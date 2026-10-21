@@ -143,74 +143,7 @@ fun GuidePreviewBanner(
     miniActive: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val artKey = program?.let { p -> p.dispatcharrProgramId?.let { "pid:$it" } ?: ("t:" + cleanPreviewTitle(p.title)) }
-    LaunchedEffect(artKey) {
-        val p = program ?: return@LaunchedEffect
-        val key = artKey ?: return@LaunchedEffect
-        if (previewArt.containsKey(key)) return@LaunchedEffect
-        val entry = EntryPointAccessors.fromApplication(context.applicationContext, ProgramInfoEntryPoint::class.java)
-        var url: String? = null
-        val pid = p.dispatcharrProgramId
-        val playlist = entry.appPreferences()
-        // Program detail icon (Direct Connect) first. Same order and the same
-        // URL rules as Apple's GuidePreviewArtCache (Logan 2026-09-17: the
-        // two platforms showed different art for the same program).
-        var detailSkipped = false
-        if (pid != null) {
-            val base = ActivePlaylistBase.baseUrl
-            val playlistId = ActivePlaylistBase.playlistId
-            if (base == null || playlistId == null) {
-                // The playlist globals are not set yet on the first focus
-                // after launch. Do not cache a miss for that; retry next time.
-                detailSkipped = true
-            } else {
-                // A failed detail lookup (a 404 for a regenerated program id
-                // that could not be re-resolved, or any network error) is
-                // never cached as "no art"; the next focus retries.
-                val result = runCatching {
-                    com.aeriotv.android.feature.livetv.fetchProgramDetailResolving(
-                        entry, base, playlistId, pid,
-                        listOfNotNull(p.channelId, channel?.tvgID),
-                        p.startMillis, p.title,
-                    )
-                }.getOrNull()
-                if (result == null || result.failed) detailSkipped = true
-                url = result?.detail?.bestPosterString?.let { raw -> resolvePreviewArtUrl(raw, base) }
-            }
-        }
-        // Order on every art surface: server detail icon, then the program's
-        // OWN feed icon (XMLTV `<icon src>`), then TMDB by title only when
-        // both are empty. Sports events match nothing useful on TMDB (an
-        // NFL pregame matched an unrelated movie poster, Onn 2026-10-12).
-        if (url == null) url = p.iconUrl?.takeIf { it.isNotBlank() }
-        // A failed detail lookup never falls through to TMDB: the right art
-        // may arrive on the next try, and a TMDB guess would be cached.
-        if (url == null && !detailSkipped && p.title.isNotBlank() && playlist.programPostersTmdbEnabled.first()) {
-            val apiKey = playlist.tmdbApiKey.first()
-            if (apiKey.isNotBlank()) {
-                val isMovie = p.category.lowercase().let { it.contains("movie") || it.contains("film") }
-                url = runCatching {
-                    withContext(Dispatchers.IO) {
-                        // One typed search hit (Apple's lookupArt): landscape
-                        // backdrop first, poster only when there is no
-                        // backdrop. No second poster-only search, which is
-                        // what produced portrait art here while Apple showed
-                        // the landscape card.
-                        val tmdb = entry.tmdbService()
-                        val art = tmdb.lookupArt(cleanPreviewTitle(p.title), isMovie, apiKey)
-                        art?.backdrop?.takeIf { it.isNotBlank() }?.let { tmdb.imageUrlFor(it, "w780") }
-                            ?: art?.poster?.takeIf { it.isNotBlank() }?.let { tmdb.imageUrlFor(it, "w500") }
-                    }
-                }.getOrNull()
-            }
-        }
-        // Nothing is cached after a skipped or failed detail step, so the
-        // next focus asks the server again.
-        if (!detailSkipped) previewArt[key] = url
-    }
-    val art = artKey?.let { previewArt[it] }
-    val artKnown = artKey != null && previewArt.containsKey(artKey)
+    val (art, artKnown) = rememberPreviewArt(program, channel)
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose {
             com.aeriotv.android.feature.player.MiniPlayerChrome
@@ -373,6 +306,87 @@ fun GuidePreviewBanner(
             }
         }
     }
+}
+
+/** Resolved art for a focused program: [url] null with [known] true = every source missed. */
+internal data class PreviewArt(val url: String?, val known: Boolean)
+
+/**
+ * The art lookup behind the Channel Preview banner, shared with the TiviMate
+ * header (ANDROID) so both surfaces resolve and cache art the same way.
+ */
+@Composable
+internal fun rememberPreviewArt(program: EPGProgramme?, channel: M3UChannel?): PreviewArt {
+    val context = LocalContext.current
+    val artKey = program?.let { p -> p.dispatcharrProgramId?.let { "pid:$it" } ?: ("t:" + cleanPreviewTitle(p.title)) }
+    LaunchedEffect(artKey) {
+        val p = program ?: return@LaunchedEffect
+        val key = artKey ?: return@LaunchedEffect
+        if (previewArt.containsKey(key)) return@LaunchedEffect
+        val entry = EntryPointAccessors.fromApplication(context.applicationContext, ProgramInfoEntryPoint::class.java)
+        var url: String? = null
+        val pid = p.dispatcharrProgramId
+        val playlist = entry.appPreferences()
+        // Program detail icon (Direct Connect) first. Same order and the same
+        // URL rules as Apple's GuidePreviewArtCache (Logan 2026-09-17: the
+        // two platforms showed different art for the same program).
+        var detailSkipped = false
+        if (pid != null) {
+            val base = ActivePlaylistBase.baseUrl
+            val playlistId = ActivePlaylistBase.playlistId
+            if (base == null || playlistId == null) {
+                // The playlist globals are not set yet on the first focus
+                // after launch. Do not cache a miss for that; retry next time.
+                detailSkipped = true
+            } else {
+                // A failed detail lookup (a 404 for a regenerated program id
+                // that could not be re-resolved, or any network error) is
+                // never cached as "no art"; the next focus retries.
+                val result = runCatching {
+                    com.aeriotv.android.feature.livetv.fetchProgramDetailResolving(
+                        entry, base, playlistId, pid,
+                        listOfNotNull(p.channelId, channel?.tvgID),
+                        p.startMillis, p.title,
+                    )
+                }.getOrNull()
+                if (result == null || result.failed) detailSkipped = true
+                url = result?.detail?.bestPosterString?.let { raw -> resolvePreviewArtUrl(raw, base) }
+            }
+        }
+        // Order on every art surface: server detail icon, then the program's
+        // OWN feed icon (XMLTV `<icon src>`), then TMDB by title only when
+        // both are empty. Sports events match nothing useful on TMDB (an
+        // NFL pregame matched an unrelated movie poster, Onn 2026-10-12).
+        if (url == null) url = p.iconUrl?.takeIf { it.isNotBlank() }
+        // A failed detail lookup never falls through to TMDB: the right art
+        // may arrive on the next try, and a TMDB guess would be cached.
+        if (url == null && !detailSkipped && p.title.isNotBlank() && playlist.programPostersTmdbEnabled.first()) {
+            val apiKey = playlist.tmdbApiKey.first()
+            if (apiKey.isNotBlank()) {
+                val isMovie = p.category.lowercase().let { it.contains("movie") || it.contains("film") }
+                url = runCatching {
+                    withContext(Dispatchers.IO) {
+                        // One typed search hit (Apple's lookupArt): landscape
+                        // backdrop first, poster only when there is no
+                        // backdrop. No second poster-only search, which is
+                        // what produced portrait art here while Apple showed
+                        // the landscape card.
+                        val tmdb = entry.tmdbService()
+                        val art = tmdb.lookupArt(cleanPreviewTitle(p.title), isMovie, apiKey)
+                        art?.backdrop?.takeIf { it.isNotBlank() }?.let { tmdb.imageUrlFor(it, "w780") }
+                            ?: art?.poster?.takeIf { it.isNotBlank() }?.let { tmdb.imageUrlFor(it, "w500") }
+                    }
+                }.getOrNull()
+            }
+        }
+        // Nothing is cached after a skipped or failed detail step, so the
+        // next focus asks the server again.
+        if (!detailSkipped) previewArt[key] = url
+    }
+    return PreviewArt(
+        url = artKey?.let { previewArt[it] },
+        known = artKey != null && previewArt.containsKey(artKey),
+    )
 }
 
 /** Trailing "(2024)" style year tags never help an art lookup. */

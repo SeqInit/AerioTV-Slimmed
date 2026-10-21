@@ -83,6 +83,14 @@ object MiniPlayerChrome {
 
     /** Width of the video left on screen while the mini is stashed. */
     val stashSliver = 32.dp
+
+    /** ANDROID: root px rect of the TiviMate-style guide header's preview
+     *  slot, published by TiviMateGuideHeader while it is mounted on the
+     *  ACTIVE tab, [Rect.Zero] otherwise. When set, the mini fills exactly
+     *  this rect (docked on the left of the guide, TiviMate's preview) instead
+     *  of the tvOS corner geometry; the springs are the same, so minimize and
+     *  expand still animate between full screen and the dock. */
+    val dockRectPx = MutableStateFlow(androidx.compose.ui.geometry.Rect.Zero)
 }
 
 @Singleton

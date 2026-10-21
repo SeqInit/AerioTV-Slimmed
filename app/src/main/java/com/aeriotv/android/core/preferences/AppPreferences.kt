@@ -659,6 +659,21 @@ class AppPreferences @Inject constructor(
     }
 
     /**
+     * ANDROID: TV interface layout. "standard" (default) = the tvOS-parity
+     * shell (top tab bar, Channel Preview banner, corner mini). "tivimate" =
+     * a TiviMate-style shell: left side menu instead of the tab bar, a guide
+     * header with the preview player docked on the left and program details
+     * on the right. TV only; phones and tablets ignore it. Drive-synced but
+     * deliberately NOT in Dispatcharr sync: that schema is shared byte-for-
+     * byte with Apple, which has no such layout.
+     */
+    val tvInterfaceLayout: Flow<String> =
+        store.data.map { it[KEY_TV_INTERFACE_LAYOUT] ?: TvInterfaceLayout.STANDARD }
+    suspend fun setTvInterfaceLayout(mode: String) {
+        store.edit { it[KEY_TV_INTERFACE_LAYOUT] = mode }
+    }
+
+    /**
      * Phone / tablet Live TV group selector (Logan 2026-09-05, Apple parity
      * with `phoneGroupSelectorKey`): "sidebar" (default) = a slide-in group
      * drawer opened from the header's groups button, "pills" = the group pill
@@ -1775,6 +1790,7 @@ class AppPreferences @Inject constructor(
         }
         data[KEY_GUIDE_GROUP_SELECTOR]?.let { out["guideGroupSelector"] = it }
         data[KEY_GUIDE_SIDEBAR_LAYOUT]?.let { out["guideSidebarLayout"] = it }
+        data[KEY_TV_INTERFACE_LAYOUT]?.let { out["tvInterfaceLayout"] = it }
         data[KEY_PHONE_GROUP_SELECTOR]?.let { out["phoneGroupSelector"] = it }
         data[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR]?.let { out["liveTvEdgeSwipeOpensSidebar"] = it.toString() }
         data[KEY_GUIDE_TUNE_IN_MINI]?.let { out["guideTuneInMini"] = it.toString() }
@@ -1845,6 +1861,7 @@ class AppPreferences @Inject constructor(
                     }
                     put("guideGroupSelector", KEY_GUIDE_GROUP_SELECTOR)
                     put("guideSidebarLayout", KEY_GUIDE_SIDEBAR_LAYOUT)
+                    put("tvInterfaceLayout", KEY_TV_INTERFACE_LAYOUT)
                     put("phoneGroupSelector", KEY_PHONE_GROUP_SELECTOR)
                     put("liveTvEdgeSwipeOpensSidebar", KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR)
                     put("guideTuneInMini", KEY_GUIDE_TUNE_IN_MINI)
@@ -1895,6 +1912,7 @@ class AppPreferences @Inject constructor(
             }
             keys["guideGroupSelector"]?.let { prefs[KEY_GUIDE_GROUP_SELECTOR] = it }
             keys["guideSidebarLayout"]?.let { prefs[KEY_GUIDE_SIDEBAR_LAYOUT] = it }
+            keys["tvInterfaceLayout"]?.takeIf { it in TvInterfaceLayout.VALUES }?.let { prefs[KEY_TV_INTERFACE_LAYOUT] = it }
             keys["phoneGroupSelector"]?.let { prefs[KEY_PHONE_GROUP_SELECTOR] = it }
             keys["liveTvEdgeSwipeOpensSidebar"]?.toBooleanStrictOrNull()
                 ?.let { prefs[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR] = it }
@@ -2549,6 +2567,7 @@ class AppPreferences @Inject constructor(
         val KEY_SYNC_RADIO_MODE_BY_DEFAULT = booleanPreferencesKey("sync_radio_mode_by_default")
         val KEY_GUIDE_GROUP_SELECTOR = stringPreferencesKey("guide_group_selector")
         val KEY_GUIDE_SIDEBAR_LAYOUT = stringPreferencesKey("guide_sidebar_layout")
+        val KEY_TV_INTERFACE_LAYOUT = stringPreferencesKey("tv_interface_layout")
         val KEY_PHONE_GROUP_SELECTOR = stringPreferencesKey("phone_group_selector")
         val KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR = booleanPreferencesKey("live_tv_edge_swipe_opens_sidebar")
         val KEY_GUIDE_TUNE_IN_MINI = booleanPreferencesKey("guide_tune_in_mini")
@@ -2704,6 +2723,13 @@ const val PLAYER_EDGE_RIGHT = "right"
  * Settings > Live TV > Program Info Button values (Apple GuideProgramInfoButton,
  * same key and strings): the guide cell info button on phone and tablet.
  */
+/** ANDROID: wire values for the TV interface layout preference. */
+object TvInterfaceLayout {
+    const val STANDARD = "standard"
+    const val TIVIMATE = "tivimate"
+    val VALUES = setOf(STANDARD, TIVIMATE)
+}
+
 object GuideProgramInfoButton {
     const val OFF = "off"
     const val CURRENT = "current"

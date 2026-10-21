@@ -146,17 +146,30 @@ fun BoxScope.PersistentExoWindow(
             .coerceAtLeast(0.dp)
     } else 0.dp
     val band = artBottom - barBottomInset
-    val miniFitHeight = when {
+    val cornerFitHeight = when {
         artBottom <= 0.dp -> MINI_HEIGHT
         band >= MINI_HEIGHT -> MINI_HEIGHT
         else -> band.coerceAtLeast(MINI_MIN_HEIGHT)
     }
-    val miniFitWidth = MINI_WIDTH * (miniFitHeight / MINI_HEIGHT)
-    val miniFitTop = if (artBottom > 0.dp) {
-        (artBottom - miniFitHeight).coerceAtLeast(barBottomInset)
+    val cornerFitWidth = MINI_WIDTH * (cornerFitHeight / MINI_HEIGHT)
+    val cornerFitTop = if (artBottom > 0.dp) {
+        (artBottom - cornerFitHeight).coerceAtLeast(barBottomInset)
     } else {
         barBottomInset
     }
+    // TiviMate-style header dock (ANDROID): the guide header's preview slot
+    // replaces the corner geometry wholesale. Expressed as the same
+    // TopEnd-anchored width / height / top / end the corner uses, so the
+    // existing springs carry the frame between full screen and the dock.
+    val dockRectPx by MiniPlayerChrome.dockRectPx.collectAsStateWithLifecycle()
+    val docked = dockRectPx.width > 0f && dockRectPx.height > 0f
+    val dockDp = with(localDensity) {
+        listOf(dockRectPx.width.toDp(), dockRectPx.height.toDp(), dockRectPx.top.toDp(), screenW - dockRectPx.right.toDp())
+    }
+    val miniFitWidth = if (docked) dockDp[0] else cornerFitWidth
+    val miniFitHeight = if (docked) dockDp[1] else cornerFitHeight
+    val miniFitTop = if (docked) dockDp[2] else cornerFitTop
+    val miniFitEnd = if (docked) dockDp[3] else MINI_END_INSET
 
     // Leaving Hidden starts a fresh set of springs, keyed on [miniEpoch], so
     // each spring's first value is its target: a first tune straight into
@@ -187,7 +200,7 @@ fun BoxScope.PersistentExoWindow(
                 label = "miniTopInset",
             ),
             animateDpAsState(
-                targetValue = if (miniTarget) MINI_END_INSET else 0.dp,
+                targetValue = if (miniTarget) miniFitEnd else 0.dp,
                 animationSpec = miniSpec,
                 label = "miniEndInset",
             ),
@@ -219,7 +232,7 @@ fun BoxScope.PersistentExoWindow(
     }
     val stashOffset by animateDpAsState(
         targetValue = if (stashTarget) {
-            miniFitWidth + MINI_END_INSET - MiniPlayerChrome.stashSliver
+            miniFitWidth + miniFitEnd - MiniPlayerChrome.stashSliver
         } else 0.dp,
         animationSpec = if (reduceMotion) snap() else miniSpec,
         label = "miniStashOffset",

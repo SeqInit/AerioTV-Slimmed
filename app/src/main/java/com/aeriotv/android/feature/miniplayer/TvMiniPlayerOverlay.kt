@@ -37,6 +37,9 @@ fun BoxScope.TvMiniPlayerOverlay(
     state: MiniPlayerSession.State,
     onResume: () -> Unit,
     onJumpToTop: () -> Unit,
+    /** False in the TiviMate-style TV interface (ANDROID): Back there opens
+     *  the guide's groups panel / the main menu, and hold Back expands. */
+    enabled: Boolean = true,
 ) {
     if (state !is MiniPlayerSession.State.Active) return
     val isTv = (LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK) ==
@@ -51,7 +54,7 @@ fun BoxScope.TvMiniPlayerOverlay(
     val scope = rememberCoroutineScope()
     var pressCount by remember { mutableIntStateOf(0) }
     var debounce by remember { mutableStateOf<Job?>(null) }
-    BackHandler {
+    BackHandler(enabled = enabled) {
         pressCount++
         debounce?.cancel()
         debounce = scope.launch {

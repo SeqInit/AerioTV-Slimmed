@@ -2245,7 +2245,12 @@ fun AerioTVNavHost(
         // Back jumps the guide to the top channel (mini keeps playing). There
         // is no Back-to-close (tvOS only stops via the player's X); the video
         // is drawn by the activity-lifetime PersistentExoWindow at root.
+        val miniLayoutVm: com.aeriotv.android.feature.settings.SettingsViewModel =
+            androidx.hilt.navigation.compose.hiltViewModel()
+        val miniTvLayout by miniLayoutVm.tvInterfaceLayout.collectAsStateWithLifecycle()
         TvMiniPlayerOverlay(
+            // TiviMate-style interface: Back belongs to the guide / menu.
+            enabled = miniTvLayout != com.aeriotv.android.core.preferences.TvInterfaceLayout.TIVIMATE,
             state = miniState,
             onResume = {
                 val resumed = miniPlayerVm.resumeChannel()

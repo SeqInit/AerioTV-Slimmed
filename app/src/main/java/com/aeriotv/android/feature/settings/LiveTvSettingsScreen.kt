@@ -56,6 +56,7 @@ import com.aeriotv.android.core.category.CategoryPaletteState
 import com.aeriotv.android.core.category.ProgramCategory
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 import com.aeriotv.android.core.preferences.GuideProgramInfoButton
+import com.aeriotv.android.core.preferences.TvInterfaceLayout
 import com.aeriotv.android.ui.scale.AlertDialog
 import com.aeriotv.android.ui.settings.SettingsActionRow
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
@@ -109,6 +110,7 @@ fun LiveTvSettingsScreen(
     val phoneGroupSelector by viewModel.phoneGroupSelector.collectAsStateWithLifecycle(initialValue = "sidebar")
     val edgeSwipeOpensSidebar by viewModel.liveTvEdgeSwipeOpensSidebar.collectAsStateWithLifecycle(initialValue = false)
     val guideGroupSelector by viewModel.guideGroupSelector.collectAsStateWithLifecycle(initialValue = "pills")
+    val tvInterfaceLayout by viewModel.tvInterfaceLayout.collectAsStateWithLifecycle()
     val showEpgBadges by viewModel.showEpgBadges(isTv).collectAsStateWithLifecycle(initialValue = true)
     val hiddenEpgBadges by viewModel.hiddenEpgBadges.collectAsStateWithLifecycle(initialValue = emptySet())
     val scaleLiveTV by viewModel.displayScaleLiveTV.collectAsStateWithLifecycle(initialValue = 1.0f)
@@ -287,6 +289,24 @@ fun LiveTvSettingsScreen(
                             } else {
                                 "The layout Live TV opens in. Automatic uses List on compact, portrait phones and Guide on regular width (unfolded foldable, iPad, Apple TV). You can still switch anytime with the List / Guide button; that switch lasts for the current session and does not change this default."
                             },
+                        )
+                    }
+                }
+
+                // MARK: TV Interface (TV, ANDROID: no Apple counterpart)
+                if (isTv) item("tv-interface") {
+                    SettingsSection(header = "TV Interface") {
+                        SettingsPickerRow(
+                            title = "Interface Style",
+                            options = listOf(
+                                SettingsPickerOption(TvInterfaceLayout.STANDARD, "Standard"),
+                                SettingsPickerOption(TvInterfaceLayout.TIVIMATE, "TiviMate Style"),
+                            ),
+                            selected = tvInterfaceLayout,
+                            onSelect = viewModel::setTvInterfaceLayout,
+                            leadingIcon = Icons.Outlined.ViewAgenda,
+                            footer = "Standard uses the top tab bar and the Channel Preview banner. TiviMate Style replaces the tab bar with a left side menu and docks the preview player on the left of the guide, with program details beside it.",
+                            tvChoiceSheet = true,
                         )
                     }
                 }

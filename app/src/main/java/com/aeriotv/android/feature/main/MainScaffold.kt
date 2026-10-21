@@ -71,6 +71,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import com.aeriotv.android.core.pip.findActivity
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -818,7 +820,18 @@ fun MainScaffold(
     // of a second on Live TV before settling on Favorites").
     val focusPill = remember { mutableStateOf<((AppTab) -> Boolean)?>(null) }
     val backFocusScope = androidx.compose.runtime.rememberCoroutineScope()
-    androidx.activity.compose.BackHandler(enabled = selectedTab != homeTab) {
+    // ANDROID: TiviMate-style TV interface (Settings > Live TV > Interface
+    // Style). The top tab bar gives way to TvSideMenu; Back from a tab root
+    // opens that menu instead of returning to the home tab (TiviMate).
+    val tvInterfaceLayout by settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle()
+    val tivimateShell = rememberLiveTvFormFactor().isTv &&
+        tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.TIVIMATE
+    var sideMenuOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(tivimateShell) { if (!tivimateShell) sideMenuOpen = false }
+    androidx.activity.compose.BackHandler(enabled = tivimateShell && selectedTab != homeTab && !sideMenuOpen) {
+        sideMenuOpen = true
+    }
+    androidx.activity.compose.BackHandler(enabled = !tivimateShell && selectedTab != homeTab) {
         val leaving = selectedTab
         val took = focusPill.value?.invoke(homeTab)
         selectedTab = homeTab
@@ -1015,10 +1028,17 @@ fun MainScaffold(
         // One stable lambda: a new one each recomposition would invalidate
         // every reader of this static CompositionLocal.
         val pillRequestersRef = androidx.compose.runtime.rememberUpdatedState(pillRequesters)
+        // TiviMate: there is no bar to land on; "go to the nav" opens the menu.
+        val tivimateRef = androidx.compose.runtime.rememberUpdatedState(tivimateShell)
         val requestCurrentTabPill: () -> Boolean = remember {
             {
-                val r = pillRequestersRef.value[selectedTab]
-                r != null && runCatching { r.requestFocus() }.getOrDefault(false)
+                if (tivimateRef.value) {
+                    sideMenuOpen = true
+                    true
+                } else {
+                    val r = pillRequestersRef.value[selectedTab]
+                    r != null && runCatching { r.requestFocus() }.getOrDefault(false)
+                }
             }
         }
         // Chrome-collapse channel: long content surfaces (the On Demand grids)
@@ -1029,8 +1049,36 @@ fun MainScaffold(
         val fullScreenOverlay = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
         val topNavHasFocusState: androidx.compose.runtime.MutableState<Boolean> = remember { mutableStateOf(false) }
         val tabEntryFocus: androidx.compose.runtime.MutableState<FocusRequester?> = remember { mutableStateOf(null) }
+        // TiviMate side menu close: give focus back to the content. Same tab
+        // = the restorer's last-focused node; a new tab = its entry target
+        // (it may need a frame or two to compose).
+        val tivimateContentFocus = remember { FocusRequester() }
+        // The open menu stands in for the bar in LocalTvTopNavHasFocus: the
+        // guide's refocus loops (launch, sidebar close, tab entry) back off
+        // while the nav holds focus, and without this they pulled focus
+        // straight back to the grid the moment the menu opened.
+        // Keyed, not a SideEffect: nothing in this scope reads sideMenuOpen
+        // during composition, so a SideEffect never re-ran on open.
+        androidx.compose.runtime.LaunchedEffect(sideMenuOpen, tivimateShell) {
+            if (tivimateShell) topNavHasFocusState.value = sideMenuOpen
+        }
+        val sideMenuScope = androidx.compose.runtime.rememberCoroutineScope()
+        val closeSideMenu: (Boolean) -> Unit = { switched ->
+            sideMenuOpen = false
+            sideMenuScope.launch {
+                androidx.compose.runtime.withFrameNanos { }
+                androidx.compose.runtime.withFrameNanos { }
+                val restored = !switched && runCatching { tivimateContentFocus.requestFocus() }.getOrDefault(false)
+                val landed = restored ||
+                    runCatching { tabEntryFocus.value?.requestFocus() }.getOrNull() == true ||
+                    runCatching { tivimateContentFocus.requestFocus() }.getOrDefault(false)
+                com.aeriotv.android.ui.tv.TvFocusTrace.guide("tv-side-menu close switched=$switched landed=$landed")
+            }
+        }
         CompositionLocalProvider(
-            LocalTvTopNavFocusRequester provides topNavRequester,
+            // TiviMate: no bar, so no requester; every consumer is null-safe
+            // and keeps geometric focus instead.
+            LocalTvTopNavFocusRequester provides (if (tivimateShell) null else topNavRequester),
             LocalTvTopNavHasFocus provides topNavHasFocusState,
             LocalTvTabEntryFocus provides tabEntryFocus,
             LocalTvRequestCurrentTabPill provides requestCurrentTabPill,
@@ -1056,7 +1104,9 @@ fun MainScaffold(
             // 62dp is the bar's designed height (16 top + 34 capsule + 12
             // bottom); it only ever seeds the very first frame, after which
             // the measured height governs.
-            val barInset = if (barHeightPx > 0) {
+            val barInset = if (tivimateShell) {
+                0.dp
+            } else if (barHeightPx > 0) {
                 with(chromeDensity) { barHeightPx.toDp() }
             } else {
                 62.dp
@@ -1072,16 +1122,20 @@ fun MainScaffold(
             } else {
                 barInset - 12.dp
             }
-            androidx.compose.runtime.LaunchedEffect(barDrawnBottom) {
+            androidx.compose.runtime.LaunchedEffect(barDrawnBottom, tivimateShell) {
+                // TiviMate: no bar; an undocked corner mini (a tab without the
+                // guide header) sits 16 dp from the top.
                 com.aeriotv.android.feature.player.MiniPlayerChrome
-                    .topInsetDp.value = barDrawnBottom.value + 4f
+                    .topInsetDp.value = if (tivimateShell) 16f else barDrawnBottom.value + 4f
             }
             // Stash the corner mini at the trailing edge while Settings is
             // the selected tab; cleared when the scaffold leaves composition
             // so a player / search route never inherits a stashed mini.
-            androidx.compose.runtime.LaunchedEffect(selectedTab) {
+            // The TiviMate side menu covers the left of the screen, where the
+            // docked preview sits, so it stashes the mini the same way.
+            androidx.compose.runtime.LaunchedEffect(selectedTab, sideMenuOpen) {
                 com.aeriotv.android.feature.player.MiniPlayerChrome
-                    .settingsStashed.value = selectedTab == AppTab.Settings
+                    .settingsStashed.value = selectedTab == AppTab.Settings || sideMenuOpen
             }
             androidx.compose.runtime.DisposableEffect(Unit) {
                 onDispose {
@@ -1131,10 +1185,11 @@ fun MainScaffold(
             //  - Live TV: a 16dp band under the bar holds the one-line strip.
             //  - Other tabs / fullscreen (Pending): none (no strip shown).
             val miniActive = miniPlayerState is MiniPlayerSession.State.Active
-            val showHintStrip = hintsEnabled &&
+            val showHintStrip = hintsEnabled && !tivimateShell &&
                 selectedTab == AppTab.LiveTV &&
                 miniPlayerState !is MiniPlayerSession.State.Pending
             val topHintGap = when {
+                tivimateShell -> 0.dp
                 selectedTab == AppTab.LiveTV &&
                     miniPlayerState !is MiniPlayerSession.State.Pending ->
                     16.dp
@@ -1155,7 +1210,7 @@ fun MainScaffold(
                 // initial focus it decides) is exactly what it was when the
                 // bar was the Column's first child; zIndex keeps it painted
                 // above the content it now overlaps.
-                Box(
+                if (!tivimateShell) Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
@@ -1218,6 +1273,15 @@ fun MainScaffold(
                         // while the bar collapses, so no tab (guide, Settings,
                         // media pages) sees its viewport resize mid-scroll.
                         .padding(top = barInset + topHintGap)
+                        // TiviMate: the menu reseats focus here on close, and
+                        // the restorer puts it back on whatever had it.
+                        .then(
+                            if (tivimateShell) {
+                                Modifier.focusRequester(tivimateContentFocus).focusRestorer()
+                            } else {
+                                Modifier
+                            },
+                        )
                         // UP leaving the tab content must land on the SELECTED
                         // tab's pill. Geometric 2D search used to hit whichever
                         // pill sat above the focused column (On Demand over the
@@ -1228,7 +1292,8 @@ fun MainScaffold(
                         .focusGroup()
                         .focusProperties {
                             onExit = {
-                                if (requestedFocusDirection == androidx.compose.ui.focus.FocusDirection.Up) {
+                                // TiviMate has no pills: Up at the top of a tab stays put.
+                                if (!tivimateShell && requestedFocusDirection == androidx.compose.ui.focus.FocusDirection.Up) {
                                     pillRequesters[selectedTab]?.requestFocus()
                                 }
                             }
@@ -1317,6 +1382,28 @@ fun MainScaffold(
                 }
             }
                         fullScreenOverlay.value?.invoke()
+                if (tivimateShell && sideMenuOpen) {
+                    val menuActivity = androidx.compose.ui.platform.LocalContext.current
+                    TvSideMenu(
+                        tabs = tabs,
+                        selected = selectedTab,
+                        onSelect = { tab ->
+                            val switched = tab != selectedTab
+                            selectedTab = tab
+                            initialTabApplied = true
+                            closeSideMenu(switched)
+                        },
+                        onRefresh = { viewModel.refreshPlaylist() },
+                        retainedCount = retainedList.size,
+                        onRetainedClick = { closeSideMenu(false); showRetainedDialog = true },
+                        onDismiss = { closeSideMenu(false) },
+                        // TiviMate: Back from the main menu is the way out.
+                        onBack = {
+                            (menuActivity.findActivity() as? com.aeriotv.android.MainActivity)
+                                ?.requestExitPrompt("tv-side-menu")
+                        },
+                    )
+                }
             }
         }
         return

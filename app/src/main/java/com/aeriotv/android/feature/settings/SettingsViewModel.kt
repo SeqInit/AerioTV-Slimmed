@@ -377,6 +377,12 @@ class SettingsViewModel @Inject constructor(
     fun setGuideSidebarLayout(mode: String) {
         viewModelScope.launch { prefs.setGuideSidebarLayout(mode) }
     }
+    /** ANDROID: TV interface layout, "standard" or "tivimate" (see AppPreferences). */
+    val tvInterfaceLayout: StateFlow<String> = prefs.tvInterfaceLayout
+        .stateIn(viewModelScope, SharingStarted.Eagerly, com.aeriotv.android.core.preferences.TvInterfaceLayout.STANDARD)
+    fun setTvInterfaceLayout(mode: String) {
+        viewModelScope.launch { prefs.setTvInterfaceLayout(mode) }
+    }
     /** Phone / tablet Live TV group selector: "sidebar" (default drawer) or "pills". */
     val phoneGroupSelector: StateFlow<String> = prefs.phoneGroupSelector
         .stateIn(viewModelScope, SharingStarted.Eagerly, "sidebar")
