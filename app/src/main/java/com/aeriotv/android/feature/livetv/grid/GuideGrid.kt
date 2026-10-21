@@ -187,7 +187,18 @@ fun GuideGrid(
     // Lane: keep the focused row two rows below the top edge once past it.
     // snapshotFlow, not effect keys: reading focusRow in composition would
     // recompose the whole grid (and every visible row) on each D-pad press.
-    val rowHeightPx = with(density) { rowHeight.toPx() }
+    // FIT UP TO TEN CHANNELS: the host's rowHeight is the designed row, and
+    // the rows shrink from it until GUIDE_VISIBLE_ROWS fill the list's own
+    // measured height (the list is fillMaxSize, so its height never depends
+    // on the row height). GUIDE_MIN_ROW_HEIGHT, grown with the text size,
+    // keeps the title readable, so a short viewport (phone landscape, TV with
+    // the corner mini) shows fewer rows rather than unreadable ones.
+    var listHeightPx by remember { mutableStateOf(0) }
+    val fittedRowHeight = if (listHeightPx <= 0) rowHeight else with(density) {
+        val fit = (listHeightPx / GUIDE_VISIBLE_ROWS).toDp()
+        minOf(rowHeight, maxOf(fit, GUIDE_MIN_ROW_HEIGHT * fontScale))
+    }
+    val rowHeightPx = with(density) { fittedRowHeight.toPx() }
     LaunchedEffect(state, listState, rowHeightPx) {
         snapshotFlow {
             Triple(state.focusRow, state.rows, listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset)
@@ -582,6 +593,7 @@ fun GuideGrid(
                 .onSizeChanged { size ->
                     val stripPx = (size.width - railPx).coerceAtLeast(1f)
                     state.resizeViewport((stripPx / pxPerMs).toLong())
+                    listHeightPx = size.height
                 },
         ) {
             val rows = state.rows
@@ -590,7 +602,7 @@ fun GuideGrid(
                     state = state,
                     row = row,
                     nowMs = nowMs,
-                    rowHeight = rowHeight,
+                    rowHeight = fittedRowHeight,
                     railWidth = railWidth,
                     pxPerMs = pxPerMs,
                     gridFocused = gridFocused && !clockSelected,
@@ -847,7 +859,8 @@ private fun GridRow(
     // measuring through TextMeasurer on every draw was ~1 ms per row.
     // Keyed on fontScale too: cached layouts are measured in sp, so a live
     // Text Size change must re-measure instead of drawing stale sizes.
-    val textCache = remember(state.rows, row, showBadges, showSubtitles, clockMode, rail, LocalDensity.current.fontScale, subScale, textContrast, accent) { HashMap<Long, CellText>() }
+    // Keyed on rowHeight too: the fitted row height decides which lines fit.
+    val textCache = remember(state.rows, row, rowHeight, showBadges, showSubtitles, clockMode, rail, LocalDensity.current.fontScale, subScale, textContrast, accent) { HashMap<Long, CellText>() }
     val rangeCache = remember(state.rows, row, clockMode) { HashMap<Long, String>() }
     val railWidthPx = with(LocalDensity.current) { railWidth.toPx() }
     val logos = LocalLogoCache.current
@@ -1328,7 +1341,15 @@ private fun GridRow(
                             val time = measure(range, timeStyle, 15.sp.toPx() * subScale, ellipsis = false)
                             val badges = if (showBadges) cell.epgFlags().filter { it.label !in hiddenBadges }
                                 .map { measure(it.label, badgeStyle, 12.sp.toPx(), ellipsis = false) to it.color } else emptyList()
-                            CellText(title, time, desc, sub, badges, pill(cell))
+                            // Rows fitted to ten on screen can be shorter than
+                            // title + subtitle + description + time: keep the
+                            // title and the time line, then the subtitle and
+                            // the description only while they still fit
+                            // between them, instead of drawing over the time.
+                            var room = size.height - 6.dp.toPx() - title.size.height - time.size.height
+                            val fitSub = sub?.takeIf { it.size.height <= room }?.also { room -= it.size.height }
+                            val fitDesc = desc?.takeIf { it.size.height <= room }
+                            CellText(title, time, fitDesc, fitSub, badges, pill(cell))
                         }
                     }.also { if (it !== cachedText) { it.measuredW = textW; it.measuredClipped = clippedNow; it.startMs = cell.startMillis; textCache[key] = it } }
                     val recording = !cell.isPlaceholder && recordingWindows.any { win ->
@@ -1467,6 +1488,10 @@ val LocalLogoCache = staticCompositionLocalOf<GuideLogoCache> { error("GuideLogo
 
 /** Focus lane: the seventh visible row (index 6), as on Apple TV. */
 private const val LANE_ROWS = 6
+/** Channel rows the guide fits on screen when the viewport is tall enough. */
+private const val GUIDE_VISIBLE_ROWS = 10
+/** Shortest fitted row at 100% text size: the title line plus its padding. */
+private val GUIDE_MIN_ROW_HEIGHT = 40.dp
 private const val HOLD_LEFT_REPEATS = 4
 private const val OK_LONG_REPEATS = 1
 /**
