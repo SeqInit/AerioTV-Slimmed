@@ -151,69 +151,25 @@ import com.aeriotv.android.feature.settings.visibleSettingsSections
 import com.aeriotv.android.feature.settings.allowedFor
 import com.aeriotv.android.ui.tv.tvFocusScale
 
-/**
- * App-scoped [FocusRequester] for the Android TV top tab bar's "current"
- * focusable surface (the Row of pills, with [Modifier.focusRestorer] so a
- * re-entry restores the previously-focused pill).
- *
- * Section-level composables (GuideScreen first) read this and attach
- * `Modifier.focusProperties { up = it }` to their top-most focusable so
- * D-pad UP from the top row of the guide jumps focus back to the pills
- * instead of being trapped inside the `focusGroup()` (audit task #57).
- *
- * `null` on phone shell - the CompositionLocal is only filled on TV.
- */
-val LocalTvTopNavFocusRequester = staticCompositionLocalOf<FocusRequester?> { null }
-
-/** True while any pill in the Android TV top tab bar holds focus. Tab
- *  content reads it so a launch-focus grab never yanks focus out of the bar
- *  while the user is still walking it (Logan 2026-09-02: Live TV -> Favorites
- *  -> the Favorites guide stole focus mid-walk, every further Right went
- *  into the grid). */
+/** True while the TV side menu or Settings panel is open. Tab content reads
+ *  it so a launch-focus grab never yanks focus out of the menu while the user
+ *  is still walking it (Logan 2026-09-02: a guide refocus loop stole focus
+ *  mid-walk and every further key went into the grid). */
 val LocalTvTopNavHasFocus = staticCompositionLocalOf<androidx.compose.runtime.State<Boolean>> {
     androidx.compose.runtime.mutableStateOf(false)
 }
 
-/** Where D-pad DOWN from the tab bar should land inside the current tab.
- *  A tab sets it (On Demand: its current sub-tab pill) and clears it on
- *  dispose; null keeps Compose's geometric search. Consulted by the bar's
- *  Down exit, which is honoured where a group's onEnter was not. */
+/** Where focus should land inside the current tab when the TV side menu
+ *  closes onto it. A tab sets it (On Demand: its current sub-tab pill) and
+ *  clears it on dispose; null keeps Compose's geometric search. */
 val LocalTvTabEntryFocus = staticCompositionLocalOf<androidx.compose.runtime.MutableState<FocusRequester?>> {
     androidx.compose.runtime.mutableStateOf(null)
 }
 
-/** Move focus to the CURRENTLY SELECTED tab's pill, returning whether it
- *  landed. Back from a TV page's content uses it: the first Back parks focus
- *  on the page's own pill (Movies / TV Shows / DVR) and only a second Back,
- *  with the bar focused, reaches the scaffold's "Back goes to the home tab"
- *  rule (Logan 2026-09-11: Back on the hero jumped straight to Live TV).
- *  `null` on the phone shell. */
+/** Open the TV side menu ("go to the nav"), returning whether it took
+ *  focus. Back or Up out of a TV page's content uses it. `null` on the phone
+ *  shell. */
 val LocalTvRequestCurrentTabPill = staticCompositionLocalOf<(() -> Boolean)?> { null }
-
-/**
- * TV chrome-collapse channel. Content screens write `true` while the user is
- * scrolled down a long surface (the On Demand poster grids first) and the top
- * tab bar shrinks out of the way so an extra poster row fits on screen.
- *
- * The bar is never UNMOUNTED for this: its pills are the target of
- * FocusRequester.requestFocus() calls (the content's D-pad UP exit redirect),
- * which throws on a detached node, so an AnimatedVisibility-style hide would
- * crash the first UP press while collapsed. [collapsibleChrome] instead
- * shrinks the bar to a 1px, alpha-0 strip; the pills stay attached and
- * focusable, and focus arriving on the bar expands it back.
- *
- * `null` on the phone shell -- only the TV shell provides a state.
- */
-val LocalTvChromeCollapsed =
-    staticCompositionLocalOf<androidx.compose.runtime.MutableState<Boolean>?> { null }
-
-/**
- * How far (px) the active TV page has scrolled while its top section is
- * still on screen: the tab bar slides off in step with the page (tvOS: the
- * bar is part of the scroll, Logan 2026-09-10). 0 = fully shown.
- */
-val LocalTvChromeScroll =
-    staticCompositionLocalOf<androidx.compose.runtime.MutableState<Int>?> { null }
 
 /**
  * TV full-screen overlay slot: a tab sets a composable here to draw ABOVE
@@ -584,44 +540,17 @@ fun MainScaffold(
     // so the leaving content's nodes vanish with focus already parked there
     // and no fallback flashes the Live TV pill (Logan: "less than a quarter
     // of a second on Live TV before settling on Favorites").
-    val focusPill = remember { mutableStateOf<((AppTab) -> Boolean)?>(null) }
-    val backFocusScope = androidx.compose.runtime.rememberCoroutineScope()
-    // ANDROID: Sidebar-style TV interface (Settings > Live TV > Interface
-    // Style). The top tab bar gives way to TvSideMenu; Back from a tab root
-    // opens that menu instead of returning to the home tab (sidebar style).
-    val tvInterfaceLayout by settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle()
-    val sidebarShell = rememberLiveTvFormFactor().isTv &&
-        tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR
     var sideMenuOpen by remember { mutableStateOf(false) }
-    // Sidebar style: Settings opens as a right-hand panel over the current tab
-    // rather than as a tab of its own.
+    // TV: Settings opens as a right-hand panel over the current tab rather
+    // than as a tab of its own.
     var settingsPanelOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(sidebarShell) { if (!sidebarShell) { sideMenuOpen = false; settingsPanelOpen = false } }
-    androidx.activity.compose.BackHandler(enabled = sidebarShell && selectedTab != homeTab && !sideMenuOpen) {
+    // TV: Back from a tab root opens the side menu.
+    androidx.activity.compose.BackHandler(enabled = isTvShell && selectedTab != homeTab && !sideMenuOpen) {
         sideMenuOpen = true
     }
-    androidx.activity.compose.BackHandler(enabled = !sidebarShell && selectedTab != homeTab) {
-        val leaving = selectedTab
-        val took = focusPill.value?.invoke(homeTab)
+    androidx.activity.compose.BackHandler(enabled = !isTvShell && selectedTab != homeTab) {
         selectedTab = homeTab
         initialTabApplied = true
-        if (took != null) {
-            com.aeriotv.android.ui.tv.TvFocusTrace.guide("back-to-home from=$leaving to=$homeTab pillFocus=$took")
-            // Back from the Settings rail (Streamer 2026-10-04): the request
-            // above did not land while the rail held focus, and once the
-            // Settings slot hid, focus fell back onto the Settings pill while
-            // Live TV showed as selected (two pills looked active). Ask again
-            // after the switch has composed, so the focused pill and the
-            // selected pill always agree, as they already did for DVR.
-            backFocusScope.launch {
-                androidx.compose.runtime.withFrameNanos { }
-                androidx.compose.runtime.withFrameNanos { }
-                if (selectedTab == homeTab) {
-                    val again = focusPill.value?.invoke(homeTab)
-                    com.aeriotv.android.ui.tv.TvFocusTrace.guide("back-to-home settle to=$homeTab pillFocus=$again")
-                }
-            }
-        }
     }
 
     // Background-activity flag. ORs the content-fetch flags so the activity
@@ -754,87 +683,37 @@ fun MainScaffold(
         }
     }
 
-    // Android TV / Google TV: a 10-foot top tab bar instead of the phone
-    // bottom NavigationBar. D-pad friendly, overscan-safe, and mirrors the
-    // tvOS TabView. Phone / tablet / fold keep the bottom nav below.
-    val isTv = rememberLiveTvFormFactor().isTv
-    if (isTv) {
-        // tvOS layout parity (Archie 2026-05-28 reference shot): when the
-        // mini-player is active, the top chrome (centered nav tabs +
-        // sync pill on the left + group filter pills below) does NOT
-        // shift down. The mini-player sits at the top-right in the empty
-        // space alongside the centered nav tabs. They coexist because the
-        // nav pill row is centered (Live TV / On Demand / Settings ~250dp
-        // wide) and the mini is 210dp wide aligned to the right edge -- on
-        // a 960dp-wide canvas there's ~250dp of empty space between them.
-        // An earlier revision shoved everything down 184dp; that was wrong.
-        // Audit #57: a single FocusRequester bound to the tab-bar Row. The
-        // Row uses focusRestorer() so re-entry from a section restores the
-        // pill the user last focused (typically the currently-selected one).
-        // Section composables read it via LocalTvTopNavFocusRequester and
-        // route D-pad UP from their topmost focusable here.
-        val topNavRequester = remember { FocusRequester() }
-        // Timestamp of the last D-pad UP press, read by TvTopTabBar to tell a
-        // DELIBERATE bar entry (user pressed UP from the content; selection
-        // should follow the focused pill immediately) from an involuntary
-        // focus FALLBACK (a sub-screen transition removed the focused node and
-        // Compose handed focus to the leftmost pill; selecting there would
-        // yank the user to Live TV). Fallbacks are never preceded by UP.
-        val lastUpKeyMs = remember { longArrayOf(0L) }
-        // One FocusRequester per pill, shared between the bar (which binds
-        // them) and the content's exit redirect below (which targets the
-        // SELECTED pill directly, not the bar, so no entry heuristics apply).
-        // + Search: not a pill, but the floating bar button needs a requester
-        // for the same entry/exit focus redirects the pills use.
-        val pillRequesters = remember(tabs) {
-            (tabs + AppTab.Search).associateWith { FocusRequester() }
-        }
-        androidx.compose.runtime.SideEffect {
-            focusPill.value = { tab -> runCatching { pillRequesters[tab]?.requestFocus() ?: false }.getOrDefault(false) }
-        }
-        // The same requesters, as a "focus MY tab's pill" call for TV page
-        // content (Back out of a page lands on the bar, not on Live TV).
-        // One stable lambda: a new one each recomposition would invalidate
-        // every reader of this static CompositionLocal.
-        val pillRequestersRef = androidx.compose.runtime.rememberUpdatedState(pillRequesters)
-        // Sidebar style: there is no bar to land on; "go to the nav" opens the menu.
-        val sidebarShellRef = androidx.compose.runtime.rememberUpdatedState(sidebarShell)
+    // Android TV / Google TV: the sidebar shell. TvSideMenu is the tab
+    // navigation, Settings opens as a right-hand panel, and the tab content
+    // fills the screen. Phone / tablet / fold keep the bottom nav below.
+    if (isTvShell) {
+        // "Go to the nav" (Back out of a TV page's content) opens the menu.
         val requestCurrentTabPill: () -> Boolean = remember {
             {
-                if (sidebarShellRef.value) {
-                    sideMenuOpen = true
-                    true
-                } else {
-                    val r = pillRequestersRef.value[selectedTab]
-                    r != null && runCatching { r.requestFocus() }.getOrDefault(false)
-                }
+                sideMenuOpen = true
+                true
             }
         }
-        // Chrome-collapse channel: long content surfaces (the On Demand grids)
-        // set this true while scrolled down so the tab bar shrinks away. See
-        // LocalTvChromeCollapsed for why the bar collapses instead of unmounting.
-        val chromeCollapsed = remember { mutableStateOf(false) }
-        val chromeScroll = remember { mutableStateOf(0) }
         val fullScreenOverlay = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
-        // Sidebar style: the menu pushes the content instead of covering it.
+        // The menu pushes the content instead of covering it.
         val sideMenuShift = androidx.compose.animation.core.animateDpAsState(
-            targetValue = if (sidebarShell && sideMenuOpen) TvSideMenuWidth else 0.dp,
+            targetValue = if (sideMenuOpen) TvSideMenuWidth else 0.dp,
             label = "tvSideMenuShift",
         )
         val topNavHasFocusState: androidx.compose.runtime.MutableState<Boolean> = remember { mutableStateOf(false) }
         val tabEntryFocus: androidx.compose.runtime.MutableState<FocusRequester?> = remember { mutableStateOf(null) }
-        // Sidebar-style side menu close: give focus back to the content. Same tab
-        // = the restorer's last-focused node; a new tab = its entry target
-        // (it may need a frame or two to compose).
+        // Side menu close: give focus back to the content. Same tab = the
+        // restorer's last-focused node; a new tab = its entry target (it may
+        // need a frame or two to compose).
         val sidebarContentFocus = remember { FocusRequester() }
-        // The open menu stands in for the bar in LocalTvTopNavHasFocus: the
+        // The open menu stands in for a nav bar in LocalTvTopNavHasFocus: the
         // guide's refocus loops (launch, sidebar close, tab entry) back off
         // while the nav holds focus, and without this they pulled focus
         // straight back to the grid the moment the menu opened.
         // Keyed, not a SideEffect: nothing in this scope reads sideMenuOpen
         // during composition, so a SideEffect never re-ran on open.
-        androidx.compose.runtime.LaunchedEffect(sideMenuOpen, settingsPanelOpen, sidebarShell) {
-            if (sidebarShell) topNavHasFocusState.value = sideMenuOpen || settingsPanelOpen
+        androidx.compose.runtime.LaunchedEffect(sideMenuOpen, settingsPanelOpen) {
+            topNavHasFocusState.value = sideMenuOpen || settingsPanelOpen
         }
         val sideMenuScope = androidx.compose.runtime.rememberCoroutineScope()
         val closeSideMenu: (Boolean) -> Unit = { switched ->
@@ -850,82 +729,32 @@ fun MainScaffold(
             }
         }
         CompositionLocalProvider(
-            // Sidebar style: no bar, so no requester; every consumer is null-safe
-            // and keeps geometric focus instead.
-            LocalTvTopNavFocusRequester provides (if (sidebarShell) null else topNavRequester),
             LocalTvTopNavHasFocus provides topNavHasFocusState,
             LocalTvTabEntryFocus provides tabEntryFocus,
             LocalTvRequestCurrentTabPill provides requestCurrentTabPill,
-            LocalTvChromeCollapsed provides chromeCollapsed,
-            LocalTvChromeScroll provides chromeScroll,
             LocalTvFullScreenOverlay provides fullScreenOverlay,
             LocalTvSideMenuWidth provides sideMenuShift,
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-            // TV chrome is an OVERLAY, not a sibling above the content
-            // (2026-09-11). The bar used to live in a Column with the tab
-            // content and collapsibleChrome animated its HEIGHT, so the
-            // content's viewport grew over 250 ms while the bar hid and
-            // snapped back the instant it re-expanded: the grid shifted
-            // under a focus scroll that was already running, which is the
-            // "notchy" signature in the device trace. tvOS gives the page a
-            // FIXED top spacer (MoviesView.swift:1397) and slides the system
-            // bar over it. So: content fills the screen and takes a constant
-            // top inset, and the bar animates its own offset and alpha on
-            // top of it. Nothing the bar does resizes the content.
-            var barHeightPx by remember { mutableIntStateOf(0) }
-            var barDrawnBottomPx by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-            val chromeDensity = LocalDensity.current
-            // 62dp is the bar's designed height (16 top + 34 capsule + 12
-            // bottom); it only ever seeds the very first frame, after which
-            // the measured height governs.
-            val barInset = if (sidebarShell) {
-                0.dp
-            } else if (barHeightPx > 0) {
-                with(chromeDensity) { barHeightPx.toDp() }
-            } else {
-                62.dp
-            }
             // The corner mini player is mounted at the ACTIVITY root, outside
-            // this composition, so it cannot read a CompositionLocal from
-            // here. Publish the measured bar height through the app-scoped
-            // window state instead; PersistentExoWindow takes its top inset
-            // from it (tvOS pins the mini 87pt from the physical screen top,
-            // deliberately clear of the tab bar: mini report D1).
-            val barDrawnBottom = if (barDrawnBottomPx > 0f) {
-                with(chromeDensity) { barDrawnBottomPx.toDp() }
-            } else {
-                barInset - 12.dp
+            // this composition. With no bar, an undocked corner mini (a tab
+            // without the guide header) sits 16 dp from the top.
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                com.aeriotv.android.feature.player.MiniPlayerChrome.topInsetDp.value = 16f
             }
-            androidx.compose.runtime.LaunchedEffect(barDrawnBottom, sidebarShell) {
-                // Sidebar style: no bar; an undocked corner mini (a tab without the
-                // guide header) sits 16 dp from the top.
-                com.aeriotv.android.feature.player.MiniPlayerChrome
-                    .topInsetDp.value = if (sidebarShell) 16f else barDrawnBottom.value + 4f
-            }
-            // Stash the corner mini at the trailing edge while Settings is
-            // the selected tab; cleared when the scaffold leaves composition
-            // so a player / search route never inherits a stashed mini.
-            // The Sidebar-style side menu covers the left of the screen, where the
-            // docked preview sits, so it stashes the mini the same way. ONLY
-            // while docked: an undocked mini is already in the top-right
-            // corner, clear of the menu, and stashing it there pushed all but
-            // the sliver off screen.
-            val dockRect by com.aeriotv.android.feature.player.MiniPlayerChrome
-                .dockRectPx.collectAsStateWithLifecycle()
+            // Stash the corner mini while Settings is the selected tab;
+            // cleared when the scaffold leaves composition so a player /
+            // search route never inherits a stashed mini.
             // The Settings panel sits on the right, over the corner mini (an
             // undocked one); the docked preview on the left stays clear of it.
             // The side menu pushes the docked preview along with the guide,
             // so only the Settings panel can cover the mini.
+            val dockRect by com.aeriotv.android.feature.player.MiniPlayerChrome
+                .dockRectPx.collectAsStateWithLifecycle()
             val menuCoversMini = settingsPanelOpen && dockRect.width <= 0f
             androidx.compose.runtime.LaunchedEffect(selectedTab, menuCoversMini) {
                 com.aeriotv.android.feature.player.MiniPlayerChrome
                     .settingsStashed.value = selectedTab == AppTab.Settings || menuCoversMini
-            }
-            // Sidebar style: a stashed mini leaves the screen entirely (user
-            // choice 2026-10-21); Standard keeps the tvOS sliver.
-            androidx.compose.runtime.LaunchedEffect(sidebarShell) {
-                com.aeriotv.android.feature.player.MiniPlayerChrome.stashFully.value = sidebarShell
             }
             androidx.compose.runtime.DisposableEffect(Unit) {
                 onDispose {
@@ -933,106 +762,11 @@ fun MainScaffold(
                         .settingsStashed.value = false
                 }
             }
-            // Collapse the bar only while the content reports a scrolled
-            // state AND no pill holds focus: the UP-from-content redirect
-            // (focusProperties onExit below) lands focus on the selected
-            // pill, which flips barHasFocus and brings the bar back so the
-            // user can see what they're navigating.
-            var barHasFocus by remember { mutableStateOf(false) }
-            // Collapse slides up and fades over 250 ms; the bar comes back
-            // INSTANTLY (tvOS shows it at once on the way up).
-            val barTarget = if (chromeCollapsed.value && !barHasFocus) 0f else 1f
-            val barCollapse by animateFloatAsState(
-                targetValue = barTarget,
-                animationSpec = if (barTarget == 1f) androidx.compose.animation.core.snap() else tween(durationMillis = 250),
-                label = "tvTopBarCollapse",
-            )
-            // Nothing proportional: tvOS keeps the bar fully present until
-            // the page passes the hide threshold and then hides it, so the
-            // collapse tween is the only channel (Movies spec D10, DVR D9).
-            // The page owns the threshold (TvMediaPage.barHideThreshold).
-            val barFraction = barCollapse
-            // Remote hint strip inputs. The copy is generated from the
-            // EFFECTIVE remote map plus the live app state (below), so a user
-            // who remaps a button in Settings > Remote Control sees their own
-            // button named; the whole strip is gated on the "Show remote
-            // hints" toggle in that same screen.
-            val hintSettingsVm: com.aeriotv.android.feature.settings.SettingsViewModel =
-                hiltViewModel()
-            val hintsEnabled by hintSettingsVm.showRemoteHints
-                .collectAsStateWithLifecycle(initialValue = true)
-            val hintMap by hintSettingsVm.remoteControlMap.collectAsStateWithLifecycle(
-                initialValue = com.aeriotv.android.core.remote.RemoteControlMap.DEFAULT,
-            )
-            val hintGroupSelector by hintSettingsVm.guideGroupSelector
-                .collectAsStateWithLifecycle(initialValue = "pills")
-            // Reserve a band below the nav bar for the remote hint STRIP.
-            // The mini player used to push all tab content down 78dp; it no
-            // longer does (tvOS parity, mini report D5): the mini now sits
-            // clear of the bar in the top-right corner and the Channel
-            // Preview banner reserves its column instead, so nothing moves
-            // when a channel starts playing in the corner.
-            //  - Live TV: a 16dp band under the bar holds the one-line strip.
-            //  - Other tabs / fullscreen (Pending): none (no strip shown).
-            val miniActive = miniPlayerState is MiniPlayerSession.State.Active
-            val showHintStrip = hintsEnabled && !sidebarShell &&
-                selectedTab == AppTab.LiveTV &&
-                miniPlayerState !is MiniPlayerSession.State.Pending
-            val topHintGap = when {
-                sidebarShell -> 0.dp
-                selectedTab == AppTab.LiveTV &&
-                    miniPlayerState !is MiniPlayerSession.State.Pending ->
-                    16.dp
-                else -> 0.dp
-            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .onPreviewKeyEvent { ev ->
-                        if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionUp) {
-                            lastUpKeyMs[0] = android.os.SystemClock.uptimeMillis()
-                        }
-                        false
-                    },
+                    .background(MaterialTheme.colorScheme.background),
             ) {
-                // Declared FIRST so traversal order (and the cold-start
-                // initial focus it decides) is exactly what it was when the
-                // bar was the Column's first child; zIndex keeps it painted
-                // above the content it now overlaps.
-                if (!sidebarShell) Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .fillMaxWidth()
-                        .zIndex(1f)
-                        .onSizeChanged { barHeightPx = it.height }
-                        .graphicsLayer {
-                            alpha = barFraction
-                            translationY = -(1f - barFraction) * barHeightPx.toFloat()
-                        }
-                        .onFocusChanged { barHasFocus = it.hasFocus; topNavHasFocusState.value = it.hasFocus },
-                ) {
-                    TvTopTabBar(
-                        retainedCount = retainedList.size,
-                        onRetainedClick = { showRetainedDialog = true },
-                        onRefresh = { viewModel.refreshPlaylist() },
-                        // Spins only while the bar can be seen: collapsed under
-                        // a scrolled media page it holds a still glyph (perf
-                        // 2026-10-03, the spinner ran the frame clock for the
-                        // whole On Demand refill).
-                        refreshing = anyBackgroundWork,
-                        refreshAnimates = barTarget == 1f,
-                        tabs = tabs,
-                        selected = selectedTab,
-                        onSelect = { selectedTab = it; initialTabApplied = true },
-                        focusRequester = topNavRequester,
-                        tabEntryFocus = tabEntryFocus,
-                        lastUpKeyMs = lastUpKeyMs,
-                        pillRequesters = pillRequesters,
-                        isTabWarm = { it in visitedTabs },
-                        onDrawnBottomChanged = { barDrawnBottomPx = it },
-                    )
-                }
                 androidx.compose.runtime.CompositionLocalProvider(
                     com.aeriotv.android.feature.livetv.LocalRetainedChannelIds provides retainedIds,
                 ) {
@@ -1057,130 +791,25 @@ fun MainScaffold(
                     visited = visitedTabs,
                     modifier = Modifier
                         .fillMaxSize()
-                        // The FIXED inset every tab used to get from the bar's
-                        // measured height plus the hint band. It never changes
-                        // while the bar collapses, so no tab (guide, Settings,
-                        // media pages) sees its viewport resize mid-scroll.
-                        .padding(top = barInset + topHintGap)
                         .offset { androidx.compose.ui.unit.IntOffset(sideMenuShift.value.roundToPx(), 0) }
-                        // Sidebar style: the menu reseats focus here on close, and
-                        // the restorer puts it back on whatever had it.
-                        .then(
-                            if (sidebarShell) {
-                                Modifier.focusRequester(sidebarContentFocus).focusRestorer()
-                            } else {
-                                Modifier
-                            },
-                        )
-                        // UP leaving the tab content must land on the SELECTED
-                        // tab's pill. Geometric 2D search used to hit whichever
-                        // pill sat above the focused column (On Demand over the
-                        // centered Settings form) and selection-follows-focus
-                        // switched tabs (user report). The bar's own onEnter
-                        // does not intercept a direct child hit, so the
-                        // redirect lives on the content group's exit instead.
-                        .focusGroup()
-                        .focusProperties {
-                            onExit = {
-                                // The sidebar style has no pills: Up at the top of a tab stays put.
-                                if (!sidebarShell && requestedFocusDirection == androidx.compose.ui.focus.FocusDirection.Up) {
-                                    pillRequesters[selectedTab]?.requestFocus()
-                                }
-                            }
-                        },
+                        // The menu reseats focus here on close, and the
+                        // restorer puts it back on whatever had it.
+                        .focusRequester(sidebarContentFocus)
+                        .focusRestorer()
+                        .focusGroup(),
                 )
                 }
             }
-            // No "Syncing" pill on TV: the top bar's Refresh circle already
-            // spins while background work runs (refreshing = anyBackgroundWork).
-            // Remote hint strip (Logan's design, approved 2026-09-11). ONE
-            // line, horizontally CENTERED, in the band between the tab bar and
-            // the Channel Preview banner. Rendered at the Home level -- NOT
-            // inside the guide -- so the band is measured off the SAME bar
-            // height the content inset uses and the strip can never land on
-            // the bar or its nav circles (the old chip stack sat at a
-            // hard-coded top=18dp, which became the bar's own band once the
-            // bar turned into an overlay). If the reserved band is shorter
-            // than the text the strip is dropped entirely rather than drawn
-            // over something.
-            if (showHintStrip) {
-                // Center the strip in the VISIBLE band: from the tab bar's
-                // DRAWN bottom (measured, so the bar's own 12 dp bottom
-                // padding is not mistaken for occupied space) down to the
-                // Channel Preview banner's top edge, which is where the tab
-                // content inset ends (barInset + topHintGap). The old band
-                // started at barInset + 2 dp, i.e. 14 dp BELOW the drawn bar,
-                // which pushed the strip against the banner's first text line
-                // (Logan, Google TV Streamer 2026-09-11). tvOS centers it the
-                // same way (ChannelListView.swift:1041 carries the banner's
-                // old -28 pull so the strip sits midway in that band).
-                val stripHeight = com.aeriotv.android.ui.tv.remoteHintStripHeight
-                val bandTop = barDrawnBottom
-                // The banner does NOT start at the content inset: GuideScreen
-                // lifts it GuidePreviewBanner.tvLift UP into the reserved band
-                // (tvOS's -28 pt, halved), so the old barInset + 2 dp band sat
-                // INSIDE the banner, on top of the title (Streamer screenshot
-                // 2026-09-11: bar bottom 53.5 dp, banner top 73.5 dp, strip
-                // text centered at 78.5 dp). Subtracting the lift puts the
-                // band back where it is drawn. The content inset itself is
-                // untouched, so the banner/guide do not move.
-                val bannerTop = barInset + topHintGap -
-                    com.aeriotv.android.feature.livetv.grid.GuidePreviewBanner.tvLift
-                val bannerFirstText = bannerTop +
-                    com.aeriotv.android.feature.livetv.grid.GuidePreviewBanner.firstTextInset
-                // At least 6 dp of clear space above that first text line;
-                // when the band is tight this shrinks the strip's own top
-                // offset toward the bar, never the gap to the banner.
-                val minBannerClear = 6.dp
-                // Fixed 8 dp below the drawn bar rather than centered: dead
-                // center read too close to the nav circles (Logan 2026-09-11).
-                val centeredTop = bandTop + 8.dp
-                val maxTop = bannerFirstText - minBannerClear - stripHeight
-                val stripBandTop = centeredTop.coerceIn(bandTop, maxTop.coerceAtLeast(bandTop))
-                if (maxTop >= bandTop) {
-                    // Stay centered even next to the mini: cap the width at
-                    // twice the gap between screen center and the mini's left
-                    // edge (205dp wide, 20dp from the end) so a long strip
-                    // truncates with an ellipsis instead of shifting.
-                    val screenW = androidx.compose.ui.platform.LocalConfiguration
-                        .current.screenWidthDp.dp
-                    val stripMaxWidth = if (miniActive) {
-                        (screenW - 450.dp).coerceAtLeast(160.dp)
-                    } else {
-                        (screenW - 48.dp).coerceAtLeast(160.dp)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .fillMaxWidth()
-                            .padding(top = stripBandTop)
-                            .height(stripHeight),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        com.aeriotv.android.ui.tv.TvRemoteHintStrip(
-                            hints = com.aeriotv.android.core.remote.RemoteControlHints
-                                .guideStripHints(
-                                    map = hintMap,
-                                    sidebarGroups = hintGroupSelector == "sidebar",
-                                    miniActive = miniActive,
-                                    radioActive = com.aeriotv.android.feature.player.RadioMode.state
-                                        .collectAsStateWithLifecycle().value != null,
-                                ),
-                            modifier = Modifier.widthIn(max = stripMaxWidth),
-                        )
-                    }
-                }
-            }
                         fullScreenOverlay.value?.invoke()
-                if (sidebarShell && sideMenuOpen) {
+                if (sideMenuOpen) {
                     val menuActivity = androidx.compose.ui.platform.LocalContext.current
                     TvSideMenu(
                         tabs = tabs,
                         selected = selectedTab,
                         onSelect = { tab ->
                             if (tab == AppTab.Settings) {
-                                // Sidebar style: Settings is a panel over the
-                                // current tab, not a tab switch.
+                                // Settings is a panel over the current tab,
+                                // not a tab switch.
                                 sideMenuOpen = false
                                 settingsPanelOpen = true
                             } else {
@@ -1194,14 +823,14 @@ fun MainScaffold(
                         retainedCount = retainedList.size,
                         onRetainedClick = { closeSideMenu(false); showRetainedDialog = true },
                         onDismiss = { closeSideMenu(false) },
-                        // Sidebar style: Back from the main menu is the way out.
+                        // Back from the main menu is the way out.
                         onBack = {
                             (menuActivity.findActivity() as? com.aeriotv.android.MainActivity)
                                 ?.requestExitPrompt("tv-side-menu")
                         },
                     )
                 }
-                if (sidebarShell && settingsPanelOpen) {
+                if (settingsPanelOpen) {
                     // Back on the category list closes the panel. Registered
                     // before the panel's own content, so the page / push
                     // handlers inside it (registered later) win while enabled.
@@ -1407,7 +1036,7 @@ fun MainScaffold(
                 // dialog the TV circle uses). This scaffold is not composed
                 // under the fullscreen player; there the Options menu carries
                 // the Kept Live rows instead.
-                val showKept = retainedList.isNotEmpty() && !isTv
+                val showKept = retainedList.isNotEmpty()
                 val cardRowFrame = if (tabletCardWidth != null) {
                     Modifier.width(tabletCardWidth)
                 } else {
@@ -1441,7 +1070,7 @@ fun MainScaffold(
                 // same session. The row is now only the fallback for an Active session whose
                 // video window is NOT the floating mini (phone Back and the
                 // top-strip swipe minimize into that window instead).
-                if (miniState is MiniPlayerSession.State.Active && !isTv &&
+                if (miniState is MiniPlayerSession.State.Active &&
                     exoWindowMode != com.aeriotv.android.feature.player.ExoWindowState.Mode.Mini
                 ) {
                     val channel = miniState.channel
@@ -1888,433 +1517,16 @@ private fun MainTabContent(
 }
 
 /**
- * 10-foot top navigation for Android TV. A horizontal, D-pad-traversable row of
- * pill tabs with overscan-safe margins. Selection follows focus (tvOS TabView
- * behaviour): landing on a tab switches to it; pressing DOWN drops into content.
- *
- * Audit task #57: [focusRequester] is attached to the pill Row and combined
- * with [Modifier.focusRestorer]. When a section calls `focusRequester
- * .requestFocus()` (via the D-pad UP route from the guide), focus lands on
- * the previously-focused pill rather than the first one - so the user comes
- * back exactly where they left.
- */
-@Composable
-private fun TvTopTabBar(
-    tabs: List<AppTab>,
-    selected: AppTab,
-    onSelect: (AppTab) -> Unit,
-    focusRequester: FocusRequester,
-    tabEntryFocus: androidx.compose.runtime.State<FocusRequester?>? = null,
-    lastUpKeyMs: LongArray = longArrayOf(0L),
-    pillRequesters: Map<AppTab, FocusRequester> = emptyMap(),
-    /** True when the tab is already composed and alive, so selecting it is a
-     *  placement rather than a cold build and can commit immediately. */
-    isTabWarm: (AppTab) -> Boolean = { false },
-    /** Refresh circle (Logan 2026-08-06): TV's stand-in for pull-to-refresh.
-     *  Re-fetches channels + EPG so Dispatcharr-side group/channel edits show
-     *  up without a trip through Settings > playlist. */
-    onRefresh: () -> Unit = {},
-    refreshing: Boolean = false,
-    refreshAnimates: Boolean = true,
-    /** Reports the leftmost pixel the bar actually occupies (the action
-     *  circles when shown, otherwise the centered capsule) so the top-left
-     *  gesture hints can size themselves to the real gutter instead of a
-     *  hard-coded guess. Logan 2026-08-10: the hint pill grew into the bar. */
-    onLeftEdgeChanged: (Int) -> Unit = {},
-    /** Keep Recent Channels Live: count of flipped-away channels still
-     *  buffering. > 0 shows the indicator circle beside Refresh/Search -
-     *  the one spot that is focus-reachable on every content tab (the
-     *  guide's pill-row placement is skipped in sidebar group mode, and
-     *  a standalone strip was not reachable by D-pad; field 2026-08-31). */
-    retainedCount: Int = 0,
-    onRetainedClick: () -> Unit = {},
-    /** Bottom of the bar's DRAWN content (capsule / circles) in root px. The
-     *  outer Box is 16 dp taller above and 12 dp below, so its measured height
-     *  is not where the bar visually ends; the corner mini needs the real one. */
-    onDrawnBottomChanged: (Float) -> Unit = {},
-) {
-    // Selection-follows-focus, but committed ONLY for focus moves BETWEEN pills
-    // (real D-pad traversal of the bar), never for focus ENTERING the bar from
-    // outside. That entry case is exactly how the focus fallback used to bounce
-    // the user to Live TV: drilling into a Settings sub-screen removes the
-    // focused row, Compose hands focus to the first focusable in the tree (the
-    // leftmost Live TV pill), and a straight onFocus -> onSelect switched the
-    // tab, unmounting the sub-screen. We "arm" on the first pill focus after the
-    // bar gains focus and only commit on subsequent in-bar moves; the
-    // post-composition requestFocus that pulls focus back into the content can't
-    // win that race on its own, so the guard lives here where it is deterministic.
-    var navHasFocus by remember { mutableStateOf(false) }
-    var focusedTab by remember { mutableStateOf<AppTab?>(null) }
-    var armed by remember { mutableStateOf(false) }
-    // Arm one frame AFTER the bar gains focus, so the focus that ENTERS the bar
-    // (the same-frame pill focus, including the involuntary fallback) is never
-    // treated as a deliberate selection. Deferring a frame makes this order
-    // independent of whether the Row's or the pill's onFocusChanged fires first.
-    LaunchedEffect(navHasFocus) {
-        if (navHasFocus) {
-            androidx.compose.runtime.withFrameNanos { }
-            armed = true
-        } else {
-            armed = false
-        }
-    }
-    LaunchedEffect(focusedTab) {
-        val cur = focusedTab ?: return@LaunchedEffect
-        // Deliberate bar ENTRY (a fresh D-pad UP) selects immediately too, so
-        // highlighting a pill is always enough; the armed gate alone made the
-        // first-focused pill need an extra move or OK (user report).
-        val deliberateEntry =
-            android.os.SystemClock.uptimeMillis() - lastUpKeyMs[0] < 400L
-        if ((armed || deliberateEntry) && cur != selected) {
-            // E-5 (perf campaign 2026-08-19): SETTLE before committing. Only
-            // one tab branch is composed at a time, so each intermediate
-            // commit while walking the pill row serially cold-builds and
-            // disposes an entire tab (guide, On Demand grid, DVR) on the
-            // Streamer's single big core. 250ms is under the "did it react"
-            // threshold for a resting selection but longer than a pill-walk
-            // step, so pass-through pills never build. This LaunchedEffect is
-            // keyed on focusedTab: moving to the next pill cancels the
-            // pending commit with the coroutine.
-            //
-            // 2026-09-11 (Streamer, measured): with the keep-alive slots that
-            // landed in 4c800955 a tab that has been visited once is already
-            // composed, so committing costs one placement (25-105 ms to the
-            // first placed frame) and there is nothing to protect against.
-            // The flat 250 ms was the WHOLE perceived delay Logan reported:
-            // key to placed frame was 324-386 ms warm, of which ~280 ms was
-            // this sleep. Cold tabs keep the settle window.
-            if (!isTabWarm(cur)) kotlinx.coroutines.delay(250L)
-            onSelect(cur)
-        }
-    }
-
-    // Focus entering the bar by ANY route (the guide's routed UP, or plain
-    // geometric 2D search from tabs that don't wire the requester) must land
-    // on the SELECTED tab's pill. Geometric entry used to land on whichever
-    // pill sat above the content column (On Demand over the centered Settings
-    // form), and with selection-follows-focus that instantly switched tabs
-    // (user report). The per-pill requesters + the group's entry redirect
-    // replace focusRestorer: with selection following focus, the selected
-    // pill IS the last-focused pill in every normal flow.
-    // tvOS-style floating nav: the tabs are grouped into one centered, rounded
-    // "segmented" capsule over the app background (no full-width surface toolbar
-    // strip), so the bar reads as a polished pill group rather than a heavy bar.
-    // The action circles hide on Settings (Logan 2026-08-06: they belong to
-    // the content tabs - Live TV / DVR / On Demand). They stay while the
-    // Search screen itself is up so its circle can show the selected fill.
-    val showActionCircles = selected != AppTab.Settings
-    // Cold start: TV initial focus falls on the LEFTMOST focusable, which is
-    // now the Refresh circle - pull it onto the selected pill (the
-    // pre-circle behavior, and an accidental OK there refreshed instead of
-    // doing nothing). The system grants initial focus when the WINDOW gains
-    // focus, which lands after composition - a plain one-frame LaunchedEffect
-    // lost that race (Streamer 2026-08-06) - so key the one-shot pull on the
-    // window-focus edge and run it a frame later.
-    //
-    // rememberSaveable, not remember: the full-screen player is its own nav
-    // route, so the MAIN destination (and this bar) leaves composition while
-    // it plays. With plain remember the flag came back false on return, the
-    // pull fired a second time ~300 ms after the guide had refocused the
-    // playing channel's cell, and Back from playback landed on the Live TV
-    // pill (Streamer 2026-10-03, stack traced to this requestFocus). The
-    // saveable state lives with the nav entry, so the pull stays one-shot
-    // per Activity, which is what the cold-start case needs.
-    var initialPillFocusPulled by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-    // The cold-start pull's tab and time, until the landing tab is applied.
-    var coldPull by remember { mutableStateOf<Pair<AppTab, Long>?>(null) }
-    val windowFocused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(windowFocused) {
-        if (windowFocused && !initialPillFocusPulled) {
-            initialPillFocusPulled = true
-            androidx.compose.runtime.withFrameNanos { }
-            runCatching { pillRequesters[selected]?.requestFocus() }
-            coldPull = selected to android.os.SystemClock.uptimeMillis()
-            com.aeriotv.android.ui.tv.TvFocusTrace.guide("cold-start pull tab=$selected")
-            com.aeriotv.android.ui.tv.TvColdStartFocus.pending = false
-        } else if (initialPillFocusPulled) {
-            com.aeriotv.android.ui.tv.TvColdStartFocus.pending = false
-        }
-    }
-    // The saved Default Landing Tab is applied a beat AFTER the pull (the
-    // preference loads async), so on a DVR / Movies / TV Shows landing the
-    // pull focused the Live TV pill while the landing tab was shown
-    // (Streamer 2026-10-04). Follow the landing tab once, only while focus
-    // still sits on the pulled pill untouched and within a few seconds.
-    LaunchedEffect(selected) {
-        val (pulledTab, pulledAt) = coldPull ?: return@LaunchedEffect
-        if (selected == pulledTab) return@LaunchedEffect
-        coldPull = null
-        if (!navHasFocus || focusedTab != pulledTab) return@LaunchedEffect
-        if (android.os.SystemClock.uptimeMillis() - pulledAt > 5_000L) return@LaunchedEffect
-        runCatching { pillRequesters[selected]?.requestFocus() }
-        com.aeriotv.android.ui.tv.TvFocusTrace.guide("cold-start pull follows landing tab=$selected")
-    }
-    // Custom layout so the PILL CAPSULE is centered on the SCREEN (Logan
-    // 2026-08-06: adding the circles to a shared centered row shoved the
-    // pills off-center) and the circles hang off its left edge without
-    // affecting its position.
-    //
-    // The circles live OUTSIDE the capsule's focus group, on purpose. Bar
-    // entry arrives as a direct requestFocus on the capsule row, which
-    // IGNORES enter/onEnter redirects and lands on the group's first
-    // focusable - with a circle inside the group, entry never reached the
-    // selected pill and the armed gate (correctly) refused to treat entry
-    // focus as a selection, so Search could never open (Streamer
-    // 2026-08-06). Out here the capsule's focus contract is exactly the
-    // pre-circle one, and each circle is a plain focusable CLICK target
-    // that D-pad Left reaches geometrically.
-    androidx.compose.ui.layout.Layout(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp, bottom = 12.dp)
-            // AFTER the padding, so these bounds are the drawn content's.
-            .onGloballyPositioned { onDrawnBottomChanged(it.boundsInRoot().bottom) },
-        content = {
-            Row(
-                modifier = Modifier
-                    .focusRequester(focusRequester)
-                    // focusProperties describes the focus target BELOW it in
-                    // the chain, so it must precede focusGroup() to apply to
-                    // the group (after it, the enter/exit callbacks never ran).
-                    .focusProperties {
-                        onEnter = {
-                            pillRequesters[selected]?.requestFocus()
-                        }
-                        // Down into the tab: land where the tab asked to
-                        // (On Demand's current sub-tab pill), else default.
-                        onExit = {
-                            if (requestedFocusDirection == androidx.compose.ui.focus.FocusDirection.Down) {
-                                val target = tabEntryFocus?.value
-                                val took = target != null && runCatching { target.requestFocus() }.getOrDefault(false)
-                                com.aeriotv.android.ui.tv.TvFocusTrace.guide("tab-exit down target=${target != null} took=$took")
-                                if (took) {
-                                    // The default geometric move would run
-                                    // after this and land elsewhere.
-                                    cancelFocusChange()
-                                }
-                            }
-                        }
-                    }
-                    .focusGroup()
-                    // Row-level hasFocus stays true while focus moves between pills
-                    // and only flips false when focus leaves the bar entirely, so it
-                    // is the reliable "is the user in the bar" signal for [armed].
-                    .onFocusChanged { navHasFocus = it.hasFocus }
-                    // tvOS system tab bar, halved: a 68 pt capsule holding
-                    // 44 pt pills (Logan 2026-09-10, Streamer vs Apple TV).
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                // 6dp still leaves headroom for the focused pill's 1.04x paint-only
-                // grow (graphicsLayer does not relayout); at 3dp the widest pill
-                // visually collided. Trimmed from 8dp to narrow the bar.
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                tabs.forEach { tab ->
-                    TvTab(
-                        tab = tab,
-                        selected = tab == selected,
-                        onFocused = {
-                            com.aeriotv.android.ui.tv.TvFocusTrace.focus("tab:" + tab.name)
-                            focusedTab = tab
-                            // Warm tabs commit on the SAME frame as the pill
-                            // highlight (tvOS TabView behavior). Going through
-                            // the LaunchedEffect below cost another 22-38 ms
-                            // of coroutine scheduling for nothing. The cold
-                            // path still runs there, with its settle window.
-                            if (tab != selected && isTabWarm(tab) &&
-                                (armed || android.os.SystemClock.uptimeMillis() - lastUpKeyMs[0] < 400L)
-                            ) {
-                                onSelect(tab)
-                            }
-                        },
-                        modifier = pillRequesters[tab]?.let { Modifier.focusRequester(it) } ?: Modifier,
-                    )
-                }
-            }
-            if (showActionCircles) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Refresh (TV's pull-to-refresh stand-in), then Search -
-                    // the most-used action sits closest to the pills, one
-                    // Left press away.
-                    TvBarCircleButton(
-                        icon = Icons.Filled.Refresh,
-                        contentDescription = "Refresh channels and guide",
-                        onClick = onRefresh,
-                        spinning = refreshing,
-                        spinAnimates = refreshAnimates,
-                    )
-                    if (retainedCount > 0) {
-                        TvBarCircleButton(
-                            icon = Icons.Filled.FiberSmartRecord,
-                            contentDescription = "$retainedCount channels kept live",
-                            onClick = onRetainedClick,
-                        )
-                    }
-                    TvBarCircleButton(
-                        icon = AppTab.Search.iconSelected,
-                        contentDescription = AppTab.Search.label,
-                        selected = selected == AppTab.Search,
-                        onClick = { onSelect(AppTab.Search) },
-                        modifier = pillRequesters[AppTab.Search]
-                            ?.let { Modifier.focusRequester(it) } ?: Modifier,
-                    )
-                }
-            }
-        },
-    ) { measurables, constraints ->
-        val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val capsule = measurables[0].measure(loose)
-        val circles = measurables.getOrNull(1)?.measure(loose)
-        val width = constraints.maxWidth
-        val height = maxOf(capsule.height, circles?.height ?: 0)
-        layout(width, height) {
-            val capsuleX = (width - capsule.width) / 2
-            capsule.placeRelative(capsuleX, (height - capsule.height) / 2)
-            val circlesX = capsuleX - 10.dp.roundToPx() - (circles?.width ?: 0)
-            circles?.placeRelative(circlesX, (height - circles.height) / 2)
-            // Publish the real left edge for the hint chips. Writing snapshot
-            // state here is safe: it feeds a SIBLING overlay, never this bar,
-            // so it cannot drive a layout loop, and an equal write is a no-op.
-            onLeftEdgeChanged(if (circles != null) circlesX else capsuleX)
-        }
-    }
-}
-
-/**
- * A floating action circle beside the pill capsule (Search, Refresh). Unlike
- * the pills these are plain BUTTONS: focus highlights (white ring, app
- * convention) and OK acts. They deliberately do NOT select on focus - they
- * sit outside the capsule's focus group and its armed machinery, so
- * focus-driven action here would fire on every accidental Left past the
- * bar's edge. [selected] paints solid primary while the button's content is
- * the one on screen (Search); [spinning] rotates the glyph while its action
- * is in flight (Refresh).
- */
-@Composable
-private fun TvBarCircleButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    selected: Boolean = false,
-    spinning: Boolean = false,
-    spinAnimates: Boolean = true,
-) {
-    // TV chrome canon (ui/tv/TvChrome.kt, tvOS TVNavCircleButtonStyle):
-    // quiet translucent circle at rest, white platter with a dark glyph
-    // while focused, accent fill while its screen (Search) is up. Sized to
-    // the tab capsule beside it so the row centres cleanly.
-    com.aeriotv.android.ui.tv.TvActionCircle(
-        icon = icon,
-        contentDescription = contentDescription,
-        onClick = onClick,
-        modifier = modifier,
-        selected = selected,
-        spinning = spinning,
-        spinAnimates = spinAnimates,
-        size = com.aeriotv.android.ui.tv.TvChrome.circleSize,
-    )
-}
-
-@Composable
-private fun TvTab(
-    tab: AppTab,
-    selected: Boolean,
-    onFocused: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var focused by remember { mutableStateOf(false) }
-    // SELECTED owns the solid fill; FOCUS is the white ring (the app-wide
-    // guide-pill convention). The old scheme gave focused-not-selected a
-    // solid fill brighter than the selected tab, so re-entering the bar lit
-    // two pills as "active" at once.
-    // tvOS system tab bar look (TV chrome canon, ui/tv/TvChrome.kt): the
-    // FOCUSED pill is a white platter with dark ink, the SELECTED pill keeps
-    // the accent fill, everything else is bare text. No ring: the platter
-    // is the focus visual, exactly as on the Apple TV.
-    // Both tweens run the SAME 150 ms EaseInOut as tvFocusScale (the tvOS pill
-    // grow). The default color spring took 145-210 ms to settle and landed the
-    // highlight ~200-260 ms after the key press, which is AFTER the content
-    // swap now arrives (51-199 ms warm): the tab read as loading ahead of the
-    // bar (Logan 2026-09-11). tvOS changes the pill and the content together,
-    // so the bar is sped up to meet the content rather than the content
-    // delayed to meet the bar.
-    val pillTween = androidx.compose.animation.core.tween<Color>(
-        durationMillis = 150,
-        easing = androidx.compose.animation.core.EaseInOut,
-    )
-    val background by animateColorAsState(
-        targetValue = when {
-            focused -> Color.White
-            selected -> MaterialTheme.colorScheme.primary
-            else -> Color.Transparent
-        },
-        animationSpec = pillTween,
-        label = "tvTabBackground",
-    )
-    val foreground by animateColorAsState(
-        targetValue = when {
-            focused -> Color.Black
-            selected -> MaterialTheme.colorScheme.onPrimary
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        animationSpec = pillTween,
-        label = "tvTabForeground",
-    )
-    Row(
-        modifier = modifier
-            .onFocusChanged {
-                focused = it.isFocused
-                if (it.isFocused) onFocused()
-            }
-            // 1.04x (not the 1.08x default): the pills sit 8dp apart and the
-            // paint-only grow must stay inside that gap.
-            .tvFocusScale(focused, focusedScale = 1.04f)
-            .clip(CircleShape)
-            .background(background)
-            .focusable()
-            // Trimmed (13->10 h / 20->18 icon) to narrow the whole centered nav
-            // bar so its right edge clears the enlarged corner mini-player.
-            // Vertical 8 = the old 6 plus the 2dp ring the platter replaced.
-            // tvOS system tab bar pill: 44 pt tall, ~20 pt sides, 26 pt
-            // glyph, 28 pt semibold label, halved.
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Icon(
-            imageVector = if (selected) tab.iconSelected else tab.iconUnselected,
-            contentDescription = null,
-            tint = foreground,
-            modifier = Modifier.size(14.dp),
-        )
-        Text(
-            text = tab.label,
-            color = foreground,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-        )
-    }
-}
-
-/**
- * Collapses a TV chrome strip (the top tab bar here, the On Demand segment
- * pills on their tab) to [visibleFraction] of its measured height, fading the
+ * Collapses a chrome strip (the On Demand segment pills on their tab) to
+ * [visibleFraction] of its measured height, fading the
  * pixels in step. The strip stays MOUNTED throughout: its children are
  * FocusRequester targets and requestFocus() on a detached node throws, so the
  * hide must be geometric, not compositional. Height is floored at 1px so the
  * strip also stays reachable by plain D-pad UP focus search when fully
  * collapsed; focus arriving is the signal the callers use to expand it again.
  *
- * Internal (not private) because the On Demand tab applies the same treatment
- * to its Movies/Series pills; the behavior must stay identical in both spots.
- * Also drives the phone bottom NavigationBar's scroll auto-hide (GH #20),
+ * Internal (not private) because the On Demand tab applies it to its
+ * Movies/Series pills. Also drives the phone bottom NavigationBar's scroll auto-hide (GH #20),
  * where the height collapse is what lets Scaffold hand the space to content.
  */
 internal fun Modifier.collapsibleChrome(visibleFraction: Float): Modifier = this

@@ -101,9 +101,7 @@ import com.aeriotv.android.core.tv.TvActionMenuDialog
 import com.aeriotv.android.core.tv.TvMenuAction
 import com.aeriotv.android.core.tv.rememberTvMenuGuard
 import com.aeriotv.android.feature.main.LocalTabIsActive
-import com.aeriotv.android.feature.main.LocalTvChromeCollapsed
 import com.aeriotv.android.feature.main.LocalTvTabEntryFocus
-import com.aeriotv.android.feature.main.LocalTvTopNavFocusRequester
 import com.aeriotv.android.ui.tv.TvActionCircle
 import com.aeriotv.android.ui.tv.TvChrome
 import com.aeriotv.android.ui.tv.TvFocusTrace
@@ -341,10 +339,6 @@ fun <T> TvMediaPage(
     /** tvOS Movies gates the rail on an empty search field (MoviesView.swift:1854);
      *  DVR does NOT (DVRView.swift:517), so it is a parameter, not an invariant. */
     hideRailWhileSearching: Boolean = true,
-    /** Content offset at which the tab bar hides. tvOS: flat 560 pt / 280 dp for
-     *  Movies and TV Shows (MoviesView.swift:379-382); DVR 620 pt / 310 dp with a
-     *  hero, 260 pt / 130 dp without (DVRView.swift:863). */
-    barHideThreshold: Dp = 280.dp,
     /** A filter surface is open over the page: on close, focus returns to the
      *  Filter circle (tvOS fullScreenCover never tore the tab's focus state
      *  down, MoviesView.swift:3503). */
@@ -366,9 +360,7 @@ fun <T> TvMediaPage(
 ) {
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
-    val topNav = LocalTvTopNavFocusRequester.current
     val tabEntry = LocalTvTabEntryFocus.current
-    val chromeCollapsed = LocalTvChromeCollapsed.current
     val visibleShelves = shelves.filter { it.items.isNotEmpty() }
     val hasHero = heroPages.isNotEmpty()
 
@@ -392,12 +384,10 @@ fun <T> TvMediaPage(
      *  search fell back to the nearest card in the row. A key handler, not
      *  `focusProperties { up = ... }`, for the reason spelled out on the
      *  grid's top row: a detached custom destination swallows the key. The
-     *  key is ALWAYS consumed so the first row can never move sideways; the
-     *  nav bar requester is the fallback when the pill refuses focus. */
+     *  key is ALWAYS consumed so the first row can never move sideways. */
     val upToTabPill: (KeyEvent, String) -> Boolean = { ev, from ->
         if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionUp) {
-            val landed = requestTabPill?.invoke() == true ||
-                runCatching { topNav?.requestFocus() }.getOrNull() == true
+            val landed = requestTabPill?.invoke() == true
             TvFocusTrace.key("Up", landed, "first-row-to-tab-pill($from)")
             true
         } else false
@@ -548,7 +538,6 @@ fun <T> TvMediaPage(
         { key, h -> if (h > 0 && leadingHeightByKey.put(key, h) != h) measureEpoch.value++ }
     }
     val geometry = remember { mutableStateOf<TvPageGeometry?>(null) }
-    val chromeScroll = com.aeriotv.android.feature.main.LocalTvChromeScroll.current
     /** Pixels the page has scrolled, from the first visible row whose rest top is known. */
     fun scrollOffsetPx(): Int? {
         val g = geometry.value ?: return null
@@ -669,13 +658,8 @@ fun <T> TvMediaPage(
                     estimatedRows = estimated,
                 )
             }
-            // No anchor: LEAVE the previous value. Writing Int.MAX_VALUE hid
-            // the bar because we lost track of where we are (Movies spec D11).
-            // This is the owner's once-per-frame publish of the live offset.
-            scrollOffsetPx()?.let { chromeScroll?.value = it }
         }
     }
-    DisposableEffect(Unit) { onDispose { chromeScroll?.value = 0 } }
 
     // The anchors every focusable sends, and the one coroutine that moves
     // the page. CONFLATED: a burst of presses collapses to the newest.
@@ -868,13 +852,6 @@ fun <T> TvMediaPage(
                         " " + (geometry.value?.summary() ?: "no-geometry"),
                 )
                 if (goal == current) return@launch
-                if (target is TvPageAnchor.Hero) {
-                    // Bring the bar back before the page moves: one relayout,
-                    // then a scroll over a page that no longer changes height.
-                    chromeCollapsed?.value = false
-                    chromeScroll?.value = 0
-                    withFrameNanos { }
-                }
                 try {
                 gridState.scroll(androidx.compose.foundation.MutatePriority.PreventUserInput) {
                     var last = 0f
@@ -966,23 +943,7 @@ fun <T> TvMediaPage(
         }
     }
 
-    // Tab bar: fully present until the content offset passes the threshold,
-    // then hidden, and the hide is COMMITTED only once the scroll rests;
-    // the way up returns it instantly (tvOS MoviesView.swift:1762-1787,
-    // DVRView.swift:813-820, threshold :863). Nothing is proportional.
     val scrolled by remember(gridState) { derivedStateOf { gridState.firstVisibleItemIndex > 1 } }
-    val barHideThresholdPx = with(density) { barHideThreshold.roundToPx() }
-    if (chromeCollapsed != null) {
-        LaunchedEffect(gridState, barHideThresholdPx) {
-            snapshotFlow {
-                ((scrollOffsetPx() ?: 0) >= barHideThresholdPx) to gridState.isScrollInProgress
-            }.collect { (want, scrolling) ->
-                if (!want) chromeCollapsed.value = false
-                else if (!scrolling) chromeCollapsed.value = true
-            }
-        }
-        DisposableEffect(Unit) { onDispose { chromeCollapsed.value = false } }
-    }
     // BACK closes an open search first (tvOS: Menu closes the field before
     // anything else), then, while scrolled, snaps to the top and refocuses
     // the hero (the guide's ladder); at the top the handlers stand down so
@@ -1010,7 +971,6 @@ fun <T> TvMediaPage(
     ) {
         val landed = requestTabPill?.invoke() == true
         TvFocusTrace.key("Back", landed, "page-to-tab-pill")
-        if (!landed) runCatching { topNav?.requestFocus() }
     }
     androidx.activity.compose.BackHandler(enabled = LocalTabIsActive.current && scrolled && !(searchEnabled && searchActive)) {
         TvFocusTrace.key("Back", true, "page-snap-to-top")
@@ -1295,7 +1255,6 @@ fun <T> TvMediaPage(
                     TvHeroCarousel(
                         pages = heroPages,
                         primaryRequester = heroPrimary,
-                        upTarget = topNav,
                         // tvOS: any hero button gaining focus while the page
                         // is scrolled snaps the page back to the top.
                         buttonRequesters = heroButtonRequesters,
@@ -1693,7 +1652,6 @@ private fun TvPageBackToTabBar(
 private fun TvHeroCarousel(
     pages: List<TvHeroPage>,
     primaryRequester: FocusRequester,
-    upTarget: FocusRequester?,
     /** Shared [tvHeroSourceKey] requester table (return focus by button id). */
     buttonRequesters: HashMap<String, FocusRequester>? = null,
     onButtonFocused: (pageKey: Any, buttonId: String) -> Unit,
@@ -1754,7 +1712,6 @@ private fun TvHeroCarousel(
                         page = page,
                         width = pageWidth,
                         primaryRequester = if (i == index) primaryRequester else null,
-                        upTarget = upTarget,
                         buttonRequesters = buttonRequesters,
                         onButtonFocused = { id -> index = i; onButtonFocused(page.key, id) },
                     )
@@ -1784,7 +1741,6 @@ private fun TvHeroCard(
     page: TvHeroPage,
     width: Dp,
     primaryRequester: FocusRequester?,
-    upTarget: FocusRequester?,
     buttonRequesters: HashMap<String, FocusRequester>? = null,
     onButtonFocused: (buttonId: String) -> Unit,
 ) {
@@ -1944,7 +1900,6 @@ private fun TvHeroCard(
                         modifier = Modifier
                             .then(if (req != null) Modifier.focusRequester(req) else Modifier)
                             .then(if (b.primary && primaryRequester != null) Modifier.focusRequester(primaryRequester) else Modifier)
-                            .then(if (upTarget != null) Modifier.focusProperties { up = upTarget } else Modifier)
                             .onFocusChanged {
                                 if (it.isFocused) {
                                     TvFocusTrace.focus("hero:" + b.label.ifEmpty { "button$i" })
@@ -1961,7 +1916,6 @@ private fun TvHeroCard(
                         button = TvHeroButton("", Icons.Filled.MoreHoriz, id = "More", onClick = { menuOpen = true }),
                         modifier = Modifier
                             .then(if (moreReq != null) Modifier.focusRequester(moreReq) else Modifier)
-                            .then(if (upTarget != null) Modifier.focusProperties { up = upTarget } else Modifier)
                             .onFocusChanged {
                                 if (it.isFocused) {
                                     TvFocusTrace.focus("hero:More")

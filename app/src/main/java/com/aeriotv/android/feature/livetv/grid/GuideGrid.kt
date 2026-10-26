@@ -261,10 +261,6 @@ fun GuideGrid(
         }
     }
     androidx.compose.runtime.SideEffect { onActionRunner(runAction) }
-    // UP out of the grid must land on the CURRENT tab's pill (Logan
-    // 2026-09-02), never on whichever pill is geometrically nearest: the nav
-    // switches tabs on focus, so a geometric search opened On Demand.
-    val topNav = com.aeriotv.android.feature.main.LocalTvTopNavFocusRequester.current
     // GH #71: digit keys jump focus to a channel number (no tune); the
     // number resolves against the rows on screen, so it respects the
     // active group / filter.
@@ -330,9 +326,7 @@ fun GuideGrid(
                 // cursor up once something upstairs has actually taken focus.
                 Key.DirectionUp -> {
                     if (down) {
-                        val left = onLeaveTop() ||
-                            (topNav?.let { runCatching { it.requestFocus() }.getOrDefault(false) } ?: false)
-                        if (left) clockSelected = false
+                        if (onLeaveTop()) clockSelected = false
                     }
                     true
                 }
@@ -390,8 +384,8 @@ fun GuideGrid(
                         }
                         if (isTv) { traceBy = "grid-top-row->clock"; clockSelected = true; return@handler true }
                         if (onLeaveTop()) { traceBy = "grid-top-row->onLeaveTop"; return@handler true }
-                        traceBy = "grid-top-row->topNav"
-                        return@handler topNav?.let { runCatching { it.requestFocus() }.getOrDefault(false) } ?: false
+                        traceBy = "grid-top-row(held)"
+                        return@handler false
                     }
                     traceBy = "grid-moveRows"
                     true
@@ -586,7 +580,6 @@ fun GuideGrid(
             .fillMaxSize()
             .focusRequester(focusRequester)
             .focusProperties {
-                if (topNav != null) up = topNav
                 left = FocusRequester.Cancel
                 right = FocusRequester.Cancel
             }

@@ -56,7 +56,6 @@ import com.aeriotv.android.core.category.CategoryPaletteState
 import com.aeriotv.android.core.category.ProgramCategory
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 import com.aeriotv.android.core.preferences.GuideProgramInfoButton
-import com.aeriotv.android.core.preferences.TvInterfaceLayout
 import com.aeriotv.android.ui.scale.AlertDialog
 import com.aeriotv.android.ui.settings.SettingsActionRow
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
@@ -106,11 +105,8 @@ fun LiveTvSettingsScreen(
     val roundedArtworkGuide by viewModel.roundedArtworkGuide.collectAsStateWithLifecycle(initialValue = false)
     val roundedProgramCells by viewModel.roundedProgramCells.collectAsStateWithLifecycle(initialValue = false)
     val defaultLiveTVView by viewModel.defaultLiveTVView.collectAsStateWithLifecycle(initialValue = "")
-    val liveTvLayout by viewModel.liveTvLayout.collectAsStateWithLifecycle(initialValue = "basic")
     val phoneGroupSelector by viewModel.phoneGroupSelector.collectAsStateWithLifecycle(initialValue = "sidebar")
     val edgeSwipeOpensSidebar by viewModel.liveTvEdgeSwipeOpensSidebar.collectAsStateWithLifecycle(initialValue = false)
-    val guideGroupSelector by viewModel.guideGroupSelector.collectAsStateWithLifecycle(initialValue = "pills")
-    val tvInterfaceLayout by viewModel.tvInterfaceLayout.collectAsStateWithLifecycle()
     val showEpgBadges by viewModel.showEpgBadges(isTv).collectAsStateWithLifecycle(initialValue = true)
     val hiddenEpgBadges by viewModel.hiddenEpgBadges.collectAsStateWithLifecycle(initialValue = emptySet())
     val scaleLiveTV by viewModel.displayScaleLiveTV.collectAsStateWithLifecycle(initialValue = 1.0f)
@@ -293,73 +289,16 @@ fun LiveTvSettingsScreen(
                     }
                 }
 
-                // MARK: TV Interface (TV, ANDROID: no Apple counterpart)
-                if (isTv) item("tv-interface") {
-                    SettingsSection(header = "TV Interface") {
-                        SettingsPickerRow(
-                            title = "Interface Style",
-                            options = listOf(
-                                SettingsPickerOption(TvInterfaceLayout.STANDARD, "Standard"),
-                                SettingsPickerOption(TvInterfaceLayout.SIDEBAR, "Sidebar Style"),
-                            ),
-                            selected = tvInterfaceLayout,
-                            onSelect = viewModel::setTvInterfaceLayout,
-                            leadingIcon = Icons.Outlined.ViewAgenda,
-                            footer = "Standard uses the top tab bar and the Channel Preview banner. Sidebar Style replaces the tab bar with a left side menu and docks the preview player on the left of the guide, with program details beside it.",
-                            tvChoiceSheet = true,
-                        )
-                    }
-                }
-
-                // MARK: Guide Layout (TV)
-                if (isTv) item("guide-layout") {
-                    SettingsSection(header = "Guide Layout") {
-                        SettingsSelectionRow(
-                            label = "Basic",
-                            // Apple rectangle.grid.1x2: two outlined stacked rows.
-                            leadingIcon = Icons.Outlined.ViewAgenda,
-                            subtitle = "Full program details in every guide cell",
-                            selected = liveTvLayout != "preview",
-                            onClick = { viewModel.setLiveTvLayout("basic") },
-                        )
-                        SettingsSelectionRow(
-                            label = "Channel Preview",
-                            leadingIcon = Icons.Filled.Web,
-                            subtitle = "A banner shows the highlighted program; cells keep the title and tags",
-                            selected = liveTvLayout == "preview",
-                            onClick = { viewModel.setLiveTvLayout("preview") },
-                        )
-                    }
-                }
-
                 // MARK: Groups
                 //
                 // The Default Group picker moved to Live TV's Manage Groups
                 // sheet (Logan 2026-09-17, Apple parity): the group list, the
                 // hide/show checks and the default all live in one place now.
-                // Group Selection below is all this section carries.
+                // Group Selection below is all this section carries; the TV
+                // guide always opens its groups as the sidebar panel, so
+                // there is nothing to choose there.
                 item("group-selection") {
-                    // Phase 3: one picker on both inputs. TV used to open a
-                    // TvActionMenuDialog from a value row and touch listed the
-                    // two choices inline; the shared picker renders inline on
-                    // TV and pushes a choice page on touch. Same keys.
-                    if (isTv) {
-                        // tvOS: one choice row; its sheet carries the footer.
-                        SettingsSection(header = "Group Selection") {
-                            SettingsPickerRow(
-                                title = "Group Selection",
-                                options = listOf(
-                                    SettingsPickerOption("pills", "Top Group Pills"),
-                                    SettingsPickerOption("sidebar", "Sidebar Menu"),
-                                ),
-                                selected = if (guideGroupSelector == "sidebar") "sidebar" else "pills",
-                                onSelect = viewModel::setGuideGroupSelector,
-                                leadingIcon = Icons.AutoMirrored.Outlined.ViewSidebar,
-                                footer = "How channel groups are picked in the guide. Top Group Pills keep the group row above the grid; Sidebar Menu hides that row and opens by holding Left in the grid (unless Left (Hold) is reassigned in Remote Control). Only one is active at a time.",
-                                tvChoiceSheet = true,
-                            )
-                        }
-                    } else {
+                    if (!isTv) {
                         SettingsSection(
                             header = "Group Selection",
                             footer = "How Live TV picks a channel group. Sidebar Menu " +

@@ -55,25 +55,6 @@ class MiniPlayerSession @Inject constructor() {
     val resumeRequests: SharedFlow<M3UChannel> = _resumeRequests.asSharedFlow()
 
     /**
-     * One-shot "jump the guide to the top channel" events, emitted when the
-     * user DOUBLE-presses Back while the mini-player is Active (tvOS parity:
-     * NowPlayingManager's double-Menu -> .guideScrollToTop). The mini stays
-     * Active/playing; only the guide's focus + scroll move. GuideScreen
-     * collects this. Buffer 1 + DROP_OLDEST so it survives a compose churn.
-     */
-    private val _guideTopRequests = MutableSharedFlow<Unit>(
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
-    val guideTopRequests: SharedFlow<Unit> = _guideTopRequests.asSharedFlow()
-
-    /** Double-Back on the mini (tvOS): ask the guide to jump to the top
-     *  channel WITHOUT touching playback or the mini's Active state. */
-    fun requestGuideTop() {
-        _guideTopRequests.tryEmit(Unit)
-    }
-
-    /**
      * GH #15: one-shot handoff from PlayerScreen's resume-time self-pop to
      * the guide. HOME on TV stops playback and hides the player window
      * (MainActivity.onStop); on return PlayerScreen resumes onto that Hidden

@@ -555,10 +555,8 @@ fun PlayerScreen(
         context.resources.configuration.uiMode and
             android.content.res.Configuration.UI_MODE_TYPE_MASK
         ) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    // Sidebar-style TV interface: Back with the controls up only hides them
-    // (BackHandler below).
-    val sidebarInterface = isTvForm && settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle().value ==
-        com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR
+    // TV: Back with the controls up only hides them (BackHandler below).
+    val sidebarInterface = isTvForm
 
     // GH #7 (True Android Fullscreen): on phone/tablet, hide the status + nav
     // bars in LANDSCAPE so playback is genuinely edge-to-edge instead of
@@ -2682,13 +2680,11 @@ private fun LiveRewindChromeSection(
             exoHolder.playTimeshift(target.coerceAtLeast(tail))
         }
     }
-    // ANDROID: Sidebar-style interface. Its own controls replace this
-    // chrome's on a live channel; catch-up, a stream outage (Retry lives in
-    // the standard controls) and the full Options menu keep the standard
-    // chrome, which also keeps its hidden-chrome HUDs (info card, scrub).
-    val tvInterfaceLayout by settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle()
-    val sidebarChrome = isTvForm && !isCatchupMode && !streamUnavailable && !chromeMenuOpen &&
-        tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR
+    // ANDROID (TV): the sidebar controls replace this chrome's on a live
+    // channel; catch-up, a stream outage (Retry lives in the standard
+    // controls) and the full Options menu keep the standard chrome, which
+    // also keeps its hidden-chrome HUDs (info card, scrub).
+    val sidebarChrome = isTvForm && !isCatchupMode && !streamUnavailable && !chromeMenuOpen
     PlayerChromeOverlay(
         channel = currentChannel,
         nowProgramme = nowProgramme,

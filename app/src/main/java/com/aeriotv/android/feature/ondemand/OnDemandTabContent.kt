@@ -103,7 +103,6 @@ import com.aeriotv.android.core.tv.rememberTvMenuGuard
 import com.aeriotv.android.core.network.DispatcharrVODMovie
 import com.aeriotv.android.core.network.DispatcharrVODSeries
 import com.aeriotv.android.feature.livetv.rememberLiveTvFormFactor
-import com.aeriotv.android.feature.main.LocalTvChromeCollapsed
 import com.aeriotv.android.ui.tv.rememberVodReturnFocus
 import com.aeriotv.android.ui.tv.vodGridDpadFallback
 import com.aeriotv.android.feature.main.collapsibleChrome
@@ -199,22 +198,12 @@ fun OnDemandTabContent(
         OnDemandSection.Series -> seriesGridState
         OnDemandSection.ContinueWatching -> continueGridState
     }
-    // TV chrome collapse: once the user scrolls past the first poster row,
-    // report "collapsed" to the shell (top tab bar) and shrink the segment
-    // pills below, so the reclaimed height shows more posters. derivedStateOf
-    // keeps this from recomposing on every scroll frame -- it only flips at
-    // the row-0 boundary.
-    val chromeCollapsed = LocalTvChromeCollapsed.current
+    // TV: once the user scrolls past the first poster row, shrink the segment
+    // pills so the reclaimed height shows more posters. derivedStateOf keeps
+    // this from recomposing on every scroll frame -- it only flips at the
+    // row-0 boundary.
     val scrolled by remember(activeGridState) {
         derivedStateOf { activeGridState.firstVisibleItemIndex > 0 }
-    }
-    if (tabIsTv && chromeCollapsed != null) {
-        LaunchedEffect(scrolled) { chromeCollapsed.value = scrolled }
-        // Leaving the tab (or losing the TV shell) must never strand the
-        // top bar collapsed for the next tab.
-        DisposableEffect(Unit) {
-            onDispose { chromeCollapsed.value = false }
-        }
     }
     // TV focus paths (Logan 2026-09-02): Down from the tab bar lands on the
     // CURRENT sub-tab pill (geometric search picked the search icon), and

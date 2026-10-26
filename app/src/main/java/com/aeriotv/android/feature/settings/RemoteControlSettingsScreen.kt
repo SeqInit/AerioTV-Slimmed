@@ -292,9 +292,8 @@ fun RemoteControlSettingsScreen(
     fun saveLearned(b: com.aeriotv.android.core.remote.LearnedButton) {
         viewModel.setLearnedRemoteButtons((learned + (b.keyCode to b)).values)
     }
-    val groupSelector by viewModel.guideGroupSelector.collectAsStateWithLifecycle(
-        initialValue = "pills",
-    )
+    // The TV guide's groups always open as the sidebar panel.
+    val sidebarGroups = true
     val tuneInMini by viewModel.guideTuneInMini.collectAsStateWithLifecycle(
         initialValue = false,
     )
@@ -367,14 +366,14 @@ fun RemoteControlSettingsScreen(
                     GUIDE_SLOTS.forEach { slot ->
                         SlotRow(
                             slotName = slot.displayName,
-                            valueName = map.guideAction(slot, groupSelector == "sidebar").displayName(groupSelector == "sidebar"),
+                            valueName = map.guideAction(slot, sidebarGroups).displayName(sidebarGroups),
                             onClick = { editingGuideSlot = slot },
                         )
                     }
                     GUIDE_BACK_SLOTS.forEach { slot ->
                         SlotRow(
                             slotName = slot.displayName,
-                            valueName = map.guideAction(slot, groupSelector == "sidebar").displayName(groupSelector == "sidebar"),
+                            valueName = map.guideAction(slot, sidebarGroups).displayName(sidebarGroups),
                             subtitle = if (slot == RemoteSlot.BACK_SHORT) {
                                 "Single press. Pressing twice quickly and the Radio Mode shortcuts are fixed."
                             } else null,
@@ -399,7 +398,7 @@ fun RemoteControlSettingsScreen(
                     GUIDE_EXTENDED_SLOTS.forEach { slot ->
                         SlotRow(
                             slotName = slot.displayName,
-                            valueName = map.guideAction(slot).displayName(groupSelector == "sidebar"),
+                            valueName = map.guideAction(slot).displayName(sidebarGroups),
                             onClick = { editingGuideSlot = slot },
                         )
                     }
@@ -474,8 +473,8 @@ fun RemoteControlSettingsScreen(
         TvActionMenuDialog(
             title = slot.displayName,
             actions = guideActionChoices(slot).map { action ->
-                val current = map.guideAction(slot, groupSelector == "sidebar") == action
-                val name = action.displayName(groupSelector == "sidebar")
+                val current = map.guideAction(slot, sidebarGroups) == action
+                val name = action.displayName(sidebarGroups)
                 TvMenuAction(
                     label = if (current) "$name  (current)" else name,
                 ) {
@@ -526,7 +525,7 @@ fun RemoteControlSettingsScreen(
         is LearnStep.PickGuide, is LearnStep.EditGuide -> {
             val code = if (step is LearnStep.PickGuide) step.keyCode else (step as LearnStep.EditGuide).keyCode
             val existing = learned[code]
-            val sidebar = groupSelector == "sidebar"
+            val sidebar = sidebarGroups
             TvActionMenuDialog(
                 title = "${learnedKeyName(code)}: In the Guide",
                 actions = LEARNED_GUIDE_CHOICES.map { action ->
@@ -551,7 +550,7 @@ fun RemoteControlSettingsScreen(
             if (b == null) {
                 learnStep = null
             } else {
-                val sidebar = groupSelector == "sidebar"
+                val sidebar = sidebarGroups
                 TvActionMenuDialog(
                     title = learnedKeyName(b.keyCode),
                     actions = listOf(

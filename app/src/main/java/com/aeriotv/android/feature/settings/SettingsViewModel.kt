@@ -358,27 +358,9 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setShowRemoteHints(value) }
     }
 
-    /** TV guide group-selector style: "pills" (top row) or "sidebar". */
     /** Settings root / rail Sync subtitle: Off / Dispatcharr. */
     val syncProviderLabel: kotlinx.coroutines.flow.Flow<String> = prefs.syncProvider.map { syncProviderLabel(it) }
 
-    val guideGroupSelector: StateFlow<String> = prefs.guideGroupSelector
-        .stateIn(viewModelScope, SharingStarted.Eagerly, "pills")
-    fun setGuideGroupSelector(mode: String) {
-        viewModelScope.launch { prefs.setGuideGroupSelector(mode) }
-    }
-    /** TV guide sidebar layout: "overlay" (default, scrim) or "shift" (grid narrows). */
-    val guideSidebarLayout: StateFlow<String> = prefs.guideSidebarLayout
-        .stateIn(viewModelScope, SharingStarted.Eagerly, "overlay")
-    fun setGuideSidebarLayout(mode: String) {
-        viewModelScope.launch { prefs.setGuideSidebarLayout(mode) }
-    }
-    /** ANDROID: TV interface layout, "standard" or "sidebar" (see AppPreferences). */
-    val tvInterfaceLayout: StateFlow<String> = prefs.tvInterfaceLayout
-        .stateIn(viewModelScope, SharingStarted.Eagerly, com.aeriotv.android.core.preferences.TvInterfaceLayout.STANDARD)
-    fun setTvInterfaceLayout(mode: String) {
-        viewModelScope.launch { prefs.setTvInterfaceLayout(mode) }
-    }
     /** Phone / tablet Live TV group selector: "sidebar" (default drawer) or "pills". */
     val phoneGroupSelector: StateFlow<String> = prefs.phoneGroupSelector
         .stateIn(viewModelScope, SharingStarted.Eagerly, "sidebar")
@@ -625,11 +607,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     /** TV Live TV layout (tvOS parity 2026-09-10): "basic" or "preview". Per device. */
-    val liveTvLayout: StateFlow<String> = prefs.liveTvLayout
-        .stateIn(viewModelScope, SharingStarted.Eagerly, "basic")
-    fun setLiveTvLayout(value: String) {
-        viewModelScope.launch { prefs.setLiveTvLayout(value) }
-    }
 
     // Network (Phase 8c)
     val networkTimeoutSecs: Flow<Double> = prefs.networkTimeoutSecs

@@ -45,7 +45,6 @@ import com.aeriotv.android.feature.main.MainScaffold
 import com.aeriotv.android.feature.main.MainScaffoldEntryPoint
 import com.aeriotv.android.feature.miniplayer.MiniPlayerSession
 import com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel
-import com.aeriotv.android.feature.miniplayer.TvMiniPlayerOverlay
 import com.aeriotv.android.feature.onboarding.ChooseSourceTypeScreen
 import com.aeriotv.android.feature.onboarding.ConfigureSourceScreen
 import com.aeriotv.android.feature.onboarding.SettingUpScreen
@@ -87,8 +86,6 @@ object Routes {
     const val CHOOSE_TYPE = "choose_type"
     const val CONFIGURE = "configure/{type}"
     const val MAIN = "main"
-    /** ANDROID (TV): setup's last step, Choose Your Interface. */
-    const val CHOOSE_INTERFACE = "choose_interface"
     // Task #148 milestone B: optional cs* args put the LIVE player into
     // catch-up mode on TV (phone keeps the recording player, mirroring
     // iPhone vs the tvOS unified player). csEnd <= csStart = not catch-up.
@@ -441,7 +438,7 @@ fun AerioTVNavHost(
                 }
                 val vm: PlaylistViewModel = hiltViewModel(parent)
                 val state by vm.state.collectAsStateWithLifecycle()
-                val setupDoneRoute = if (com.aeriotv.android.ui.settings.rememberIsTvDevice()) Routes.CHOOSE_INTERFACE else Routes.MAIN
+                val setupDoneRoute = Routes.MAIN
                 LaunchedEffect(state.phase) {
                     if (state.phase == PlaylistViewModel.Phase.ChannelsReady) {
                         navController.navigate(setupDoneRoute) {
@@ -494,7 +491,7 @@ fun AerioTVNavHost(
                 route = Routes.CONFIGURE,
                 arguments = listOf(navArgument("type") { type = NavType.StringType }),
             ) { entry ->
-                val setupDoneRoute = if (com.aeriotv.android.ui.settings.rememberIsTvDevice()) Routes.CHOOSE_INTERFACE else Routes.MAIN
+                val setupDoneRoute = Routes.MAIN
                 val parent = remember(entry) {
                     navController.getBackStackEntry(Routes.PLAYLIST_GRAPH)
                 }
@@ -555,36 +552,6 @@ fun AerioTVNavHost(
                 )
             }
 
-            composable(Routes.CHOOSE_INTERFACE) {
-                val ctx = androidx.compose.ui.platform.LocalContext.current
-                val prefs = remember {
-                    dagger.hilt.android.EntryPointAccessors
-                        .fromApplication(ctx.applicationContext, NavEntryPoint::class.java)
-                        .appPreferences()
-                }
-                val scope = androidx.compose.runtime.rememberCoroutineScope()
-                val openMain = {
-                    navController.navigate(Routes.MAIN) {
-                        popUpTo(Routes.PLAYLIST_GRAPH) { inclusive = false }
-                    }
-                }
-                // A layout already chosen (restored from Drive with the other
-                // preferences) is respected: no question, straight in.
-                var asked by remember { androidx.compose.runtime.mutableStateOf(false) }
-                LaunchedEffect(Unit) {
-                    if (prefs.tvInterfaceLayoutChosenOnce()) openMain() else asked = true
-                }
-                if (asked) {
-                    com.aeriotv.android.feature.onboarding.ChooseInterfaceScreen(
-                        onChoose = { layout ->
-                            scope.launch {
-                                prefs.setTvInterfaceLayout(layout)
-                                openMain()
-                            }
-                        },
-                    )
-                }
-            }
             composable(Routes.MAIN) { entry ->
                 val parent = remember(entry) {
                     navController.getBackStackEntry(Routes.PLAYLIST_GRAPH)
@@ -1599,46 +1566,8 @@ fun AerioTVNavHost(
 
         // Mini-player overlay (Phase 139 / audit #22). The session ViewModel
         // is rooted here so the same instance is visible from PlayerScreen
-        // (writes state on its dispose) and from this overlay (reads state
-        // and renders). The TV variant draws a top-right video window with a
-        // "hold Back to resume" hint; the phone variant lives inside
-        // MainScaffold as a row above the bottom nav.
+        // (writes state on its dispose) and from the guide / scaffold.
         val miniPlayerVm: MiniPlayerViewModel = androidx.hilt.navigation.compose.hiltViewModel()
-        val miniState by miniPlayerVm.state.collectAsStateWithLifecycle()
-        val miniContext = androidx.compose.ui.platform.LocalContext.current
-        val miniEntry = remember {
-            dagger.hilt.android.EntryPointAccessors.fromApplication(
-                miniContext.applicationContext,
-                MainScaffoldEntryPoint::class.java,
-            )
-        }
-        val miniExoHolder = remember { miniEntry.exoPlayerHolder() }
-        val miniExoWindowState = remember { miniEntry.exoWindowState() }
-        // tvOS-parity mini Back: SINGLE Back expands to fullscreen, DOUBLE
-        // Back jumps the guide to the top channel (mini keeps playing). There
-        // is no Back-to-close (tvOS only stops via the player's X); the video
-        // is drawn by the activity-lifetime PersistentExoWindow at root.
-        val miniLayoutVm: com.aeriotv.android.feature.settings.SettingsViewModel =
-            androidx.hilt.navigation.compose.hiltViewModel()
-        val miniTvLayout by miniLayoutVm.tvInterfaceLayout.collectAsStateWithLifecycle()
-        TvMiniPlayerOverlay(
-            // Sidebar-style interface: Back belongs to the guide / menu.
-            enabled = miniTvLayout != com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR,
-            state = miniState,
-            onResume = {
-                val resumed = miniPlayerVm.resumeChannel()
-                if (resumed != null) {
-                    // Single top: a repeated expand must never stack a
-                    // second player route over the first.
-                    navController.navigate(Routes.player(resumed.id)) { launchSingleTop = true }
-                }
-            },
-            onJumpToTop = {
-                // Mini stays Active; the guide (composed under the mini on the
-                // Live TV tab) scrolls + focuses its top channel.
-                miniPlayerVm.session.requestGuideTop()
-            },
-        )
         // Radio Mode "Return to Channel": the holder is still playing the
         // channel, so the player adopts it with no re-tune.
         androidx.compose.runtime.LaunchedEffect(Unit) {

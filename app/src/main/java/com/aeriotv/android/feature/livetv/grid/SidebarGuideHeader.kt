@@ -91,7 +91,6 @@ fun SidebarGuideHeader(
     onOpenInfo: () -> Unit,
     descriptionFocus: FocusRequester,
     downTarget: FocusRequester?,
-    upTarget: FocusRequester?,
     /** Down handled by the host (lands on the clock). Return true when consumed. */
     onDown: (() -> Boolean)? = null,
     miniActive: Boolean,
@@ -209,7 +208,6 @@ fun SidebarGuideHeader(
                         .focusRequester(descriptionFocus)
                         .focusProperties {
                             if (downTarget != null) down = downTarget
-                            if (upTarget != null) up = upTarget
                         }
                         .onPreviewKeyEvent { e ->
                             onDown != null && e.type == KeyEventType.KeyDown &&

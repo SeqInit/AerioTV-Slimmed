@@ -220,18 +220,10 @@ fun GuideScreen(
     val reminders by remindersVm.all.collectAsStateWithLifecycle()
     val reminderKeys = remember(reminders) { reminders.mapTo(HashSet()) { it.reminderKey } }
     val collections by collectionsVm.collections.collectAsStateWithLifecycle()
-    val groupSelector by settingsVm.guideGroupSelector.collectAsStateWithLifecycle()
-    // ANDROID: Sidebar-style TV interface. It implies its own guide layout
-    // (preview header, groups in a left panel over the guide) whatever the
-    // Guide Layout / Group Selection / Sidebar Layout settings say, which
-    // keep applying to the Standard interface only.
-    val tvInterfaceLayout by settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle()
-    val sidebarInterface = isTv && tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR
-    val sidebarGroupMode = isTv && (groupSelector == "sidebar" || sidebarInterface) && !favoritesOnly
-    // Sidebar layout (Logan 2026-09-14): "shift" docks the pane beside the
-    // grid, which narrows instead of being covered; "overlay" keeps the scrim.
-    val guideSidebarLayout by settingsVm.guideSidebarLayout.collectAsStateWithLifecycle()
-    val sidebarShiftMode = isTv && guideSidebarLayout == "shift" && !sidebarInterface
+    // ANDROID: the TV guide is the sidebar layout: preview header, groups in
+    // a left panel beside the side menu.
+    val sidebarInterface = isTv
+    val sidebarGroupMode = isTv && !favoritesOnly
     // Phone group selector (Logan 2026-09-05, Apple parity): drawer by
     // default, pills on request. Separate preference from the TV's.
     val phoneGroupSelector by settingsVm.phoneGroupSelector.collectAsStateWithLifecycle()
@@ -272,11 +264,10 @@ fun GuideScreen(
     // the iPad), so they are taller. Phone = smallest width under 600dp,
     // so a rotated phone keeps the tall rows like the iPhone does.
     val isPhoneIdiom = !isTv && LocalConfiguration.current.smallestScreenWidthDp < 600
-    // Channel Preview (tvOS "Live TV Layout", Logan 2026-09-05): a banner
+    // Channel Preview (tvOS "Live TV Layout", Logan 2026-09-05): a header
     // above the guide carries the focused program; rows keep title + tags
-    // and are shorter (tvOS 96 vs 110 pt).
-    val liveTvLayout by settingsVm.liveTvLayout.collectAsStateWithLifecycle()
-    val previewMode = isTv && (liveTvLayout == "preview" || sidebarInterface)
+    // and are shorter (tvOS 96 vs 110 pt). Always on for TV.
+    val previewMode = isTv
     // Subtext Size grows rows only (never shrinks them) by the share of the
     // row that holds secondary lines (subtitle, description, time).
     val subtextGrowth = com.aeriotv.android.ui.scale.LocalSubtextScale.current.let { s ->
@@ -343,16 +334,6 @@ fun GuideScreen(
         ) {
             viewModel.onGroupSelected(fallbackGroup, persist = false)
         }
-    }
-    // Pills: collections placed at the beginning, then the groups, then the rest.
-    val pillItems = remember(groups, collections) {
-        val begin = collections.filter { it.placement == ChannelCollection.PLACEMENT_BEGINNING }
-        val end = collections.filter { it.placement != ChannelCollection.PLACEMENT_BEGINNING }
-        begin.map { ChannelCollection.token(it.id) to it.name } +
-            // Tokens (Favorites, All) read through the shared label map; the
-            // raw "__favorites__" token showed on the Streamer (2026-09-10).
-            groups.map { it to com.aeriotv.android.feature.livetv.groupDisplayName(it) } +
-            end.map { ChannelCollection.token(it.id) to it.name }
     }
     val groupedChannels by produceState(
         initialValue = computeDisplayChannels(
@@ -719,7 +700,6 @@ fun GuideScreen(
     }
 
     val gridFocus = remember { FocusRequester() }
-    val pillsFocus = remember { FocusRequester() }
     val bannerFocus = remember { FocusRequester() }
     val radioBannerFocus = remember { FocusRequester() }
     var clockSelectTrigger by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -801,8 +781,7 @@ fun GuideScreen(
     val exoWindowMode by exoWindowModeFlow.collectAsStateWithLifecycle()
     val traceGates: () -> String = {
         "gates[tabActive=$tabActive gridHasFocus=$gridHasFocus" +
-            " sidebarOpen=$groupSidebarOpen sidebarMode=$sidebarGroupMode layout=${if (sidebarShiftMode) "shift" else "overlay"}" +
-            " gridFocusEnabled=${!(sidebarShiftMode && groupSidebarOpen && !gridHasFocus)}" +
+            " sidebarOpen=$groupSidebarOpen sidebarMode=$sidebarGroupMode" +
             " manageGroups=$showManageGroups menu=${menuFor != null} info=${programInfoTarget != null} record=${recordTarget != null}" +
             " jump=$showJumpSheet collectionPicker=${collectionPickerFor != null} search=$searchActive" +
             " mini=$miniActive exoWindow=$exoWindowMode clockTrigger=$clockSelectTrigger" +
@@ -850,19 +829,13 @@ fun GuideScreen(
             com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=launch-loop result=${if (gridHasFocus) "success" else "failure"} attempts=12 ${traceGates()}")
         }
     }
-    // Down out of the top nav has to land somewhere deterministic. The bar's
-    // onExit only cancels the default geometric move when the tab published an
-    // entry point, and Live TV never did: the guide fills the screen UNDER the
-    // overlaid bar, so its focus rect is not "below" the bar and the geometric
-    // search found nothing. Frankie B. 2026-09-15: Down from tab:LiveTV was
-    // declined twice in a row (guide-screen(focus-not-in-grid)) with focus
-    // stuck in the bar. Publish the guide's entry point, mirroring the Up
-    // chain: the pill row when it is there, otherwise the grid itself.
+    // Publish the guide's entry point (the grid) so closing the side menu onto
+    // this tab lands focus somewhere deterministic (Frankie B. 2026-09-15:
+    // without one, focus was stranded and every key was declined).
     val tabEntryFocus = com.aeriotv.android.feature.main.LocalTvTabEntryFocus.current
-    val pillsShownForEntry = isTv && !sidebarGroupMode && !favoritesOnly && pillItems.isNotEmpty()
-    androidx.compose.runtime.DisposableEffect(isTv, tabActive, pillsShownForEntry) {
-        if (isTv && tabActive) tabEntryFocus.value = if (pillsShownForEntry) pillsFocus else gridFocus
-        onDispose { if (tabEntryFocus.value === pillsFocus || tabEntryFocus.value === gridFocus) tabEntryFocus.value = null }
+    androidx.compose.runtime.DisposableEffect(isTv, tabActive) {
+        if (isTv && tabActive) tabEntryFocus.value = gridFocus
+        onDispose { if (tabEntryFocus.value === gridFocus) tabEntryFocus.value = null }
     }
 
     // Stranded-focus watchdog (Frankie B. 2026-09-15). A failed hand-off out of
@@ -1006,7 +979,7 @@ fun GuideScreen(
             sidebarOriginalGroup = state.selectedGroup
             groupSidebarOpen = true
             true
-        } else runCatching { pillsFocus.requestFocus() }.getOrDefault(false)
+        } else false
     }
     val hostAction: (com.aeriotv.android.core.remote.GuideRemoteAction) -> Boolean = { action ->
         when (action) {
@@ -1102,27 +1075,6 @@ fun GuideScreen(
         // The new playlist restores its own saved group; the old snapshot
         // belongs to the previous playlist and must not be put back.
         if (groupSidebarOpen) { sidebarOriginalGroup = null; groupSidebarOpen = false }
-    }
-    // Android#137: double Back on the TV mini emits guideTopRequests
-    // (Navigation.kt TvMiniPlayerOverlay onJumpToTop), but the guide rebuild
-    // (fd886fab) dropped the only collector, so the request went nowhere in
-    // every Play Channels In mode. Land now + the top channel; the mini keeps
-    // playing.
-    val tuneModeVm: com.aeriotv.android.feature.settings.SettingsViewModel = hiltViewModel()
-    val tuneInMiniMode by tuneModeVm.guideTuneInMini.collectAsStateWithLifecycle(initialValue = false)
-    val tabActiveNow by androidx.compose.runtime.rememberUpdatedState(tabActive)
-    val miniActiveNow by androidx.compose.runtime.rememberUpdatedState(miniActive)
-    LaunchedEffect(miniPlayerVm.session) {
-        miniPlayerVm.session.guideTopRequests.collect {
-            if (!tabActiveNow) return@collect
-            android.util.Log.i(
-                "AerioTV",
-                "[GUIDE] double Back -> top channel (window=${if (miniActiveNow) "mini" else "fullscreen"} tuneIn=${if (tuneInMiniMode) "mini" else "fullscreen"})",
-            )
-            grid.back(System.currentTimeMillis())
-            runCatching { gridListState.scrollToItem(0) }
-            runCatching { gridFocus.requestFocus() }
-        }
     }
     // Sidebar style: Back from the groups column steps out to the main menu,
     // which opens BESIDE it (the column stays). Standard:
@@ -1408,9 +1360,7 @@ fun GuideScreen(
             }
         }
         if (previewMode) {
-            val topNav = com.aeriotv.android.feature.main.LocalTvTopNavFocusRequester.current
-            val pillsShown = !sidebarGroupMode && !favoritesOnly
-            if (sidebarInterface) SidebarGuideHeader(
+            SidebarGuideHeader(
                 program = previewProgram,
                 channel = previewChannel,
                 nowMs = nowMs,
@@ -1421,68 +1371,17 @@ fun GuideScreen(
                 },
                 descriptionFocus = bannerFocus,
                 downTarget = gridFocus,
-                upTarget = topNav,
                 onDown = { clockSelectTrigger += 1; true },
                 miniActive = miniActive,
                 publishDock = tabActive,
-            ) else GuidePreviewBanner(
-                program = previewProgram,
-                channel = previewChannel,
-                nowMs = nowMs,
-                onOpenInfo = {
-                    previewProgram?.let { cell ->
-                        programInfoTarget = cell.toInfoTarget(previewChannel?.name ?: "", previewChannel?.dispatcharrChannelId)
-                    }
-                },
-                descriptionFocus = bannerFocus,
-                downTarget = if (pillsShown) pillsFocus else gridFocus,
-                upTarget = topNav,
-                // tvOS: Down from the description lands on the clock when
-                // there is no pill row between them.
-                onDown = if (pillsShown) null else ({ clockSelectTrigger += 1; true }),
-                miniActive = miniActive,
-                // tvOS pulls the banner 28 pt up under the tab bar so eight
-                // rows still fit (ChannelListView, Logan 2026-09-05); halved.
-                modifier = Modifier.layout { measurable, constraints ->
-                    val lift = GuidePreviewBanner.tvLift.roundToPx()
-                    val placeable = measurable.measure(constraints)
-                    layout(placeable.width, (placeable.height - lift).coerceAtLeast(0)) { placeable.placeRelative(0, -lift) }
-                },
             )
         }
-        val pillsContext = androidx.compose.ui.platform.LocalContext.current
-        if (isTv && !sidebarGroupMode && !favoritesOnly) GroupPills(
-            onManageGroups = { showManageGroups = true },
-            hiddenGroupCount = hiddenGroups.size,
-            defaultToken = defaultGroupToken,
-            onSetDefault = { token ->
-                // Brief confirmation (Logan 2026-10-10); the pin on the pill
-                // is the lasting mark. Same toggle as the sidebar rows:
-                // holding the current default clears it.
-                val clearing = token == defaultGroupToken
-                val label = pillItems.firstOrNull { it.first == token }?.second ?: token
-                com.aeriotv.android.ui.tv.TvFocusTrace.guide("default group ${if (clearing) "cleared" else "set"} token=$token")
-                android.widget.Toast.makeText(
-                    pillsContext,
-                    if (clearing) "Default group cleared" else "Live TV opens on $label",
-                    android.widget.Toast.LENGTH_SHORT,
-                ).show()
-                viewModel.setDefaultGroup(token)
-            },
-            items = pillItems,
-            selected = state.selectedGroup,
-            onSelect = { viewModel.onGroupSelected(it) },
-            rowFocus = pillsFocus,
-            onDown = { runCatching { gridFocus.requestFocus() }.getOrDefault(false) },
-            leadInset = railWidth,
-        )
         // Radio Mode dock card (Android#127), below the header / pills and
         // above the grid.
         if (isTv) com.aeriotv.android.feature.player.RadioTvBannerSlot(
             // The grid restores the cell it last focused.
             onReturnFocus = { runCatching { gridFocus.requestFocus() }.getOrDefault(false) },
             playFocusRequester = radioBannerFocus,
-            upTarget = if (!sidebarGroupMode && !favoritesOnly && pillItems.isNotEmpty()) pillsFocus else null,
             downTarget = gridFocus,
             // Radio start keeps focus on the chosen cell (Logan 2026-10-15).
             radioKeepFocus = {
@@ -1491,53 +1390,8 @@ fun GuideScreen(
                 android.util.Log.d(com.aeriotv.android.ui.tv.TvFocusTrace.TAG, "[FOCUS] radio start keep -> ${guideTraceCell(grid)} result=${if (held) "success" else "failure"}")
             },
         )
-        // Channel Preview OFF + corner mini Active: the mini has no banner art
-        // card to share a baseline with, so it gets its OWN slot here -- a
-        // reserved band immediately above the time header whose measured bottom
-        // IS the timeline top. The mini's bottom edge is anchored to that
-        // (published below), so the timeline and every channel row start below
-        // the mini instead of being drawn under it (Logan 2026-09-13).
-        val reserveMiniSlot = isTv && !previewMode && miniActive
-        if (reserveMiniSlot) {
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(MiniPlayerChrome.miniHeight + MiniPlayerChrome.miniGap)
-                    .onGloballyPositioned {
-                        MiniPlayerChrome.timelineTopPx.value = it.boundsInRoot().bottom
-                    },
-            )
-        }
-        androidx.compose.runtime.DisposableEffect(reserveMiniSlot) {
-            onDispose { if (reserveMiniSlot) MiniPlayerChrome.timelineTopPx.value = 0f }
-        }
-        // Shift guide: the pane docks at the grid's top edge and only the
-        // grid (time header + rows) narrows; the banner, pills and mini slot
-        // above keep the full width. The pane slides in over its own slot, so
-        // the grid width changes once instead of re-laying rows every frame.
-        Row(modifier = Modifier.fillMaxSize()) {
-        androidx.compose.animation.AnimatedVisibility(
-            visible = sidebarShiftMode && groupSidebarOpen,
-            enter = androidx.compose.animation.slideInHorizontally(
-                animationSpec = androidx.compose.animation.core.tween(180),
-            ) { -it },
-            exit = androidx.compose.animation.ExitTransition.None,
-        ) {
-            GuideGroupSidebarPane(
-                groups = groups,
-                selectedToken = state.selectedGroup,
-                defaultToken = defaultGroupToken,
-                onSetDefault = viewModel::setDefaultGroup,
-                topOffset = 0.dp,
-                onPreview = previewSidebarGroup,
-                onCommit = commitSidebarGroup,
-                refocusToken = sidebarActiveToken,
-                refocusRequest = sidebarRefocusRequest,
-                onManageGroups = openSidebarManageGroups,
-                hiddenGroupCount = hiddenGroups.size,
-            )
-        }
-        Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
         if (rows.isEmpty && favoritesOnly && favoritesOrNull == null) {
             // Favorites not loaded yet: draw nothing rather than flash the
             // empty-group notice for a frame (Streamer 2026-09-03).
@@ -1596,8 +1450,7 @@ fun GuideScreen(
                         previewMode && (favoritesOnly || sidebarGroupMode) && previewProgram?.description?.isNotBlank() == true ->
                             runCatching { bannerFocus.requestFocus() }.getOrDefault(false)
                         favoritesOnly -> guideFocusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Up)
-                        sidebarGroupMode -> false
-                        else -> runCatching { pillsFocus.requestFocus() }.getOrDefault(false)
+                        else -> false
                     }
                 },
                 compact = previewMode,
@@ -1613,11 +1466,6 @@ fun GuideScreen(
                 onHostAction = hostAction,
                 onActionRunner = { gridRunner[0] = it },
                 focusRequester = gridFocus,
-                // Shift guide: the docked pane owns focus; the grid rejoins on
-                // close. Disabled only once focus has left the grid, so turning
-                // it off never clears focus onto the shell (the nav bar selects
-                // on focus) before the pane's rows claim it.
-                focusEnabled = !(sidebarShiftMode && groupSidebarOpen && !gridHasFocus),
                 onGridFocusChanged = { gridHasFocus = it },
                 traceGates = traceGates,
                 modifier = Modifier.fillMaxSize().then(
@@ -1643,43 +1491,28 @@ fun GuideScreen(
         }
     }
     }
-    // tvOS drawer (ChannelListView 2026-09-05): the rail overlays the guide
-    // under the time header, the rest of the tab dims 45%, the grid does not
-    // shift. Right or OK commit, Back reverts (handlers unchanged). The Shift
-    // guide sidebar layout docks the pane in the guide Column instead.
+    // Groups column: drawn in the shell's full-screen slot at full height
+    // beside the side menu (when open); the guide is pushed right instead of
+    // dimmed. Right or OK commit, Back reverts.
     if (isTv) {
-        // Under the time header wherever it sits: below the Channel Preview
-        // banner (lifted 14 dp under the bar) when that layout is on. Drawn
-        // in the shell's full-screen slot so the scrim dims the whole screen,
-        // nav bar included (tvOS); the pane is offset by the guide's own top.
-        val drawerTop = headerHeight + (if (previewMode) GuidePreviewBanner.height - 14.dp else 0.dp)
-        val density = androidx.compose.ui.platform.LocalDensity.current
-        val guideTop = with(density) { guideTopPx.toDp() }
         val drawerSlot = com.aeriotv.android.feature.main.LocalTvFullScreenOverlay.current
         val drawerOverlay: @Composable () -> Unit = {
-            // Sidebar style: no dimming; the column sits at full height beside the
-            // side menu (when open) and the guide is pushed right instead.
-            if (!sidebarInterface) Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
             Box(
-                modifier = if (sidebarInterface) {
-                    Modifier
-                        .offset { androidx.compose.ui.unit.IntOffset(sideMenuWidth.value.roundToPx(), 0) }
-                        .onSizeChanged { groupsColumnWidthPx = it.width }
-                        .onPreviewKeyEvent { e ->
-                            // Left from the groups column opens the main menu.
-                            e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft &&
-                                openMainMenu?.invoke() == true
-                        }
-                } else {
-                    Modifier
-                },
+                modifier = Modifier
+                    .offset { androidx.compose.ui.unit.IntOffset(sideMenuWidth.value.roundToPx(), 0) }
+                    .onSizeChanged { groupsColumnWidthPx = it.width }
+                    .onPreviewKeyEvent { e ->
+                        // Left from the groups column opens the main menu.
+                        e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft &&
+                            openMainMenu?.invoke() == true
+                    },
             ) {
                 GuideGroupSidebarPane(
                     groups = groups,
                     selectedToken = state.selectedGroup,
                     defaultToken = defaultGroupToken,
                     onSetDefault = viewModel::setDefaultGroup,
-                    topOffset = if (sidebarInterface) 0.dp else guideTop + drawerTop,
+                    topOffset = 0.dp,
                     onPreview = previewSidebarGroup,
                     onCommit = commitSidebarGroup,
                     refocusToken = sidebarActiveToken,
@@ -1689,12 +1522,9 @@ fun GuideScreen(
                 )
             }
         }
-        if (drawerSlot != null || sidebarShiftMode) {
-            // As with Jump To: the shell reseats focus (Refresh circle) once
-            // the overlay is gone, after the commit asked for the grid. Shift
-            // guide needs the same retry: the grid turns focusable again only
-            // on the next composition, and its width settles (re-clamping the
-            // viewport) before focus lands.
+        if (drawerSlot != null) {
+            // As with Jump To: the shell reseats focus once the overlay is
+            // gone, after the commit asked for the grid.
             var drawerWasOpen by remember { mutableStateOf(false) }
             LaunchedEffect(groupSidebarOpen) {
                 if (groupSidebarOpen) { drawerWasOpen = true; return@LaunchedEffect }
@@ -1709,9 +1539,7 @@ fun GuideScreen(
                 com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=sidebar-close requested=$requested result=${if (gridHasFocus) "success" else "failure"} ${traceGates()}")
             }
         }
-        if (sidebarShiftMode) {
-            // Docked beside the grid in the guide Column above; nothing here.
-        } else if (drawerSlot != null) {
+        if (drawerSlot != null) {
             androidx.compose.runtime.DisposableEffect(groupSidebarOpen) {
                 if (groupSidebarOpen) drawerSlot.value = drawerOverlay
                 else if (drawerSlot.value === drawerOverlay) drawerSlot.value = null
@@ -1817,9 +1645,6 @@ fun GuideScreen(
                 },
                 reorderEnabled = true, sortMode = groupSortMode,
                 onSortModeChange = { settingsVm.setGroupSortMode(it.name) },
-                // Only meaningful with the Sidebar Menu group selector.
-                sidebarLayout = if (groupSelector == "sidebar") guideSidebarLayout else null,
-                onSidebarLayoutChange = { settingsVm.setGuideSidebarLayout(it) },
                 onCommit = { hidden, order ->
                     com.aeriotv.android.feature.livetv.applyManagedGroups(
                         hidden, hiddenGroups, recentGroupVisible,
@@ -1930,113 +1755,6 @@ fun GuideScreen(
     }
     recordTarget?.let { target ->
         RecordProgramSheet(target = target, onDismiss = { recordTarget = null; runCatching { gridFocus.requestFocus() } })
-    }
-}
-
-@Composable
-private fun GroupPills(
-    items: List<Pair<String, String>>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    /** Focus entry for the whole row: lands on the selected pill. */
-    rowFocus: FocusRequester,
-    onDown: () -> Boolean,
-    /** Logan 2026-09-03: pills mode had no way to show/hide groups (the
-     *  sidebar has its Manage button, the pill row had none). Trailing pill. */
-    onManageGroups: () -> Unit = {},
-    hiddenGroupCount: Int = 0,
-    /** tvOS: the first pill's left edge sits on the program column. */
-    leadInset: androidx.compose.ui.unit.Dp = 12.dp,
-    /** GH #81 default group: long OK on a pill sets/clears it (the same
-     *  toggle the sidebar rows use); the default pill carries a thumbtack. */
-    defaultToken: String = "",
-    onSetDefault: ((String) -> Unit)? = null,
-) {
-    val listState = rememberLazyListState()
-    val topNav = com.aeriotv.android.feature.main.LocalTvTopNavFocusRequester.current
-    com.aeriotv.android.feature.livetv.RevealPrependedGroups(listState, items.map { it.first }, leadingItems = 1)
-    // The row's focus entry used to be a requester on the FIRST pill only.
-    // LazyRow disposes pills scrolled out of view, so once the user walked
-    // right and picked a later group the first pill was gone, the requester
-    // was unattached, and Up from the guide clock went nowhere (the user was
-    // stuck on the clock). The requester now sits on the row itself (a focus
-    // group) and entry is routed to the SELECTED pill, the tvOS behaviour.
-    // LazyRow index: the Manage Groups circle is item 0, pills follow.
-    val selectedIndex = items.indexOfFirst { it.first == selected }.let { if (it < 0) -1 else it + 1 }
-    val selectedPillFocus = remember { FocusRequester() }
-    var rowHasFocus by remember { mutableStateOf(false) }
-    // A selection made from OUTSIDE the row (sidebar, remote shortcut) glides
-    // the new pill into view. The row is never scrolled when focus merely
-    // leaves it: where the user left it is where it stays.
-    LaunchedEffect(selectedIndex) {
-        if (rowHasFocus || selectedIndex < 0) return@LaunchedEffect
-        if (listState.layoutInfo.visibleItemsInfo.none { it.index == selectedIndex }) {
-            val viewport = listState.layoutInfo.viewportEndOffset
-            listState.animateScrollToItem(selectedIndex, scrollOffset = -(viewport / 3))
-        }
-    }
-    LazyRow(
-        state = listState,
-        contentPadding = PaddingValues(start = leadInset, end = 12.dp, top = 6.dp, bottom = 6.dp),
-        // The 22dp Manage Groups circle sat on the row's top edge, above the
-        // taller pills' center (Streamer 2026-10-11); every item centers.
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .focusRequester(rowFocus)
-            .onFocusChanged { rowHasFocus = it.hasFocus }
-            // focusProperties must precede focusGroup() to apply to the group.
-            .focusProperties {
-                if (topNav != null) up = topNav
-                onEnter = {
-                    // Selected pill when it is in view; otherwise the default
-                    // search picks the first visible pill, so entry always
-                    // lands inside the row as the user left it.
-                    if (listState.layoutInfo.visibleItemsInfo.any { it.index == selectedIndex }) {
-                        selectedPillFocus.requestFocus()
-                    }
-                }
-            }
-            .focusGroup(),
-    ) {
-        // Logan 2026-10-10 (explicit decision): the round Manage Groups
-        // button sits to the LEFT of the first group pill on every pill row.
-        // Entry focus still goes to the SELECTED pill (selectedPillFocus);
-        // Left from the first pill lands here.
-        if (!com.aeriotv.android.core.profiles.ProfileRoles.isChild()) item(key = "__manage__") {
-            com.aeriotv.android.feature.livetv.TvManageGroupsCircle(
-                hiddenGroupsCount = hiddenGroupCount,
-                onClick = onManageGroups,
-                modifier = Modifier
-                    .padding(end = 8.dp)
-                    .onPreviewKeyEvent { e ->
-                        if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) onDown() else false
-                    },
-            )
-        }
-        items(items, key = { it.first }) { (group, label) ->
-            // TV chrome canon (ui/tv/TvChrome.kt): capsule, accent fill when
-            // selected, white ring focused+selected / accent ring focused+
-            // unselected. One focus target only (clickable() inside TvPill).
-            val interaction = remember { MutableInteractionSource() }
-            com.aeriotv.android.ui.tv.TvPill(
-                label = label,
-                selected = group == selected,
-                onClick = { onSelect(group) },
-                icon = if (group == com.aeriotv.android.feature.playlist.PlaylistViewModel.FAVORITES_GROUP) Icons.Filled.Star else null,
-                interactionSource = interaction,
-                onLongClick = onSetDefault?.let { set -> { set(group) } },
-                trailingPin = group == defaultToken ||
-                    (group == com.aeriotv.android.feature.playlist.PlaylistViewModel.ALL_GROUPS && defaultToken.isBlank()),
-                modifier = Modifier
-                    .padding(end = 8.dp)
-                    .then(if (group == selected) Modifier.focusRequester(selectedPillFocus) else Modifier)
-                    .onPreviewKeyEvent { e ->
-                        if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) onDown() else false
-                    },
-            )
-        }
     }
 }
 

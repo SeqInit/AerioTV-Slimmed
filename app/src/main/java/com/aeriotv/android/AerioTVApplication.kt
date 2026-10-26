@@ -260,20 +260,6 @@ class AerioTVApplication : Application(), Configuration.Provider, SingletonImage
         appScope.launch {
             runCatching { playlistRepository.activePlaylist() }
         }
-        // One-time seed: the TV group selector defaults to "sidebar" on a
-        // FRESH install and stays "pills" for everyone who has run an older
-        // build. Runs before any UI reads the pref, and writes an explicit
-        // value either way so the decision is made exactly once.
-        //
-        // Fresh = the key was never written AND the playlist table is empty.
-        appScope.launch {
-            runCatching {
-                if (appPreferences.guideGroupSelectorRawOnce() == null) {
-                    val freshInstall = playlistDao.allOnce().isEmpty()
-                    appPreferences.setGuideGroupSelector(if (freshInstall) "sidebar" else "pills")
-                }
-            }
-        }
         // Audit task #53: one-time pass that re-encrypts existing plaintext
         // playlist credentials at rest. New writes already encrypt via the
         // EncryptingPlaylistDao decorator; this upgrades rows saved by older

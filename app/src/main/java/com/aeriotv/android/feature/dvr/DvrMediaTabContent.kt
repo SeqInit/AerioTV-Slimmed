@@ -915,7 +915,6 @@ private fun TvDvrPage(
         hideRailWhileSearching = false,
         // tvOS DVR: 620 pt / 310 dp with a hero, 260 pt / 130 dp without
         // (DVRView.swift:863).
-        barHideThreshold = if (heroPages.isNotEmpty()) 310.dp else 130.dp,
         filterOpen = filterOpen,
         returnKey = remember { com.aeriotv.android.feature.movies.tv.TvReturnMemory.pending["dvr"] },
         returnOffset = remember { com.aeriotv.android.feature.movies.tv.TvReturnMemory.pendingOffset["dvr"] },

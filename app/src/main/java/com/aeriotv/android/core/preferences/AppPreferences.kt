@@ -80,14 +80,15 @@ private val Context.appDataStore: DataStore<Preferences> by preferencesDataStore
                 override suspend fun cleanUp() {}
             },
             // Slimmed fork: drop values for features this build no longer has
-            // ([RETIRED_PREF_KEYS]). Idempotent: runs only while one is present.
+            // ([RETIRED_PREF_KEYS], including per-profile copies). Idempotent:
+            // runs only while one is present.
             object : DataMigration<Preferences> {
                 override suspend fun shouldMigrate(currentData: Preferences): Boolean =
-                    currentData.asMap().keys.any { it.name in RETIRED_PREF_KEYS }
+                    currentData.asMap().keys.any { isRetiredPrefKey(it.name) }
                 override suspend fun migrate(currentData: Preferences): Preferences =
                     currentData.toMutablePreferences().apply {
                         currentData.asMap().keys
-                            .filter { it.name in RETIRED_PREF_KEYS }
+                            .filter { isRetiredPrefKey(it.name) }
                             .forEach { remove(it) }
                     }
                 override suspend fun cleanUp() {}
@@ -96,11 +97,20 @@ private val Context.appDataStore: DataStore<Preferences> by preferencesDataStore
     },
 )
 
+/** A retired key, or a profile-scoped copy of one ("<key>@prof:<id>"). */
+private fun isRetiredPrefKey(name: String): Boolean =
+    name.substringBefore("@prof:") in RETIRED_PREF_KEYS
+
 /**
  * Preference keys of features removed from the slimmed TV build. Their stored
  * values are dropped on the next DataStore open (see the migration above).
  */
 private val RETIRED_PREF_KEYS = setOf(
+    // Standard TV interface (Sidebar is the only layout)
+    "tv_interface_layout",
+    "live_tv_layout",
+    "guide_group_selector",
+    "guide_sidebar_layout",
     // What's New
     "last_seen_whatsnew_version",
     // Google Drive sync
@@ -189,7 +199,7 @@ class AppPreferences @Inject constructor(
      *  Default); its favorites, recents and the rest start empty. */
     suspend fun seedProfileSettings(profileId: String) {
         val bases = listOf(
-            KEY_DEFAULT_LIVE_TV_VIEW, KEY_LIVE_TV_LAYOUT, KEY_GUIDE_GROUP_SELECTOR,
+            KEY_DEFAULT_LIVE_TV_VIEW,
             KEY_PHONE_GROUP_SELECTOR, KEY_GROUP_SORT_MODE, KEY_GROUP_ORDER,
         )
         store.edit { prefs ->
@@ -520,14 +530,6 @@ class AppPreferences @Inject constructor(
         store.edit { it[KEY_DEFAULT_LIVE_TV_VIEW.s()] = value }
     }
 
-    /** TV Live TV layout: "basic" (full details in every cell) or "preview"
-     *  (Channel Preview banner above the guide, cells keep title and tags).
-     *  Mirrors tvOS `@AppStorage("liveTVLayout")`; per device. */
-    val liveTvLayout: Flow<String> = scopedData.map { prefs -> prefs[KEY_LIVE_TV_LAYOUT.s()] ?: "basic" }
-
-    suspend fun setLiveTvLayout(value: String) {
-        store.edit { it[KEY_LIVE_TV_LAYOUT.s()] = value }
-    }
 
     // ── App Behaviors ────────────────────────────────────────────────────
 
@@ -672,64 +674,10 @@ class AppPreferences @Inject constructor(
     }
 
     /**
-     * TV guide group-selector style (Logan 2026-07-20): "pills" = the top
-     * group-pill row (the original layout), "sidebar" = a docked left menu
-     * opened with a Left press from the currently-airing column. Mutually
-     * exclusive - the pills row is hidden while sidebar mode is active.
-     */
-    val guideGroupSelector: Flow<String> =
-        scopedData.map { it[KEY_GUIDE_GROUP_SELECTOR.s()] ?: "pills" }
-    suspend fun setGuideGroupSelector(mode: String) {
-        store.edit { it[KEY_GUIDE_GROUP_SELECTOR.s()] = mode }
-    }
-
-    /**
-     * Raw stored value, or null when the user has never had the choice made
-     * for them. Drives the one-time seed in AerioTVApplication that makes
-     * "sidebar" the default for FRESH installs only; everyone else is pinned
-     * to "pills" explicitly so the decision is never re-evaluated. The flow
-     * above keeps "pills" as its fallback for the window before the seed runs.
-     */
-    suspend fun guideGroupSelectorRawOnce(): String? =
-        store.data.first()[KEY_GUIDE_GROUP_SELECTOR.s()]
-
-    /**
-     * TV guide sidebar layout (Logan 2026-09-14), only meaningful while
-     * [guideGroupSelector] is "sidebar": "overlay" (default) = the pane sits
-     * over the guide with a dimming scrim, "shift" = the guide grid narrows
-     * beside the pane so no program is covered. Synced with the selector.
-     */
-    val guideSidebarLayout: Flow<String> =
-        store.data.map { it[KEY_GUIDE_SIDEBAR_LAYOUT] ?: "overlay" }
-    suspend fun setGuideSidebarLayout(mode: String) {
-        store.edit { it[KEY_GUIDE_SIDEBAR_LAYOUT] = mode }
-    }
-
-    /**
-     * ANDROID: TV interface layout. "standard" (default) = the tvOS-parity
-     * shell (top tab bar, Channel Preview banner, corner mini). "sidebar" =
-     * a Sidebar-style shell: left side menu instead of the tab bar, a guide
-     * header with the preview player docked on the left and program details
-     * on the right. TV only; phones and tablets ignore it. Drive-synced but
-     * deliberately NOT in Dispatcharr sync: that schema is shared byte-for-
-     * byte with Apple, which has no such layout.
-     */
-    val tvInterfaceLayout: Flow<String> =
-        store.data.map { it[KEY_TV_INTERFACE_LAYOUT]?.let(TvInterfaceLayout::normalize) ?: TvInterfaceLayout.STANDARD }
-    suspend fun setTvInterfaceLayout(mode: String) {
-        store.edit { it[KEY_TV_INTERFACE_LAYOUT] = mode }
-    }
-    /** True once a layout was ever stored (setup's Choose Your Interface step,
-     *  Settings, or a Drive restore); setup skips the step when it is. */
-    suspend fun tvInterfaceLayoutChosenOnce(): Boolean =
-        store.data.first()[KEY_TV_INTERFACE_LAYOUT] != null
-
-    /**
      * Phone / tablet Live TV group selector (Logan 2026-09-05, Apple parity
      * with `phoneGroupSelectorKey`): "sidebar" (default) = a slide-in group
      * drawer opened from the header's groups button, "pills" = the group pill
-     * strip in the header row. Separate from [guideGroupSelector] so each
-     * device type keeps its own choice and its own default.
+     * strip in the header row.
      */
     val phoneGroupSelector: Flow<String> =
         scopedData.map { it[KEY_PHONE_GROUP_SELECTOR.s()] ?: "sidebar" }
@@ -1632,8 +1580,6 @@ class AppPreferences @Inject constructor(
         put("programInfoButtonList", p[KEY_PROGRAM_INFO_BUTTON_LIST])
         put("showEpgBadgesTv", p[KEY_SHOW_EPG_BADGES_TV])
         put("showRemoteHints", p[KEY_SHOW_REMOTE_HINTS])
-        put("guideGroupSelector", p[KEY_GUIDE_GROUP_SELECTOR.s()])
-        put("guideSidebarLayout", p[KEY_GUIDE_SIDEBAR_LAYOUT])
         put("guideTuneInMini", p[KEY_GUIDE_TUNE_IN_MINI])
         put("playerInfoCard.showOnChannelChange", p[KEY_PLAYER_SHOW_CHANNEL_INFO_CARD])
         put("phoneGroupSelector", p[KEY_PHONE_GROUP_SELECTOR.s()])
@@ -1653,7 +1599,6 @@ class AppPreferences @Inject constructor(
         fun bool(n: String) = v[n]?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull()
             ?: v[n]?.takeIf { it.isString }?.content?.toBooleanStrictOrNull()
         fun dbl(n: String) = v[n]?.takeIf { !it.isString }?.content?.toDoubleOrNull()
-        val guideSel = KEY_GUIDE_GROUP_SELECTOR.s()
         val phoneSel = KEY_PHONE_GROUP_SELECTOR.s()
         store.edit { p ->
             str("selectedTheme")?.takeIf { t -> AppTheme.entries.any { it.name == t } }?.let { p[KEY_SELECTED_THEME] = it }
@@ -1669,8 +1614,6 @@ class AppPreferences @Inject constructor(
             bool("programInfoButtonList")?.let { p[KEY_PROGRAM_INFO_BUTTON_LIST] = it }
             bool("showEpgBadgesTv")?.let { p[KEY_SHOW_EPG_BADGES_TV] = it }
             bool("showRemoteHints")?.let { p[KEY_SHOW_REMOTE_HINTS] = it }
-            str("guideGroupSelector")?.let { p[guideSel] = it }
-            str("guideSidebarLayout")?.let { p[KEY_GUIDE_SIDEBAR_LAYOUT] = it }
             bool("guideTuneInMini")?.let { p[KEY_GUIDE_TUNE_IN_MINI] = it }
             bool("playerInfoCard.showOnChannelChange")?.let { p[KEY_PLAYER_SHOW_CHANNEL_INFO_CARD] = it }
             str("phoneGroupSelector")?.let { p[phoneSel] = it }
@@ -2183,7 +2126,6 @@ class AppPreferences @Inject constructor(
         val KEY_VIDEO_SCALE_MODE = stringPreferencesKey("video_scale_mode")
         val KEY_CUSTOM_ACCENT_HEX = stringPreferencesKey("custom_accent_hex")
         val KEY_DEFAULT_LIVE_TV_VIEW = stringPreferencesKey("default_live_tv_view")
-        val KEY_LIVE_TV_LAYOUT = stringPreferencesKey("live_tv_layout")
         val KEY_SKIP_LOADING_SCREEN = booleanPreferencesKey("app_behaviors_skip_loading_screen")
         val KEY_AUTO_ROTATE = booleanPreferencesKey("app_behaviors_auto_rotate")
         val KEY_DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
@@ -2198,9 +2140,6 @@ class AppPreferences @Inject constructor(
         val KEY_SYNC_REMOTE_CONTROL_MAP = booleanPreferencesKey("sync_remote_control_map")
         val KEY_RADIO_MODE_BY_DEFAULT = booleanPreferencesKey("radio_mode_by_default")
         val KEY_SYNC_RADIO_MODE_BY_DEFAULT = booleanPreferencesKey("sync_radio_mode_by_default")
-        val KEY_GUIDE_GROUP_SELECTOR = stringPreferencesKey("guide_group_selector")
-        val KEY_GUIDE_SIDEBAR_LAYOUT = stringPreferencesKey("guide_sidebar_layout")
-        val KEY_TV_INTERFACE_LAYOUT = stringPreferencesKey("tv_interface_layout")
         val KEY_HDR_TO_SDR = stringPreferencesKey("hdr_to_sdr")
         val KEY_PHONE_GROUP_SELECTOR = stringPreferencesKey("phone_group_selector")
         val KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR = booleanPreferencesKey("live_tv_edge_swipe_opens_sidebar")
@@ -2337,19 +2276,6 @@ const val PLAYER_EDGE_RIGHT = "right"
  * Settings > Live TV > Program Info Button values (Apple GuideProgramInfoButton,
  * same key and strings): the guide cell info button on phone and tablet.
  */
-/** ANDROID: wire values for the TV interface layout preference. */
-object TvInterfaceLayout {
-    const val STANDARD = "standard"
-    const val SIDEBAR = "sidebar"
-    val VALUES = setOf(STANDARD, SIDEBAR)
-
-    /** The sidebar layout's wire value before its 2026-10-25 rename. Read as
-     *  [SIDEBAR] so an install (or a Drive backup) saved under the old value
-     *  keeps its layout instead of falling back to Standard. */
-    private const val LEGACY_SIDEBAR = "tivimate"
-    fun normalize(value: String): String = if (value == LEGACY_SIDEBAR) SIDEBAR else value
-}
-
 object GuideProgramInfoButton {
     const val OFF = "off"
     const val CURRENT = "current"

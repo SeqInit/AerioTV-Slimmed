@@ -185,7 +185,7 @@ fun ChooseSourceTypeScreen(
     }
 }
 
-/** Shared with ChooseInterfaceScreen, the other card-picker setup step. */
+/** A setup-step choice card. */
 @Composable
 internal fun Modifier.tappable(onClick: () -> Unit): Modifier {
     // Clip to the SourceTypeCard rounded shape BEFORE the clickable so the D-pad

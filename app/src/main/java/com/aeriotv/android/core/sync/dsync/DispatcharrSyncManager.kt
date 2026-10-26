@@ -1388,7 +1388,7 @@ class DispatcharrSyncManager @Inject constructor(
             "selectedTheme", "appearanceMode", "trueBlack", "defaultTab", "timeFormat",
             "textScale", "subtextScale", "textContrast", "guideProgramInfoButton",
             "programInfoButtonGuide", "programInfoButtonList", "showEpgBadgesTv", "showRemoteHints",
-            "guideGroupSelector", "guideSidebarLayout", "guideTuneInMini",
+            "guideTuneInMini",
             "playerInfoCard.showOnChannelChange", "phoneGroupSelector", "liveTvEdgeSwipeOpensSidebar",
             "skipLoadingScreen", "appleTVChannelFlip",
         )

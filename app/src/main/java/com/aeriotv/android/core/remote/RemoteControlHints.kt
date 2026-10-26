@@ -138,28 +138,6 @@ object RemoteControlHints {
         RemoteSlot.BACK_LONG -> "Hold Back"
     }
 
-    /** Strip wording for a guide action; null = nothing worth advertising. */
-    private fun guideStripAction(action: GuideRemoteAction, sidebarGroups: Boolean): String? =
-        when (action) {
-            GuideRemoteAction.FOCUS_GROUP_PILLS -> if (sidebarGroups) "Groups" else "Group pills"
-            GuideRemoteAction.TIMELINE_BACK -> "Earlier programs"
-            GuideRemoteAction.TIMELINE_FORWARD -> "Later programs"
-            GuideRemoteAction.PAGE_UP -> "Page up"
-            GuideRemoteAction.PAGE_DOWN -> "Page down"
-            GuideRemoteAction.JUMP_TO_NOW -> "Now"
-            GuideRemoteAction.JUMP_TO_DAY -> "Jump to day"
-            GuideRemoteAction.JUMP_TO_TOP -> "Top channel"
-            GuideRemoteAction.RESUME_PLAYER -> "Resume"
-            GuideRemoteAction.CLOSE_MINI_PLAYER -> "Close mini"
-            GuideRemoteAction.PROGRAM_INFO -> "Program info"
-            GuideRemoteAction.PROGRAM_MENU -> "Program menu"
-            GuideRemoteAction.RECORD -> "Record"
-            GuideRemoteAction.PLAY -> "Play"
-            GuideRemoteAction.OPEN_SEARCH -> "Search"
-            GuideRemoteAction.BACK_LADDER -> "Top channel"
-            GuideRemoteAction.NAVIGATE, GuideRemoteAction.NONE -> null
-        }
-
     /** Strip wording for a player action; null = nothing worth advertising. */
     private fun playerStripAction(action: PlayerRemoteAction): String? = when (action) {
         PlayerRemoteAction.TOGGLE_CONTROLS -> "Player controls"
@@ -188,68 +166,6 @@ object RemoteControlHints {
 
     /** Cap: the strip is ONE line, so an unbounded list would just truncate. */
     private const val MAX_PAIRS = 6
-
-    /**
-     * Live TV tab strip. [sidebarGroups] is the guide's group-selector mode
-     * ("sidebar" drawer vs the pill row), [miniActive] whether the corner mini
-     * is playing.
-     *
-     * The Select / Left / Right pairs read the same resolution GuideGrid.kt
-     * dispatches (RemoteControlMap.guideAction with the group selector): an
-     * unset hold-Left opens the drawer in sidebar mode and browses earlier
-     * programs with the pills; a slot left on its default navigation or
-     * play is not advertised. With a mini up the guide's Back belongs to the
-     * mini (single = resume, double = top channel, fixed); without one the
-     * single Back and Hold Back pairs come from the guide map's backShort and
-     * backLong slots (default: the Back ladder, hold unmapped).
-     */
-    fun guideStripHints(
-        map: RemoteControlMap,
-        sidebarGroups: Boolean,
-        miniActive: Boolean,
-        /** Radio Mode on the guide (Apple TV parity): Play/Pause switches to
-         *  video and hold Right or Back twice stops, as the banner's two buttons. */
-        radioActive: Boolean = false,
-    ): List<RemoteHint> = buildList {
-        // Select plays by default, so only a remapped Select is worth a pair;
-        // the arrows and their holds are advertised whenever they do something
-        // other than move focus (truthful to the map, Settings > Remote Control).
-        map.guideAction(RemoteSlot.OK_SHORT, sidebarGroups).takeIf { it != GuideRemoteAction.PLAY }
-            ?.let { guideStripAction(it, sidebarGroups) }
-            ?.let { add(RemoteHint(slotLabel(RemoteSlot.OK_SHORT), it)) }
-        for (slot in listOf(RemoteSlot.LEFT_LONG, RemoteSlot.LEFT_SHORT, RemoteSlot.RIGHT_SHORT, RemoteSlot.RIGHT_LONG)) {
-            val action = map.guideAction(slot, sidebarGroups)
-            // The mini-player pairs below cover these, and only while a mini is up.
-            if (action == GuideRemoteAction.CLOSE_MINI_PLAYER || action == GuideRemoteAction.RESUME_PLAYER) continue
-            if (radioActive && slot == RemoteSlot.RIGHT_LONG) continue
-            guideStripAction(action, sidebarGroups)?.let {
-                add(RemoteHint(slotLabel(slot), it))
-            }
-        }
-        if (miniActive) {
-            add(RemoteHint("Double Back", "Top channel"))
-        } else {
-            for (slot in listOf(RemoteSlot.BACK_SHORT, RemoteSlot.BACK_LONG)) {
-                val action = map.guideAction(slot, sidebarGroups)
-                if (action == GuideRemoteAction.CLOSE_MINI_PLAYER || action == GuideRemoteAction.RESUME_PLAYER) continue
-                guideStripAction(action, sidebarGroups)?.let { add(RemoteHint(slotLabel(slot), it)) }
-            }
-        }
-        if (radioActive && !miniActive) {
-            // Back twice stops Radio Mode (Apple TV parity), the player's pair style.
-            add(RemoteHint("Back twice", "Stop"))
-            add(RemoteHint(slotLabel(RemoteSlot.PLAY_PAUSE), "Switch to Video Mode"))
-            add(RemoteHint(slotLabel(RemoteSlot.RIGHT_LONG), "Stop"))
-        }
-        if (miniActive) {
-            map.guideSlotFor(GuideRemoteAction.RESUME_PLAYER)?.let {
-                add(RemoteHint(slotLabel(it), "Resume"))
-            }
-            map.guideSlotFor(GuideRemoteAction.CLOSE_MINI_PLAYER)?.let {
-                add(RemoteHint(slotLabel(it), "Close mini"))
-            }
-        }
-    }.take(MAX_PAIRS)
 
     /**
      * Live player strip. Mirrors PlayerScreen's own key routing: in catch-up

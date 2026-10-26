@@ -45,15 +45,4 @@ class RemoteControlBackSlotsTest {
             RemoteControlMap.log = saved
         }
     }
-
-    @Test
-    fun guideHintsShowMappedBack() {
-        val map = RemoteControlMap(
-            preset = RemotePreset.CUSTOM,
-            guide = mapOf(RemoteSlot.BACK_LONG to GuideRemoteAction.JUMP_TO_NOW),
-        )
-        val hints = RemoteControlHints.guideStripHints(map, sidebarGroups = true, miniActive = false)
-        assertTrue(RemoteHint("Back", "Top channel") in hints)
-        assertTrue(RemoteHint("Hold Back", "Now") in hints)
-    }
 }
