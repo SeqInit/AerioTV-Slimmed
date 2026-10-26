@@ -10,16 +10,12 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.LibraryResult
-import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
 import com.aeriotv.android.MainActivity
 import com.aeriotv.android.R
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.SettableFuture
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,39 +25,25 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Media3 [MediaLibraryService] backing both background audio (notification +
- * lock screen + Bluetooth) AND Android Auto.
- *
- * Auto support (CarPlay parity) is the [LibraryCallback] browse tree built by
- * [AutoBrowseTree]: root -> Favorites + Groups -> channels, each row showing
- * name / now-playing programme / logo. Playback from a browse pick resolves the
- * channel's stream URL + Dispatcharr auth headers (rebuilt from the current
- * effective base so a car on cellular never gets a home-LAN URL), loads the
- * sibling list as the timeline so the head unit's next/previous flips channels,
- * and drops the video track (the car is audio-only).
- *
- * MediaLibraryService is a superset of the previous MediaSessionService, so
- * the existing foreground-audio behavior is unchanged. The one lifecycle
- * adjustment: the 5s foreground-start placeholder moved from onCreate to
- * onStartCommand. Android Auto BINDS the service (no onStartCommand) just to
- * browse, so it must NOT trigger a foreground "Starting playback..."
+ * Media3 [MediaSessionService] backing background audio (notification + remote
+ * media keys + Bluetooth). The 5s foreground-start placeholder is posted from
+ * onStartCommand: the explicit background-audio start path
+ * (startForegroundService -> onStartCommand) satisfies the deadline, while a
+ * controller that only BINDS the service never triggers a foreground
  * notification (which would also risk a ForegroundServiceStartNotAllowed crash
- * when bound from the background). The explicit background-audio start path
- * (startForegroundService -> onStartCommand) still satisfies the deadline.
+ * when bound from the background).
  *
  * The MediaSession wraps the SAME ExoPlayer instance mounted in
- * PersistentExoWindow, so foreground PlayerScreen, background controls, and Auto
- * all read/drive identical state.
+ * PersistentExoWindow, so the foreground PlayerScreen and the background
+ * controls read/drive identical state.
  */
 @OptIn(UnstableApi::class)
 @AndroidEntryPoint
-class AerioMediaPlaybackService : MediaLibraryService() {
+class AerioMediaPlaybackService : MediaSessionService() {
 
     @Inject lateinit var exoHolder: AerioExoPlayerHolder
-    @Inject lateinit var browseTree: AutoBrowseTree
-    @Inject lateinit var profileManager: com.aeriotv.android.core.profiles.ProfileManager
 
-    private var mediaSession: MediaLibrarySession? = null
+    private var mediaSession: MediaSession? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /** Tap target for the foreground notification -> back into the app. */
@@ -85,7 +67,8 @@ class AerioMediaPlaybackService : MediaLibraryService() {
         // SkipIntervalsPlayer: seek back / forward from the notification, lock
         // screen, and Bluetooth follow Settings > Skip Intervals live (an
         // ExoPlayer's own increments are fixed when it is built).
-        mediaSession = MediaLibrarySession.Builder(this, SkipIntervalsPlayer(player), LibraryCallback())
+        mediaSession = MediaSession.Builder(this, SkipIntervalsPlayer(player))
+            .setCallback(SessionCallback())
             .setSessionActivity(launchPi)
             .build()
 
@@ -94,10 +77,8 @@ class AerioMediaPlaybackService : MediaLibraryService() {
         // from the session's current MediaItem metadata. Pinned to the SAME
         // channel + notification id as our onStartCommand placeholder so the
         // rich notification REPLACES "Starting playback..." instead of leaving
-        // it stuck (car report: the only sign the app was running was that
-        // useless placeholder, in Auto AND on the phone). Once Auto plays, Media3
-        // promotes the bound service via onStartCommand, so the placeholder did
-        // show there too -- this aligns the ids so it's swapped out immediately.
+        // it stuck (user report: the only sign the app was running was that
+        // useless placeholder).
         // Radio Mode (Android#127): a Stop button on the media notification
         // while it is active (Play/Pause comes from the session itself).
         scope.launch {
@@ -171,9 +152,9 @@ class AerioMediaPlaybackService : MediaLibraryService() {
             }
         }
         // Explicit start (background-audio promotion from PlayerScreen) must
-        // beat the API 31+ 5s foreground-start deadline. Android Auto only
-        // BINDS to browse, so it never reaches here -- no spurious foreground
-        // notification, no FGS-start-not-allowed risk.
+        // beat the API 31+ 5s foreground-start deadline. A controller that only
+        // BINDS never reaches here -- no spurious foreground notification, no
+        // FGS-start-not-allowed risk.
         return try {
             startForegroundCompat(buildNowPlayingNotification())
             super.onStartCommand(intent, flags, startId)
@@ -195,7 +176,7 @@ class AerioMediaPlaybackService : MediaLibraryService() {
         }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         mediaSession
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -217,29 +198,20 @@ class AerioMediaPlaybackService : MediaLibraryService() {
         super.onDestroy()
     }
 
-    /**
-     * The Android Auto / Assistant browse + play callback. Browse methods walk
-     * the [AutoBrowseTree]; play methods resolve the pick into a header-authed,
-     * audio-only timeline.
-     */
-    private inner class LibraryCallback : MediaLibrarySession.Callback {
+    /** Controller gate + the Radio Mode Stop command. */
+    private inner class SessionCallback : MediaSession.Callback {
 
-        // Only the app itself, system-level controllers (Auto, Assistant,
+        // Only the app itself and system-level controllers (Assistant,
         // Bluetooth, media resumption -- all have MEDIA_CONTENT_CONTROL and
-        // show as isTrusted), and known car packages may drive playback.
-        // Any other third-party app is rejected to prevent player-state hijack.
+        // show as isTrusted) may drive playback. Any other third-party app is
+        // rejected to prevent player-state hijack.
         override fun onConnect(
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
-            val pkg = controller.packageName
-            val isCar = pkg == "com.google.android.projection.gearhead" ||
-                pkg == "com.google.android.apps.automotive.templates.host" ||
-                pkg.startsWith("com.google.android.gms.car") ||
-                packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUTOMOTIVE)
-            return if (pkg == packageName || controller.isTrusted || isCar) {
+            return if (controller.packageName == packageName || controller.isTrusted) {
                 MediaSession.ConnectionResult.accept(
-                    MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
+                    MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
                         .buildUpon().add(RADIO_STOP).build(),
                     MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS,
                 )
@@ -262,109 +234,6 @@ class AerioMediaPlaybackService : MediaLibraryService() {
             }
             return super.onCustomCommand(session, controller, customCommand, args)
         }
-
-        override fun onGetLibraryRoot(
-            session: MediaLibrarySession,
-            browser: MediaSession.ControllerInfo,
-            params: LibraryParams?,
-        ): ListenableFuture<LibraryResult<MediaItem>> = future {
-            LibraryResult.ofItem(browseTree.rootItem(), params)
-        }
-
-        override fun onGetChildren(
-            session: MediaLibrarySession,
-            browser: MediaSession.ControllerInfo,
-            parentId: String,
-            page: Int,
-            pageSize: Int,
-            params: LibraryParams?,
-        ): ListenableFuture<LibraryResult<com.google.common.collect.ImmutableList<MediaItem>>> = future {
-            LibraryResult.ofItemList(browseTree.children(parentId), params)
-        }
-
-        // Android Auto / Automotive controllers play audio-only (no car
-        // surface). EVERY other media-session controller on a PHONE (Bluetooth
-        // device, Assistant, system media-resumption, the notification) also
-        // routes through these callbacks, and blanking video for them left the
-        // foreground player black with audio still running (user report,
-        // Pixel 9 Pro XL). Only a real car controller should drop video.
-        private fun isCarController(controller: MediaSession.ControllerInfo): Boolean {
-            val pkg = controller.packageName
-            return pkg == "com.google.android.projection.gearhead" ||
-                pkg == "com.google.android.apps.automotive.templates.host" ||
-                pkg.startsWith("com.google.android.gms.car") ||
-                packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUTOMOTIVE)
-        }
-
-        // Android Auto / Assistant calls this on connect (and "resume" voice
-        // commands) to restart the last session without the user re-browsing.
-        // Supporting it is an Auto quality-guideline checklist item; we resume
-        // the last channel the holder played, rebuilt against the current
-        // LAN/WAN base so a car on cellular gets the remote URL.
-        override fun onPlaybackResumption(
-            mediaSession: MediaSession,
-            controller: MediaSession.ControllerInfo,
-        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = future {
-            // PIN: never resume (Kept Live, Radio Mode, car) into a locked profile.
-            if (profileManager.isPinGated()) throw UnsupportedOperationException("profile locked")
-            val lastId = exoHolder.currentChannelId
-                ?: throw UnsupportedOperationException("no previous channel to resume")
-            val info = browseTree.resolveForPlayback(lastId)
-                ?: throw UnsupportedOperationException("previous channel no longer available")
-            exoHolder.httpHeaders = info.headers
-            if (isCarController(controller)) exoHolder.setVideoTrackEnabled(false)
-            MediaSession.MediaItemsWithStartPosition(info.items, info.startIndex, C.TIME_UNSET)
-        }
-
-        override fun onSetMediaItems(
-            mediaSession: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            mediaItems: MutableList<MediaItem>,
-            startIndex: Int,
-            startPositionMs: Long,
-        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = future {
-            if (profileManager.isPinGated()) throw UnsupportedOperationException("profile locked")
-            val pickedId = mediaItems.getOrNull(startIndex)?.mediaId
-                ?: mediaItems.firstOrNull()?.mediaId
-            val info = pickedId?.let { browseTree.resolveForPlayback(it) }
-            if (info != null) {
-                exoHolder.httpHeaders = info.headers
-                if (isCarController(controller)) exoHolder.setVideoTrackEnabled(false)
-                MediaSession.MediaItemsWithStartPosition(info.items, info.startIndex, C.TIME_UNSET)
-            } else {
-                MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
-            }
-        }
-
-        override fun onAddMediaItems(
-            mediaSession: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            mediaItems: MutableList<MediaItem>,
-        ): ListenableFuture<MutableList<MediaItem>> = future {
-            if (profileManager.isPinGated()) throw UnsupportedOperationException("profile locked")
-            val resolved = mediaItems.mapNotNull { item ->
-                val info = browseTree.resolveForPlayback(item.mediaId) ?: return@mapNotNull null
-                exoHolder.httpHeaders = info.headers
-                if (isCarController(controller)) exoHolder.setVideoTrackEnabled(false)
-                info.items.getOrNull(info.startIndex)
-            }
-            if (resolved.isNotEmpty()) resolved.toMutableList() else mediaItems
-        }
-    }
-
-    /** Bridge a suspend producer to the Guava ListenableFuture the session
-     *  callbacks expect. Runs on the session's main thread so player touches
-     *  are thread-safe; the repository's suspend reads dispatch internally. */
-    private fun <T> future(block: suspend () -> T): ListenableFuture<T> {
-        val f = SettableFuture.create<T>()
-        scope.launch {
-            try {
-                f.set(block())
-            } catch (t: Throwable) {
-                f.setException(t)
-            }
-        }
-        return f
     }
 
     private fun ensureChannel() {

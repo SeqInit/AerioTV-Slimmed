@@ -2467,43 +2467,6 @@ class AerioExoPlayerHolder @Inject constructor(
     }
 
     /**
-     * Dynamic HTTP DataSource.Factory used ONLY by the player's MediaSource
-     * factory, i.e. the Android Auto path where a MediaController calls
-     * setMediaItems(uri) and the player resolves the source itself. It reads
-     * [httpHeaders] fresh on every createDataSource so the active source's
-     * Dispatcharr key rides along. The foreground path bypasses this entirely
-     * (it calls player.setMediaSource(buildMediaSource(...)) directly), so this
-     * factory never affects PlayerScreen playback.
-     *
-     * Parity with the foreground live fix (GH #32): Android Auto live TV is a
-     * separate, thinner path that historically used [DefaultHttpDataSource] --
-     * the same HttpURLConnection stack that can open the Dispatcharr raw-TS
-     * proxy on Android 16 yet never deliver bytes (permanent BUFFERING, silent
-     * car). The Auto browse tree is live-channels-only, so route it through the
-     * same OkHttp client the foreground live path uses (consistent across OS
-     * versions), and always send a real player User-Agent -- falling back to
-     * [DEFAULT_PLAYBACK_USER_AGENT] when the active source supplies none, so
-     * anti-restream WAFs don't drop the connection on the platform Dalvik UA.
-     * Headers are still read fresh per createDataSource for server switches.
-     * (DHU-verified 2026-07-14: Auto playback did not itself reproduce the
-     * stall on an Android 16 Z Fold, but this closes the same latent gap the
-     * foreground fix already covers.)
-     */
-    private val autoDataSourceFactory = DataSource.Factory {
-        val h = httpHeaders
-        val headerUa = h.entries
-            .firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }
-            ?.value
-        val f = OkHttpDataSource.Factory(liveHttpClient)
-            .setUserAgent(okHttpSafeUserAgent(headerUa ?: DEFAULT_PLAYBACK_USER_AGENT))
-        val nonUaHeaders = okHttpSafeHeaders(
-            h.filterKeys { !it.equals("User-Agent", ignoreCase = true) },
-        )
-        if (nonUaHeaders.isNotEmpty()) f.setDefaultRequestProperties(nonUaHeaders)
-        f.createDataSource()
-    }
-
-    /**
      * Return the active ExoPlayer, creating it once on first call.
      * The caller is expected to bind it to a PlayerView via
      * `playerView.player = holder.acquireOrCreate(...)`.
@@ -2647,25 +2610,10 @@ class AerioExoPlayerHolder @Inject constructor(
             // seek commands.
             .setSeekBackIncrementMs(com.aeriotv.android.core.ui.SkipIntervals.backMs)
             .setSeekForwardIncrementMs(com.aeriotv.android.core.ui.SkipIntervals.forwardMs)
-            // Header-aware + TS-aware MediaSource factory for the Android Auto
-            // path (a controller's setMediaItems(uri) -> the player resolves the
-            // source itself). The foreground path bypasses this with
-            // setMediaSource(buildMediaSource(...)), so this only governs Auto.
-            .setMediaSourceFactory(
-                DefaultMediaSourceFactory(
-                    autoDataSourceFactory,
-                    DefaultExtractorsFactory().setTsExtractorMode(TsExtractor.MODE_SINGLE_PMT),
-                ),
-            )
-            // Request audio focus + declare media-usage attributes. WITHOUT
-            // this, Android Auto shows the stream "playing" (the head-unit
-            // timeline advances) but routes NO audio to the car: the player
-            // decodes but never holds audio focus, so the car's audio system
-            // won't play it (car report -- silent in Auto, and the audio
-            // resumed on the phone the instant it was unplugged from Auto).
-            // handleAudioFocus=true also ducks/pauses correctly on phone-side
-            // interruptions. handleAudioBecomingNoisy (headphone unplug pause)
-            // is a SEPARATE concern, not audio focus.
+            // Request audio focus + declare media-usage attributes, so the
+            // player ducks/pauses correctly on interruptions.
+            // handleAudioBecomingNoisy (headphone unplug pause) is a SEPARATE
+            // concern, not audio focus.
             .setAudioAttributes(
                 androidx.media3.common.AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -3644,9 +3592,8 @@ class AerioExoPlayerHolder @Inject constructor(
         resetWatchdogStateForNewStream()
         // watchdogReloadEnabled is kept current by the collector in init{}; the
         // cached value reflects the latest pref without blocking the main thread.
-        // Foreground playback wants video; re-enable it in case an Android Auto
-        // session previously dropped the video track on this shared player --
-        // UNLESS a companion remote explicitly asked for Audio Only, which a
+        // Foreground playback wants video; re-enable it in case it was dropped
+        // on this shared player -- UNLESS Radio Mode owns it, which a
         // watchdog/poller re-prime must not undo.
         setVideoTrackEnabled(!radioVideoOff)
         tracer.markTuneStart(title, kind)
@@ -3840,7 +3787,7 @@ class AerioExoPlayerHolder @Inject constructor(
     }
 
     /**
-     * GH #32: okhttp3 (the client behind the live + Android Auto DataSources)
+     * GH #32: okhttp3 (the client behind the live DataSource)
      * enforces strict RFC-7230 header validation and throws
      * IllegalArgumentException on ANY header name/value byte that is < 0x20
      * (except tab) or >= 0x7f. The old [DefaultHttpDataSource] path -- Android's
@@ -4002,11 +3949,9 @@ class AerioExoPlayerHolder @Inject constructor(
     fun isPaused(): Boolean = player?.playWhenReady?.not() ?: true
 
     /**
-     * Enable / disable the video track on the shared player. Android Auto plays
-     * audio-only (no video on the car screen while driving), so the Auto session
-     * disables video to avoid decoding frames with no surface; the foreground
-     * PlayerScreen re-enables it via [playUrl]. Must be called on the main
-     * thread (ExoPlayer requirement).
+     * Enable / disable the video track on the shared player (Radio Mode drops
+     * video); the foreground PlayerScreen re-enables it via [playUrl]. Must be
+     * called on the main thread (ExoPlayer requirement).
      */
     fun setVideoTrackEnabled(enabled: Boolean) {
         val p = player ?: return
@@ -4018,8 +3963,7 @@ class AerioExoPlayerHolder @Inject constructor(
 
     /**
      * Radio Mode keeps the video track off (RadioMode sets and clears it).
-     * [playUrl]'s unconditional video re-enable exists for the Android Auto
-     * case; without this flag any re-prime (follow-poller, stall watchdog,
+     * Without this flag any re-prime (follow-poller, stall watchdog,
      * LAN/WAN flip, a Radio channel switch) would bring video back while
      * Radio Mode plays. The user-facing Audio Only mode it used to back was
      * removed (Radio Mode replaces it, 2026-10-13).

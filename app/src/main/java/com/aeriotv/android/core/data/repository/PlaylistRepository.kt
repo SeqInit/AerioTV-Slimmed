@@ -260,8 +260,8 @@ class PlaylistRepository @Inject constructor(
      * channel from the active playlist's CURRENT effective base (LAN vs WAN),
      * rather than trusting a cached channel.url baked at last fetch. Returns
      * null when there is no active playlist, the source is not Dispatcharr, or
-     * the playlist has no LAN URL (nothing to flip). Mirrors the streamUrlFor
-     * idiom in AutoBrowseTree.kt and iOS ChannelStore.dispatcharrStreamURLs.
+     * the playlist has no LAN URL (nothing to flip). Mirrors iOS
+     * ChannelStore.dispatcharrStreamURLs.
      */
     suspend fun rebuildLiveStreamUrl(channelUuid: String): String? {
         val pl = activePlaylist() ?: return null

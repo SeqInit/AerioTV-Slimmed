@@ -6,9 +6,8 @@
 // Before this, the same eight-line recipe -- read the active playlist, check
 // the source type is Dispatcharr, take a non-blank apiKey, emit the legacy
 // dual `X-API-Key` + `Authorization: ApiKey` pair -- was retyped at every
-// playback entry point: each live tune in Navigation.kt, the cast tune, the
-// VOD movie and episode routes, catch-up, DVR/recording playback, the
-// multiview tiles, the Android Auto browse tree. Adding a header (which is
+// playback entry point: each live tune in Navigation.kt, the VOD movie and
+// episode routes, catch-up, DVR/recording playback. Adding a header (which is
 // exactly what the per-playlist User-Agent needed) meant finding all of them,
 // and the per-playlist User-Agent had reached the Dispatcharr REST client only
 // -- so Dispatcharr's Stats panel attributed a box's API traffic to it and its

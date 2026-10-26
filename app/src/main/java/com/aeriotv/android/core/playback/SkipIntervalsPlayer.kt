@@ -7,7 +7,7 @@ import com.aeriotv.android.core.ui.SkipIntervals
 
 /**
  * Media session view of the shared live ExoPlayer whose seek back / forward
- * commands (notification, lock screen, Bluetooth, Android Auto) move by the
+ * commands (notification, remote media keys, Bluetooth) move by the
  * CURRENT Settings > Skip Intervals values. ExoPlayer fixes its increments at
  * build time, so without this a changed setting would only apply after the
  * holder next rebuilds the player. Everything else passes straight through.
