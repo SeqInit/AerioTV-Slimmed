@@ -16,7 +16,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * Fetches the latest GitHub release for the updater (github flavor only).
+ * Fetches the latest GitHub release for the updater.
  *
  * Unauthenticated GET against the public repo. The API allows 60
  * requests/hour/IP and a cached 304 still counts against that quota, so the
@@ -70,6 +70,9 @@ class UpdateChecker @Inject constructor() {
         } catch (t: Throwable) {
             return Outcome.Failed(t.message ?: "network error")
         }
+        // No published release yet (or only drafts/prereleases): nothing to
+        // offer, which is not an error.
+        if (response.status == HttpStatusCode.NotFound) return Outcome.UpToDate
         if (response.status == HttpStatusCode.Forbidden ||
             response.status.value == 429
         ) {
@@ -142,7 +145,7 @@ class UpdateChecker @Inject constructor() {
 
     companion object {
         private const val LATEST_RELEASE_URL =
-            "https://api.github.com/repos/jonzey231/AerioTV-Android/releases/latest"
+            "https://api.github.com/repos/SeqInit/AerioTV-Slimmed/releases/latest"
 
         /**
          * Semver-ish compare for our vX.Y.Z tags. Numeric triple compare; a

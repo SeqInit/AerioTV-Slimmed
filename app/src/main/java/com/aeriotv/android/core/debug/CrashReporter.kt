@@ -101,7 +101,7 @@ object CrashReporter {
             appendLine(
                 "App: ${com.aeriotv.android.BuildConfig.VERSION_NAME} " +
                     "(${com.aeriotv.android.BuildConfig.VERSION_CODE}) " +
-                    com.aeriotv.android.BuildConfig.FLAVOR,
+                    com.aeriotv.android.BuildConfig.BUILD_TYPE,
             )
             appendLine(
                 "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} " +

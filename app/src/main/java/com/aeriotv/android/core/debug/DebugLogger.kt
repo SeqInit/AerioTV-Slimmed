@@ -113,7 +113,7 @@ class DebugLogger @Inject constructor(
                 TAG, Level.INFO,
                 "App: ${com.aeriotv.android.BuildConfig.VERSION_NAME} " +
                     "(${com.aeriotv.android.BuildConfig.VERSION_CODE}) " +
-                    com.aeriotv.android.BuildConfig.FLAVOR,
+                    com.aeriotv.android.BuildConfig.BUILD_TYPE,
             )
             log(TAG, Level.INFO, "Connection: ${describeConnection()}")
         }

@@ -26,6 +26,10 @@
          DVR setting (default ON, iOS parity). Normal-protection, granted at
          install. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Lets the in-app updater hand the downloaded GitHub release APK to the
+         system package installer. The user still confirms every install and
+         grants the per-app "Install unknown apps" toggle the first time. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Detail screens offer "Play in YouTube" for trailers on TV. API 30+
          package-visibility filtering hides other apps from resolveActivity
@@ -170,7 +174,7 @@
 
         <!--
             Runs on the FIRST process start after this app is updated in place
-            (any channel: adb, Play, or the in-app updater). AlarmManager drops
+            (any channel: adb or the in-app updater). AlarmManager drops
             every scheduled alarm when a package is replaced, so programme
             reminders silently die on each update without this; the receiver
             re-registers them from the Room table. It also clears the in-app
@@ -185,6 +189,15 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- In-app updater: PackageInstaller session status sink. Manifest-
+             declared (not context-registered) so STATUS_PENDING_USER_ACTION
+             still reaches us if the process was recycled between commit and
+             the system's callback. Not exported: only the platform's install
+             session (targeted explicitly via PendingIntent) delivers here. -->
+        <receiver
+            android:name=".core.update.InstallStatusReceiver"
+            android:exported="false" />
 
         <!-- Audit #47: the TV launcher asks the app to (re)populate its
              home-screen channel row when the user enables it from the

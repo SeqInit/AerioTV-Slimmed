@@ -36,7 +36,7 @@ class InstallStatusReceiver : BroadcastReceiver() {
                 Log.i(TAG, "install session status=$status message=$message")
                 EntryPointAccessors
                     .fromApplication(context.applicationContext, UpdaterEntryPoint::class.java)
-                    .githubUpdateManager()
+                    .updateManager()
                     .onInstallStatus(status, message)
             }
         }

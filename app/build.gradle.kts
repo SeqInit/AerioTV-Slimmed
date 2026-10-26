@@ -9,11 +9,11 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
-// Release signing for Play uploads. Reads from keystore.properties (gitignored,
-// never committed). When absent (e.g. a contributor without the upload key),
-// the release signingConfig is simply not created and release builds stay
-// unsigned -- debug builds are unaffected. Play App Signing holds the real
-// app signing key; this is only the upload key (resettable via Play Console).
+// Release signing for the GitHub release APK. Reads from keystore.properties
+// (gitignored, never committed). When absent (e.g. a contributor without the
+// release key), the release signingConfig is simply not created and release
+// builds stay unsigned -- debug builds are unaffected. The in-app updater only
+// enables itself on builds signed with this key (UpdateManager.RELEASE_KEY_SHA256).
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -25,11 +25,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.aeriotv.android"
+        applicationId = "com.seqinit.aeriotv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 69
-        versionName = "0.5.13"
+        versionCode = 70
+        versionName = "0.6.0"
         vectorDrawables { useSupportLibrary = true }
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -53,7 +53,7 @@ android {
         // without wiping app data. Debug builds run non-optimized with Compose
         // debug instrumentation, which inflates frame timings enough to swamp
         // the differences a perf change makes; this variant is what device
-        // measurements should use. Build: :app:assembleGithubPerf
+        // measurements should use. Build: :app:assemblePerf
         create("perf") {
             initWith(getByName("release"))
             isDebuggable = false
@@ -74,24 +74,6 @@ android {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
-        }
-    }
-
-    // Distribution split (in-app updater). The GitHub/sideload channel carries
-    // the self-updater + REQUEST_INSTALL_PACKAGES (github manifest overlay);
-    // the Play channel must contain NEITHER -- Play policy forbids self-update
-    // of Play-distributed builds and the manifest permission alone triggers a
-    // declaration review. Build the GitHub release APK with
-    // :app:assembleGithubRelease and the Play AAB with :app:bundlePlayRelease.
-    flavorDimensions += "distribution"
-    productFlavors {
-        create("github") {
-            dimension = "distribution"
-            buildConfigField("boolean", "UPDATER_ENABLED", "true")
-        }
-        create("play") {
-            dimension = "distribution"
-            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
     }
 
@@ -122,7 +104,7 @@ kotlin {
 }
 
 composeCompiler {
-    // Task #190 perf audit: `./gradlew assembleGithubRelease -PcomposeReports`
+    // Task #190 perf audit: `./gradlew assembleRelease -PcomposeReports`
     // drops skippability + stability reports under
     // app/build/compose_reports/. Opt-in only; normal builds unaffected.
     if (project.hasProperty("composeReports")) {
