@@ -35,7 +35,6 @@ import com.aeriotv.android.core.tv.TvActionMenuDialog
 import com.aeriotv.android.core.tv.TvMenuAction
 import com.aeriotv.android.core.tv.rememberTvMenuGuard
 import androidx.compose.ui.Modifier
-import com.aeriotv.android.core.cast.AerioCastReceiverController
 import com.aeriotv.android.core.pip.PipState
 import com.aeriotv.android.core.playback.AerioExoPlayerHolder
 import com.aeriotv.android.core.preferences.AppPreferences
@@ -61,9 +60,6 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var exoHolder: AerioExoPlayerHolder
     @Inject lateinit var profileManager: com.aeriotv.android.core.profiles.ProfileManager
     @Inject lateinit var exoWindowState: ExoWindowState
-    @Inject lateinit var castReceiver: AerioCastReceiverController
-    @Inject lateinit var castSender: com.aeriotv.android.core.cast.AerioCastSender
-    @Inject lateinit var companionHost: com.aeriotv.android.core.cast.companion.CompanionHostController
     @Inject lateinit var homeChannelsPublisher: com.aeriotv.android.core.tv.HomeChannelsPublisher
     @Inject lateinit var timeshiftController: com.aeriotv.android.core.timeshift.TimeshiftController
 
@@ -612,17 +608,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // OUR scheme wins. A warm aeriotv:// link must never be swallowed by
-        // Cast's MediaManager: when it claimed the intent the app simply did
-        // nothing and a force-stop was the only way to make a deep link work
-        // again. Cast load intents never carry the aeriotv scheme.
-        val isAerioLink = intent.data?.scheme.equals("aeriotv", ignoreCase = true) ||
-            intent.data?.scheme.equals("aerio", ignoreCase = true)
-        // Cast Connect (GH #33): a Cast LAUNCH arriving while the app is already
-        // up lands here (singleTop). Let MediaManager consume it first; if it was
-        // a cast load the receiver's load callback fires and drives playback via
-        // the loadRequests collector, so we skip deep-link parsing for it.
-        if (!isAerioLink && castReceiver.handleIntent(intent)) return
         // singleTop means a second LAUNCH/aeriotv:// intent arrives here
         // instead of recreating the activity. Capture the URI for the
         // Compose tree.
@@ -700,15 +685,6 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Everything audible stops when the app leaves the foreground on a TV:
-     * the single live player AND every Multiview tile (Logan 2026-10-08, the
-     * Streamer kept a tile AudioTrack in state:started at the launcher; the
-     * tiles belong to the Multiview composable, which a stopped activity does
-     * not recompose, so they are stopped here synchronously). A running
-     * Multiview then exits on return, the same end state as a Cast stop, so
-     * the user never comes back to a grid of stopped tiles.
-     */
-    /**
      * TV mini player close (hold-Right, a Play/Pause mapped to Close mini
      * player, the guide's mapped close). Same teardown as before, then the
      * phone mini X's Keep Recent Channels Live decision
@@ -732,10 +708,6 @@ class MainActivity : ComponentActivity() {
         // Leaving the app is not an exit for Keep Recent Channels Live (see
         // onStop): a mini that was up keeps its channel like the mini's close.
         if (miniWasActive) runCatching { timeshiftController.onMiniClosed("tv-leave ($from)") }
-        if (!com.aeriotv.android.feature.multiview.MultiviewTilePlayers.isEmpty) {
-            com.aeriotv.android.feature.multiview.MultiviewTilePlayers.stopAll("TV leave ($from)")
-            deepLinkTarget.value = DeepLinkTarget.ExitPlayer
-        }
         AerioMediaPlaybackService.stop(this)
     }
 
@@ -1296,76 +1268,10 @@ class MainActivity : ComponentActivity() {
         val initialUrl = if (BuildConfig.DEBUG) intent?.getStringExtra("url") else null
         val initialEpgUrl = if (BuildConfig.DEBUG) intent?.getStringExtra("epg") else null
         val initialApiKey = if (BuildConfig.DEBUG) intent?.getStringExtra("apikey") else null
-        // Cast Connect (GH #33) SENDER: warm CastContext so the phone/tablet can
-        // discover cast devices and show the Cast button. No-op on a Cast-disabled
-        // build (no App ID) or a device without Google Play services.
-        // Skipped on TV: the TV is a Cast Connect RECEIVER (CastReceiverContext), never a sender.
-        if (!isTelevisionDevice()) runCatching { castSender.warm(this) }
-        // Cast Connect (GH #33): observe validated cast loads and route each into
-        // the SAME deep-link path a channel/vod tap uses, so the fullscreen player
-        // mounts the persistent surface and plays the raw TS with video enabled.
-        // Starting the media service guarantees the MediaSession exists so the
-        // sender gets play/pause + now-playing status back. No-op off Android TV.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                castReceiver.loadRequests.collect { req ->
-                    deepLinkTarget.value = when (req.kind) {
-                        AerioCastReceiverController.Kind.LIVE ->
-                            DeepLinkTarget.Channel(req.mediaId)
-                        AerioCastReceiverController.Kind.VOD ->
-                            DeepLinkTarget.Vod(req.mediaId)
-                    }
-                    runCatching { AerioMediaPlaybackService.startBackground(this@MainActivity) }
-                }
-            }
-        }
-        // Cast card X / STOP (2026-09-13): the sender stopped playback, so leave
-        // the player and land on Live TV, the same end state the companion
-        // remote's stop produces. Playback itself is already stopped by the
-        // receiver controller; this is navigation only. No-op off Android TV.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                castReceiver.exitRequests.collect {
-                    deepLinkTarget.value = DeepLinkTarget.ExitPlayer
-                }
-            }
-        }
-        // Multiview over Cast Connect: the receiver already staged the
-        // channels; navigate to Multiview. No-op off Android TV.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                castReceiver.multiviewRequests.collect {
-                    deepLinkTarget.value = DeepLinkTarget.OpenMultiview
-                }
-            }
-        }
-        // GH #33 companion VOD/DVR: a paired phone asked this TV to play a movie /
-        // episode / recording. Route through the same deep-link navigation the
-        // cast loads use; the VodPlay/RecordingPlay targets AUTOPLAY (straight to
-        // the VOD player, not the detail screen).
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                companionHost.playRequests.collect { req ->
-                    deepLinkTarget.value = when (req) {
-                        is com.aeriotv.android.core.cast.companion.CompanionHostController.PlayRequest.Vod ->
-                            DeepLinkTarget.VodPlay(req.videoId, req.isEpisode)
-                        is com.aeriotv.android.core.cast.companion.CompanionHostController.PlayRequest.Recording ->
-                            DeepLinkTarget.RecordingPlay(req.url, req.title)
-                        // The phone card's X: not a play, an exit back to Live TV.
-                        com.aeriotv.android.core.cast.companion.CompanionHostController.PlayRequest.Exit ->
-                            DeepLinkTarget.ExitPlayer
-                    }
-                }
-            }
-        }
-        // Cast Connect: the initial LAUNCH that started the activity as a receiver
-        // arrives as the launch intent. Hand it to MediaManager before deep-link
-        // parsing; if consumed, the load callback drives navigation above.
-        val castLaunch = castReceiver.handleIntent(intent)
         // Audit task #47: parse the launching intent's data URI for a
         // aeriotv:// deep link. The Compose tree consumes deepLinkTarget
         // via a top-level effect, navigates, then clears it.
-        if (!castLaunch) captureDeepLinkFrom(intent)
+        captureDeepLinkFrom(intent)
         setContent {
             val theme by appPreferences.selectedTheme.collectAsState(initial = AppTheme.Aerio)
             // DEFAULT MUST be Dark: the initial (pre-first-emission) value AND
@@ -1448,8 +1354,7 @@ class MainActivity : ComponentActivity() {
                             // chrome) paints OVER the video; Mini mode
                             // lifts via zIndex(1f) (Phase 175 fix). Live
                             // TV mounts here; VOD owns its own per-screen
-                            // PlayerView; multiview owns per-tile
-                            // PlayerViews.
+                            // PlayerView.
                             PersistentExoWindow(
                                 holder = exoHolder,
                                 state = exoWindowState,
@@ -1523,14 +1428,6 @@ class MainActivity : ComponentActivity() {
                                         ),
                                     ),
                                 )
-                            }
-                            // GH #33 companion remote: while a phone is pairing, show
-                            // its 6-digit code over everything on the TV. Clears itself
-                            // when the phone pairs (the host nulls the code). Never
-                            // non-null on phones (the host advertises on TV only).
-                            val companionCode by companionHost.pairingCode.collectAsState()
-                            companionCode?.let {
-                                com.aeriotv.android.feature.cast.companion.CompanionPairingOverlay(it)
                             }
                         }
                     }

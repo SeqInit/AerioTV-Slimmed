@@ -241,11 +241,8 @@ val LocalTvFullScreenOverlay =
 @Composable
 fun MainScaffold(
     onChannelClick: (M3UChannel) -> Unit,
-    /** Channel flips that already target the cast receiver (cast card
-     *  Switch / up/down, Change Cast Device handoff): no play-where prompt. */
-    onCastChannel: (M3UChannel) -> Unit = onChannelClick,
-    /** Expanding the local mini: always plays here, no prompt. */
-    onChannelResumeLocal: (M3UChannel) -> Unit = onChannelClick,
+    /** Expanding the mini: plays the channel, skipping the Radio Mode pick. */
+    onChannelResume: (M3UChannel) -> Unit = onChannelClick,
     onMovieClick: (String) -> Unit = {},
     onSeriesClick: (Int) -> Unit = {},
     onEpisodeResume: (String) -> Unit = {},
@@ -260,7 +257,6 @@ fun MainScaffold(
     onPlayRecording: (String, String, Int) -> Unit = { _, _, _ -> },
     /** Catch-up (task #136): url, title, progStartMillis, progEndMillis, panelTz. */
     onPlayCatchup: (String, String, String, Long, Long, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
-    onLaunchMultiview: () -> Unit = {},
     onWatchLive: (String, String, Boolean, Long, Int?) -> Unit = { _, _, _, _, _ -> },
     onWatchFromBeginning: (String, String, Boolean, Long, Int?, Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onOpenSearch: () -> Unit = {},
@@ -287,29 +283,6 @@ fun MainScaffold(
             onDismiss = { showRetainedDialog = false },
         )
     }
-    // Multiview staging dock card + sheet (phones and tablets, Logan 2026-10-06).
-    val multiviewStore = com.aeriotv.android.feature.multiview.rememberMultiviewStoreHandle()
-    // A staged set that holds exactly one live channel plays in the standard
-    // single player, not a one-tile Multiview (Logan 2026-10-11): every Play
-    // path below (TV banner, dock card, sheet Play Here) reads this wrapper.
-    @Suppress("NAME_SHADOWING")
-    val onLaunchMultiview: () -> Unit = launch@{
-        val staged = multiviewStore.selected.value
-        val only = staged.singleOrNull()
-        if (only != null && only.kind == com.aeriotv.android.feature.multiview.TileKind.Live) {
-            val channel = state.channels.firstOrNull { it.id == only.id }
-            if (channel != null) {
-                android.util.Log.i("AerioMV", "[MV] staged single ${channel.name}: standard player")
-                com.aeriotv.android.feature.multiview.MultiviewBackground.stop()
-                multiviewStore.clear()
-                multiviewStore.setStaging(false)
-                onChannelClick(channel)
-                return@launch
-            }
-        }
-        onLaunchMultiview()
-    }
-    var showMultiviewSheet by remember { mutableStateOf(false) }
     val favoritesVm: FavoritesViewModel = hiltViewModel()
     // null until the DB emits: on the phone, backing out of the player
     // recomposes this scaffold from scratch and an empty INITIAL list read as
@@ -498,205 +471,6 @@ fun MainScaffold(
             MainScaffoldEntryPoint::class.java,
         ).exoWindowState().mode
     }.collectAsStateWithLifecycle()
-    // GH #33 re-entry: an app-wide "Now Casting" mini controller above the tab
-    // bar so the user can re-open the cast remote after leaving the player.
-    val castSender = remember {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            MainScaffoldEntryPoint::class.java,
-        ).castSender()
-    }
-    val castState by castSender.state.collectAsStateWithLifecycle()
-    // Multiview to the TV: only a Cast Connect session into the AerioTV
-    // Android TV app can open Multiview; the web receiver cannot.
-    // Gated on the receiverInfo "multiview": true flag (Apple sender parity).
-    val castTarget by castSender.receiverTarget.collectAsStateWithLifecycle()
-    val castMultiview by castSender.receiverMultiview.collectAsStateWithLifecycle()
-    val castConnectedName: String? = (castState as? com.aeriotv.android.core.cast.AerioCastSender.State.Connected)
-        ?.let { it.deviceName?.takeIf { n -> n.isNotBlank() } ?: "TV" }
-    val mvNativeReceiver = castMultiview &&
-        castTarget == com.aeriotv.android.core.cast.AerioCastSender.ReceiverTarget.ANDROID_TV_APP
-    // Web receiver (Chromecast, Logan 2026-10-06): the phone composites 2 to 4
-    // live channels into one stream; more than 4 shows the cast-limit note.
-    val multiviewCast = remember {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            MainScaffoldEntryPoint::class.java,
-        ).multiviewCastController()
-    }
-    val mvWebReceiver = castTarget == com.aeriotv.android.core.cast.AerioCastSender.ReceiverTarget.WEB_RECEIVER
-    // The Live TV "Add to Multiview" labels and tile cap read the store, so
-    // it mirrors a running pile (the composite on a receiver, or the tiles
-    // playing in the background) while nothing is being staged (Apple
-    // e1dcbd2 parity: adds join the running pile). A composite that ends
-    // takes its tiles with it, so the mirrored pile ends too; nothing keeps
-    // playing hidden.
-    val compositeSession by multiviewCast.session.collectAsStateWithLifecycle()
-    val backgroundPile by com.aeriotv.android.feature.multiview.MultiviewBackground.state
-        .collectAsStateWithLifecycle()
-    var mirroredComposite by remember { mutableStateOf(false) }
-    var mirroredBackground by remember { mutableStateOf(false) }
-    LaunchedEffect(compositeSession, backgroundPile) {
-        val cs = compositeSession
-        val bg = backgroundPile
-        when {
-            cs != null -> {
-                multiviewStore.setStaging(false)
-                multiviewStore.restore(cs.tiles, cs.focused)
-                mirroredComposite = true
-            }
-            bg != null -> {
-                if (!multiviewStore.isStaging.value) {
-                    multiviewStore.restore(bg.tiles, bg.focus)
-                    mirroredBackground = true
-                }
-            }
-            mirroredComposite || mirroredBackground -> {
-                val reason = if (mirroredComposite) "composite ended" else "background Multiview ended"
-                val returnedToGrid = !mirroredComposite &&
-                    com.aeriotv.android.feature.multiview.MultiviewBackground.endedByReturn
-                mirroredComposite = false
-                mirroredBackground = false
-                if (!returnedToGrid && !multiviewStore.isStaging.value) {
-                    if (reason == "composite ended") {
-                        android.util.Log.i("AerioCast", "[MV-CAST] composite ended: Multiview ended, no tiles left playing")
-                    }
-                    android.util.Log.i("AerioMV", "[MV] mirror cleared: $reason")
-                    multiviewStore.clear()
-                }
-            }
-        }
-    }
-    val stagedForCast by multiviewStore.selected.collectAsStateWithLifecycle()
-    val stagedLiveCount = multiviewCast.castableTiles(stagedForCast).size
-    val mvReceiverName: String? = castConnectedName?.takeIf {
-        mvNativeReceiver ||
-            (mvWebReceiver && com.aeriotv.android.core.cast.multiview.MultiviewCompositeLayout.canCast(stagedLiveCount))
-    }
-    val mvCastNote: String? = if (
-        castConnectedName != null && mvWebReceiver &&
-        stagedLiveCount > com.aeriotv.android.core.cast.multiview.MultiviewCompositeLayout.MAX_TILES
-    ) com.aeriotv.android.core.cast.multiview.MultiviewCastController.CAST_LIMIT_NOTE else null
-    val playStagedHere: () -> Unit = {
-        // A fresh grid replaces a Multiview playing in the background.
-        com.aeriotv.android.feature.multiview.MultiviewBackground.stop()
-        showMultiviewSheet = false
-        multiviewStore.setStaging(false)
-        onLaunchMultiview()
-    }
-    val playStagedOnReceiver: () -> Unit = playOnReceiver@{
-        showMultiviewSheet = false
-        // One staged channel casts as a normal channel, not a one-tile Multiview.
-        val single = multiviewStore.selected.value.singleOrNull()
-            ?.takeIf { it.kind == com.aeriotv.android.feature.multiview.TileKind.Live }
-            ?.let { t -> state.channels.firstOrNull { it.id == t.id } }
-        if (single != null) {
-            multiviewStore.clear()
-            multiviewStore.setStaging(false)
-            onCastChannel(single)
-            return@playOnReceiver
-        }
-        com.aeriotv.android.feature.multiview.MultiviewBackground.stop()
-        if (!mvNativeReceiver) {
-            // Web receiver: the phone composites the grid and casts one stream.
-            val started = multiviewCast.start(
-                tiles = multiviewStore.selected.value,
-                headers = com.aeriotv.android.core.network.PlaybackHeaders.forPlaylist(state.playlist),
-                focus = multiviewStore.audioFocusedIndex.value,
-            )
-            // The store keeps the pile: it mirrors the running composite.
-            if (started) multiviewStore.setStaging(false)
-            return@playOnReceiver
-        }
-        val playlistId = state.playlist?.id.orEmpty()
-        val refs = multiviewStore.selected.value
-            .filter { it.kind == com.aeriotv.android.feature.multiview.TileKind.Live }
-            .map { com.aeriotv.android.core.cast.CastControl.MultiviewChannelRef(it.id, playlistId) }
-        castSender.sendMultiviewOpen(refs, multiviewStore.audioFocusedIndex.value)
-        multiviewStore.clear()
-        multiviewStore.setStaging(false)
-    }
-    // Card Play: Play Here, or the play-where prompt when the TV app can take it.
-    val playStagedMultiview: () -> Unit = {
-        // One staged channel: the single-player path runs its own play-where prompt.
-        if (mvReceiverName == null || multiviewStore.selected.value.size == 1) playStagedHere()
-        else PlayWhereRouter.route(castSender, "Multiview", playStagedHere, playStagedOnReceiver)
-    }
-    if (showMultiviewSheet) {
-        val sheetTiles by multiviewStore.selected.collectAsStateWithLifecycle()
-        com.aeriotv.android.feature.multiview.MultiviewStagedSheet(
-            tiles = sheetTiles,
-            receiverName = mvReceiverName,
-            onRemove = { id -> multiviewStore.removeTile(id) },
-            onReorder = { ids ->
-                val current = multiviewStore.selected.value
-                val focusedId = current.getOrNull(multiviewStore.audioFocusedIndex.value)?.id
-                val reordered = ids.mapNotNull { id -> current.firstOrNull { it.id == id } } +
-                    current.filter { it.id !in ids }
-                multiviewStore.restore(reordered, reordered.indexOfFirst { it.id == focusedId }.coerceAtLeast(0))
-            },
-            onClear = {
-                showMultiviewSheet = false
-                multiviewStore.clear()
-                multiviewStore.setStaging(false)
-            },
-            onPlayHere = playStagedHere,
-            onPlayOnReceiver = playStagedOnReceiver,
-            onDismiss = { showMultiviewSheet = false },
-            castNote = mvCastNote,
-        )
-    }
-    // GH #33 companion remote: same-pattern "Controlling <TV>" indicator card +
-    // tap-to-reopen-the-remote, mirroring the Now-Casting card below.
-    val companionRemote = remember {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            MainScaffoldEntryPoint::class.java,
-        ).companionRemote()
-    }
-    val companionConn by companionRemote.connection.collectAsStateWithLifecycle()
-    val companionChannelId by companionRemote.currentChannelId.collectAsStateWithLifecycle()
-    // Enrich the companion's channel anchor with name/logo/current programme
-    // for the media notification and the card; re-evaluated each minute so
-    // the programme rolls over on the hour.
-    LaunchedEffect(companionChannelId, state.channels, state.epgByChannel) {
-        val id = companionChannelId
-        if (id == null) { companionRemote.setNowPlayingDetails(null); return@LaunchedEffect }
-        val ch = state.channels.firstOrNull { it.id == id }
-        if (ch == null) { companionRemote.setNowPlayingDetails(null); return@LaunchedEffect }
-        while (true) {
-            val now = state.epgByChannel[ch.guideMatchKey]?.nowPlaying()
-            companionRemote.setNowPlayingDetails(
-                com.aeriotv.android.core.cast.companion.CompanionRemoteController.NowPlayingDetails(
-                    channelId = id,
-                    channelName = ch.name,
-                    logoUrl = ch.tvgLogo.takeIf { it.isNotBlank() },
-                    programmeTitle = now?.title,
-                    programmeStartMs = now?.startMillis ?: 0L,
-                    programmeEndMs = now?.endMillis ?: 0L,
-                ),
-            )
-            kotlinx.coroutines.delay(60_000L)
-        }
-    }
-    // GH #33: browse for controllable AerioTV TVs at the SCAFFOLD level (phone
-    // only; the TV is a host, not a client) so the floating "Control TV" pill
-    // can appear without opening a channel first. Refcounted with the in-player
-    // chooser's start/stop.
-    val companionDiscovery = remember {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            MainScaffoldEntryPoint::class.java,
-        ).companionDiscovery()
-    }
-    if (!rememberLiveTvFormFactor().isTv) {
-        DisposableEffect(Unit) {
-            companionDiscovery.start()
-            onDispose { companionDiscovery.stop() }
-        }
-    }
-    val companionDevices by companionDiscovery.devices.collectAsStateWithLifecycle()
-    var showCompanionPicker by remember { mutableStateOf(false) }
     // Poll pause state from the held ExoPlayer so the mini-player's
     // Pause/Play icon stays accurate when the notification action /
     // BT button toggles playback elsewhere.
@@ -771,25 +545,6 @@ fun MainScaffold(
     // devices; forcing the session view instead avoids both.
     LaunchedEffect(Unit) {
         viewModel.guideJumpRequests.collect {
-            selectedTab = AppTab.LiveTV
-            initialTabApplied = true
-        }
-    }
-
-    // Companion remote X (GH #33). Popping the player back to MAIN is only
-    // half of "exit to Live TV": the tab shell keeps whatever tab was selected
-    // when playback started, so an X pressed while the shell sat on Movies /
-    // TV Shows landed there. Measured on the Streamer 2026-09-12
-    // (gtvlogs/session7.txt): "companion stop: playback stopped, exiting to
-    // Live TV" at 14:25:23.138 is followed at 14:25:24.016 by
-    // "[PROGRESS] target series=277738 -> s=1 e=1 reason=resume row", which is
-    // the media page's hero recomputing because THAT is what came back up.
-    // Logan: "X did not return the TV to Live TV guide on the first attempt.
-    // It worked correctly on the 2nd attempt" -- the second attempt worked
-    // because by then Live TV was already the selected tab. Selecting the tab
-    // explicitly makes the first X land, from any tab.
-    LaunchedEffect(Unit) {
-        viewModel.liveTvTabRequests.collect {
             selectedTab = AppTab.LiveTV
             initialTabApplied = true
         }
@@ -1294,7 +1049,6 @@ fun MainScaffold(
                     onEpisodeResumeFromStart = onEpisodeResumeFromStart,
                     onPlayRecording = onPlayRecording,
                     onPlayCatchup = onPlayCatchup,
-                    onLaunchMultiview = onLaunchMultiview,
                     onWatchLive = onWatchLive,
                     onWatchFromBeginning = onWatchFromBeginning,
                     onOpenSearch = onOpenSearch,
@@ -1592,7 +1346,6 @@ fun MainScaffold(
                 onEpisodeResumeFromStart = onEpisodeResumeFromStart,
                 onPlayRecording = onPlayRecording,
                 onPlayCatchup = onPlayCatchup,
-                onLaunchMultiview = onLaunchMultiview,
                 onWatchLive = onWatchLive,
                 onWatchFromBeginning = onWatchFromBeginning,
                 onOpenSearch = onOpenSearch,
@@ -1609,7 +1362,7 @@ fun MainScaffold(
             // (GH #20) so an active stream's controls are never hidden.
             // Phone floating mini (PhoneMiniPlayer.kt) is mounted at the
             // activity root, so publish this overlay's measured top: the mini's
-            // bottom corners rest above the cast card, button and tab bar.
+            // bottom corners rest above the dock cards and tab bar.
             androidx.compose.runtime.DisposableEffect(Unit) {
                 onDispose {
                     com.aeriotv.android.feature.player.PhoneMiniChrome
@@ -1631,36 +1384,6 @@ fun MainScaffold(
                     .padding(bottom = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // THE cast card (Logan 2026-09-12): ONE card above the tab bar
-                // for whichever transport this phone is driving (Google Cast or
-                // the AerioTV Remote companion link). It appears the moment a
-                // session connects -- even with nothing playing yet -- and a tap
-                // opens the remote controls as a sheet over the current page,
-                // never a full-screen takeover. The local mini-player is
-                // suppressed while casting, so the cards never stack.
-                val casting = castState is com.aeriotv.android.core.cast.AerioCastSender.State.Connected
-                // Change Cast Device handoff: collected here because this shell
-                // stays composed across the receiver switch, unlike the card.
-                // Cast through onChannelClick, the same path a channel tap uses.
-                // Latest channels / click handler, not the first composition's.
-                val handoffChannels by androidx.compose.runtime.rememberUpdatedState(state.channels)
-                val handoffCast by androidx.compose.runtime.rememberUpdatedState(onCastChannel)
-                androidx.compose.runtime.LaunchedEffect(castSender) {
-                    castSender.handoffSeed.collect { id ->
-                        castSender.consumeHandoffSeed()
-                        val bare = id.substringAfter(':', id)
-                        val ch = handoffChannels.firstOrNull { it.id == id }
-                            ?: handoffChannels.firstOrNull { it.id.substringAfter(':', it.id) == bare }
-                            ?: handoffChannels.firstOrNull { it.name == id }
-                        if (ch == null) {
-                            android.util.Log.w("AerioCast", "[Cast] handoff seed $id: no matching channel")
-                        } else {
-                            handoffCast(ch)
-                        }
-                    }
-                }
-                val companionTv = companionConn
-                    as? com.aeriotv.android.core.cast.companion.CompanionRemoteController.Conn.Connected
                 // Tablets (sw >= 600 dp) and the measured width of the
                 // tablet's wrap-content tab capsule (set by the pill below).
                 val tabletNav = androidx.compose.ui.platform.LocalConfiguration.current
@@ -1678,100 +1401,26 @@ fun MainScaffold(
                         minOf(620.dp, (screenW - 32.dp).coerceAtLeast(0.dp))
                     }
                 } else null
-                // GH #33: round floating "Control a TV" button above the right
-                // end of the tab bar -- appears when a controllable AerioTV TV
-                // is discovered on the LAN OR a Google Cast route exists, so the
-                // phone can be a remote / start a cast without opening a channel
-                // first (task #255). Hidden while already controlling / casting
-                // (their cards take over).
-                val showControlFab = (companionDevices.isNotEmpty() ||
-                        castState !is com.aeriotv.android.core.cast.AerioCastSender.State.Unavailable) &&
-                    companionConn !is com.aeriotv.android.core.cast.companion
-                        .CompanionRemoteController.Conn.Connected &&
-                    !casting && !isTv
-                // Tablets (sw >= 600 dp): the button sits static at the
-                // trailing edge on the pill row (below) and never moves with
-                // the collapse (Logan 2026-10-04). Phones keep the above-the-bar
-                // spot that drops level with the minimized pill.
-                val phoneFab = showControlFab && bottomBarVisible && !tabletNav
                 // Keep Recent Channels Live pill (Apple parity, Logan
-                // 2026-10-04): one compact line sharing the Control a TV
-                // button's row, pill leading and filling the width, button
-                // trailing. Two or more kept: tapping the text opens the Kept
-                // Live list (the same dialog the TV circle uses). This scaffold
-                // is not composed under the fullscreen player; there the
-                // Options menu carries the Kept Live rows instead.
-                // A channel being cast is not listed (Logan 2026-10-05); it
-                // comes back when casting stops if it is still kept.
-                val castContentNow by castSender.content.collectAsStateWithLifecycle()
-                val castChannelId = if (casting) castContentNow?.mediaId else null
-                val keptRowList = remember(retainedList, castChannelId) {
-                    if (castChannelId == null) retainedList else {
-                        val bare = castChannelId.substringAfter(':', castChannelId)
-                        retainedList.filter {
-                            it.channelId != castChannelId &&
-                                it.channelId.substringAfter(':', it.channelId) != bare
-                        }
-                    }
-                }
-                val showKept = keptRowList.isNotEmpty() && !isTv
-                // Multiview staging dock card (Logan 2026-10-06): same capsule
-                // and frame as the cast and Kept Live cards, stacked above Kept
-                // Live. Beside the Control a TV button only when it is the
-                // last card in the stack (no Kept Live card below it).
-                val mvStaging by multiviewStore.isStaging.collectAsStateWithLifecycle()
-                val mvTiles by multiviewStore.selected.collectAsStateWithLifecycle()
-                val showMv = mvStaging && mvTiles.isNotEmpty() && !isTv
-                val mvRowFrame = if (tabletCardWidth != null) {
+                // 2026-10-04): one compact line above the tab bar. Two or more
+                // kept: tapping the text opens the Kept Live list (the same
+                // dialog the TV circle uses). This scaffold is not composed
+                // under the fullscreen player; there the Options menu carries
+                // the Kept Live rows instead.
+                val showKept = retainedList.isNotEmpty() && !isTv
+                val cardRowFrame = if (tabletCardWidth != null) {
                     Modifier.width(tabletCardWidth)
                 } else {
                     Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 20.dp)
                 }
-                // Multiview playing in the background (round 2, 2026-10-07):
-                // the cast card's shape, stacked with the other dock cards.
-                val mvBg by com.aeriotv.android.feature.multiview.MultiviewBackground.state
-                    .collectAsStateWithLifecycle()
-                val mvBgState = mvBg
-                // Dock stack (Apple parity, HomeView.swift dock VStack). Every
-                // card takes the nav bar's measured frame.
-                // Phones, top to bottom: cast card, background Multiview,
-                // staging Multiview, Kept Live directly above the tab bar. The
-                // Control a TV button rides the LOWEST card row at that card's
-                // height (the card narrows), or its own row with no cards.
-                // Tablets, top to bottom: staging Multiview, background
-                // Multiview, Kept Live, cast card at the bottom; no circle
-                // beside them (the tablet button lives on the pill row).
-                val showMvBg = mvBgState != null && !isTv
-                val radioOnDock = com.aeriotv.android.feature.player.RadioMode.state
-                    .collectAsStateWithLifecycle().value != null && !isTv && !casting
-                val fabRow = when {
-                    !phoneFab -> 0
-                    showKept -> 1
-                    showMv -> 2
-                    showMvBg -> 3
-                    // Radio Mode card row (Apple parity, Logan 2026-10-15):
-                    // the card narrows and the button sits at its trailing
-                    // edge, like Kept Live. The button hides while casting,
-                    // so the cast card never shares the row.
-                    radioOnDock -> 5
-                    else -> 4
-                }
-                @Composable
-                fun DockFab() {
-                    Spacer(Modifier.width(12.dp))
-                    CompanionControlFab(
-                        onClick = { showCompanionPicker = true },
-                        diameter = com.aeriotv.android.feature.livetv.RetainedCardHeight,
-                    )
-                }
-                fun gapAfter(row: Int) = if (tabletNav) 12.dp else if (fabRow == row) 10.dp else 8.dp
+                val dockGap = if (tabletNav) 12.dp else 8.dp
                 @Composable
                 fun DockKept() {
                     if (showKept) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Row(mvRowFrame, verticalAlignment = Alignment.CenterVertically) {
+                            Row(cardRowFrame, verticalAlignment = Alignment.CenterVertically) {
                                 com.aeriotv.android.feature.livetv.RetainedChannelsPill(
-                                    retained = keptRowList,
+                                    retained = retainedList,
                                     onTune = tuneRetained,
                                     onOpenList = { showRetainedDialog = true },
                                     onStop = retainedVm::stop,
@@ -1779,186 +1428,20 @@ fun MainScaffold(
                                     capsule = tabletNav,
                                     modifier = Modifier.weight(1f),
                                 )
-                                if (fabRow == 1) DockFab()
                             }
                         }
-                        Spacer(Modifier.height(gapAfter(1)))
+                        Spacer(Modifier.height(dockGap))
                     }
                 }
-                @Composable
-                fun DockMvStaging() {
-                    if (showMv) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Row(mvRowFrame, verticalAlignment = Alignment.CenterVertically) {
-                                com.aeriotv.android.feature.multiview.MultiviewDockCard(
-                                    tiles = mvTiles,
-                                    tablet = tabletNav,
-                                    onOpen = { showMultiviewSheet = true },
-                                    onPlay = playStagedMultiview,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                if (fabRow == 2) DockFab()
-                            }
-                        }
-                        Spacer(Modifier.height(gapAfter(2)))
-                    }
-                }
-                @Composable
-                fun DockMvBg() {
-                    if (showMvBg && mvBgState != null) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Row(mvRowFrame, verticalAlignment = Alignment.CenterVertically) {
-                                com.aeriotv.android.feature.multiview.MultiviewDockCard(
-                                    tiles = mvBgState.tiles,
-                                    tablet = tabletNav,
-                                    title = com.aeriotv.android.feature.multiview.multiviewBackgroundTitle(mvBgState.tiles.size),
-                                    actionLabel = "Stop",
-                                    onOpen = onLaunchMultiview,
-                                    onPlay = {
-                                        com.aeriotv.android.feature.multiview.MultiviewBackground.stop()
-                                        // The mirrored pile ends with the tiles.
-                                        if (!multiviewStore.isStaging.value) multiviewStore.clear()
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                )
-                                if (fabRow == 3) DockFab()
-                            }
-                        }
-                        Spacer(Modifier.height(gapAfter(3)))
-                    }
-                }
-                @Composable
-                fun DockFabOnly() {
-                    if (fabRow == 4) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Row(mvRowFrame, horizontalArrangement = Arrangement.End) {
-                                CompanionControlFab(onClick = { showCompanionPicker = true })
-                            }
-                        }
-                        Spacer(Modifier.height(gapAfter(4)))
-                    }
-                }
-                @Composable
-                fun DockCast() {
-                    if ((casting || companionTv != null) && !isTv) {
-                        // Switch Stream gate: LocalIsDispatcharrAdmin is only
-                        // provided inside the player route, so out here (the cast
-                        // card and sheet, composite tile menu) it read its false
-                        // default (device pass cc2c37c7: tile menu had no Switch
-                        // Stream on a switch=allowed account). Provide it from the
-                        // live active playlist row, the same row the player uses.
-                        androidx.compose.runtime.CompositionLocalProvider(
-                            com.aeriotv.android.ui.LocalIsDispatcharrAdmin provides
-                                (capsPlaylist?.canSwitchStream() ?: false),
-                        ) {
-                        com.aeriotv.android.feature.cast.CastTransportCard(
-                            tabletWidth = tabletCardWidth,
-                            multiviewCast = multiviewCast,
-                            compositeHeaders = if (mvWebReceiver) ({
-                                com.aeriotv.android.core.network.PlaybackHeaders.forPlaylist(state.playlist)
-                            }) else null,
-                            castSender = castSender,
-                            companionRemote = companionRemote,
-                            channels = state.channels,
-                            nowProgramme = { ch ->
-                                state.epgByChannel[ch.guideMatchKey]?.nowPlaying()
-                            },
-                            onCastChannel = onCastChannel,
-                            loadChannelStreams = { channelIntPk ->
-                                val m3uNames = viewModel.loadM3uAccountNames()
-                                viewModel.loadChannelStreams(channelIntPk).map { st ->
-                                    com.aeriotv.android.feature.player.StreamOption(
-                                        id = st.id,
-                                        name = st.name.orEmpty(),
-                                        resolution = st.resolution,
-                                        fps = st.sourceFps,
-                                        bitrateKbps = st.outputBitrateKbps,
-                                        videoCodec = st.videoCodec,
-                                        audioCodec = st.audioCodec,
-                                        sourceName = st.m3uAccount?.let { m3uNames[it] },
-                                    )
-                                }
-                            },
-                            loadCurrentStreamId = { uuid -> viewModel.loadCurrentStreamId(uuid) },
-                            switchChannelStream = { uuid, streamId ->
-                                viewModel.switchChannelStream(uuid, streamId).getOrThrow()
-                            },
-                            recheckSwitchStreamAllowed = { trigger ->
-                                viewModel.recheckSwitchStreamAllowed(trigger)
-                            },
-                        )
-                        }
-                        // 12 dp above the pill on tablets (iPad parity).
-                        Spacer(Modifier.height(if (tabletNav) 12.dp else 8.dp))
-                    }
-                }
-                // Radio Mode (Android#127): the cast card's place and style.
-                val radio by com.aeriotv.android.feature.player.RadioMode.state
-                    .collectAsStateWithLifecycle()
-                @Composable
-                fun DockRadio() {
-                    if (radio != null && !isTv && !casting) {
-                        val radioRow = fabRow == 5 && tabletCardWidth == null
-                        var radioCardPx by remember { mutableStateOf(0) }
-                        val density = LocalDensity.current
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Row(if (radioRow) mvRowFrame else Modifier, verticalAlignment = Alignment.CenterVertically) {
-                        com.aeriotv.android.feature.player.RadioTransportCard(
-                            modifier = if (radioRow) Modifier.weight(1f).onSizeChanged { radioCardPx = it.height } else Modifier,
-                            inRow = radioRow,
-                            tabletWidth = tabletCardWidth,
-                            nowProgramme = { ch -> state.epgByChannel[ch.guideMatchKey]?.nowPlaying() },
-                            loadChannelStreams = { channelIntPk ->
-                                val m3uNames = viewModel.loadM3uAccountNames()
-                                viewModel.loadChannelStreams(channelIntPk).map { st ->
-                                    com.aeriotv.android.feature.player.StreamOption(
-                                        id = st.id,
-                                        name = st.name.orEmpty(),
-                                        resolution = st.resolution,
-                                        fps = st.sourceFps,
-                                        bitrateKbps = st.outputBitrateKbps,
-                                        videoCodec = st.videoCodec,
-                                        audioCodec = st.audioCodec,
-                                        sourceName = st.m3uAccount?.let { m3uNames[it] },
-                                    )
-                                }
-                            },
-                            loadCurrentStreamId = { uuid -> viewModel.loadCurrentStreamId(uuid) },
-                            switchChannelStream = { uuid, streamId ->
-                                viewModel.switchChannelStream(uuid, streamId).getOrThrow()
-                            },
-                            recheckSwitchStreamAllowed = { trigger -> viewModel.recheckSwitchStreamAllowed(trigger) },
-                            isDispatcharrAdmin = capsPlaylist?.canSwitchStream() ?: false,
-                        )
-                        if (radioRow) {
-                            Spacer(Modifier.width(12.dp))
-                            CompanionControlFab(
-                                onClick = { showCompanionPicker = true },
-                                diameter = if (radioCardPx > 0) with(density) { radioCardPx.toDp() }
-                                    else com.aeriotv.android.feature.livetv.RetainedCardHeight,
-                            )
-                        }
-                        }
-                        }
-                        Spacer(Modifier.height(if (tabletNav) 12.dp else if (radioRow) 10.dp else 8.dp))
-                    }
-                }
-                if (tabletNav) {
-                    DockMvStaging(); DockMvBg(); DockKept(); DockFabOnly(); DockRadio(); DockCast()
-                } else {
-                    DockRadio(); DockCast(); DockMvBg(); DockMvStaging(); DockKept(); DockFabOnly()
-                }
+                DockKept()
                 val miniState = miniPlayerState
                 // Phase 139 / audit #22: on TV the mini-player is a top-right
                 // video window (TvMiniPlayerOverlay, mounted at NavHost root).
                 // Suppress the phone-style card so we don't double-render the
-                // same session. GH #33: also suppress it while casting so it can
-                // never stack under the Now-Casting card (a local mini session
-                // that was Active before the cast started would otherwise show).
-                // The row is now only the fallback for an Active session whose
+                // same session. The row is now only the fallback for an Active session whose
                 // video window is NOT the floating mini (phone Back and the
                 // top-strip swipe minimize into that window instead).
-                if (miniState is MiniPlayerSession.State.Active && !isTv && !casting &&
+                if (miniState is MiniPlayerSession.State.Active && !isTv &&
                     exoWindowMode != com.aeriotv.android.feature.player.ExoWindowState.Mode.Mini
                 ) {
                     val channel = miniState.channel
@@ -1980,7 +1463,7 @@ fun MainScaffold(
                             isPaused = miniPaused,
                             onResume = {
                                 val resumed = miniPlayerVm.resumeChannel()
-                                if (resumed != null) onChannelResumeLocal(resumed)
+                                if (resumed != null) onChannelResume(resumed)
                             },
                             onTogglePause = {
                                 exoHolder.setPaused(!exoHolder.isPaused())
@@ -2060,19 +1543,6 @@ fun MainScaffold(
                                     .padding(start = 20.dp)
                                     .graphicsLayer { alpha = reveal; scaleX = 0.6f + 0.4f * reveal; scaleY = 0.6f + 0.4f * reveal },
                             )
-                            if (showControlFab && !tabletNav) {
-                                Box(
-                                    Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)
-                                        .graphicsLayer { alpha = reveal },
-                                ) {
-                                    CompanionControlFab(onClick = { showCompanionPicker = true })
-                                }
-                            }
-                        }
-                        if (showControlFab && tabletNav) {
-                            Box(Modifier.align(Alignment.CenterEnd).padding(end = 16.dp)) {
-                                CompanionControlFab(onClick = { showCompanionPicker = true }, tablet = true)
-                            }
                         }
                     }
                 }
@@ -2081,46 +1551,10 @@ fun MainScaffold(
       }
       }
     }
-
-    // Task #255: the floating "Control TV" pill opens the SAME unified picker
-    // as the player's cast button (Google Cast routes + AerioTV companion TVs
-    // with inline pairing), replacing the old companion-only dialog that made
-    // cast targets invisible outside the player.
-    if (showCompanionPicker) {
-        // Force a fresh query sweep the moment the picker opens: the Fold's
-        // WiFi misses mid-browse announcements, so a long-running browse can
-        // be stale-by-omission (a TV that came up after the browse started).
-        LaunchedEffect(Unit) { companionDiscovery.refresh() }
-        com.aeriotv.android.feature.cast.CastRouteChooserDialog(
-            sender = castSender,
-            companionRemote = companionRemote,
-            companionDiscovery = companionDiscovery,
-            onDismiss = {
-                // Abandon an in-flight/unpaired companion attempt so it
-                // doesn't linger.
-                if (companionConn !is com.aeriotv.android.core.cast.companion
-                        .CompanionRemoteController.Conn.Connected &&
-                    companionConn !is com.aeriotv.android.core.cast.companion
-                        .CompanionRemoteController.Conn.Idle
-                ) {
-                    companionRemote.disconnect()
-                }
-                showCompanionPicker = false
-            },
-        )
-    }
-    // A fresh connection made from the picker -> close it; the Controlling card
-    // + player remote take over.
-    LaunchedEffect(companionConn) {
-        if (companionConn is com.aeriotv.android.core.cast.companion
-                .CompanionRemoteController.Conn.Connected) {
-            showCompanionPicker = false
-        }
-    }
 }
 
-/** Floating bottom-nav chrome shared by the tab bar pill, the minimized pill
- *  and the Control a TV button so they read as one layer over busy content
+/** Floating bottom-nav chrome shared by the tab bar pill and the minimized
+ *  pill so they read as one layer over busy content
  *  (guide grid, posters): solid card surface at 92 percent, a 1 dp on-surface
  *  hairline at 12 percent and a soft black drop shadow. Material styling, no
  *  translucent glass (Logan 2026-10-04, same recipe as the iPad). */
@@ -2139,42 +1573,6 @@ internal fun Modifier.floatingNavChrome(shape: androidx.compose.ui.graphics.Shap
         .clip(shape)
         .background(cs.surface.copy(alpha = 0.92f))
         .border(1.dp, cs.onSurface.copy(alpha = 0.12f), shape)
-}
-
-/**
- * GH #33: round floating button above the right end of the tab bar -- entry
- * to control a discovered TV. Matches the card chrome (surface + faint
- * primary border) rather than a filled pill, mirroring the iOS glass FAB.
- */
-@Composable
-private fun CompanionControlFab(
-    onClick: () -> Unit,
-    tablet: Boolean = false,
-    /** Beside the Kept Live card: a circle of this diameter. */
-    diameter: androidx.compose.ui.unit.Dp? = null,
-) {
-    // Same shape and chrome as MinimizedTabPill, which it sits opposite
-    // once the bar minimizes (Logan 2026-09-09).
-    Box(
-        modifier = Modifier
-            // Tablets: a 56 dp circle level with the 56 dp tab capsule.
-            .then(
-                if (diameter != null) Modifier.size(diameter)
-                else Modifier.size(width = if (tablet) 56.dp else 64.dp, height = if (tablet) 56.dp else 52.dp),
-            )
-            .floatingNavChrome(if (tablet || diameter != null) CircleShape else RoundedCornerShape(26.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            // Google's Cast glyph (Logan 2026-09-09): the Tv glyph doubled
-            // as the TV Shows tab icon.
-            imageVector = Icons.Filled.Cast,
-            contentDescription = "Control a TV",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp),
-        )
-    }
 }
 
 /**
@@ -2359,7 +1757,6 @@ private fun MainTabContent(
     onEpisodeResumeFromStart: (String) -> Unit = onEpisodeResume,
     onPlayRecording: (String, String, Int) -> Unit,
     onPlayCatchup: (String, String, String, Long, Long, String, String) -> Unit,
-    onLaunchMultiview: () -> Unit,
     onWatchLive: (String, String, Boolean, Long, Int?) -> Unit,
     onWatchFromBeginning: (String, String, Boolean, Long, Int?, Boolean) -> Unit,
     onOpenSearch: () -> Unit = {},
@@ -2394,7 +1791,6 @@ private fun MainTabContent(
             AppTab.LiveTV -> {
     LiveTVTabContent(
                     onChannelClick = onChannelClick,
-                    onLaunchMultiview = onLaunchMultiview,
                     onOpenSearch = onOpenSearch,
                     // Catch-up (task #133/#136): a resolved timeshift URL plays
                     // through the recording-player route with programme window +
@@ -3447,10 +2843,6 @@ internal fun visibleTabs(
 interface MainScaffoldEntryPoint {
     fun exoPlayerHolder(): AerioExoPlayerHolder
     fun exoWindowState(): com.aeriotv.android.feature.player.ExoWindowState
-    fun castSender(): com.aeriotv.android.core.cast.AerioCastSender
-    fun companionRemote(): com.aeriotv.android.core.cast.companion.CompanionRemoteController
-    fun companionDiscovery(): com.aeriotv.android.core.cast.companion.CompanionDiscovery
-    fun multiviewCastController(): com.aeriotv.android.core.cast.multiview.MultiviewCastController
     fun watchProgressDao(): com.aeriotv.android.core.data.db.dao.WatchProgressDao
     fun timeshiftController(): com.aeriotv.android.core.timeshift.TimeshiftController
 }

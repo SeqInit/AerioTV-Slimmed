@@ -55,6 +55,10 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 object PhoneVodMini {
 
+    /** VODPlayerScreen registers its current ExoPlayer here while mounted so
+     *  Back can hand that exact instance to the mini. */
+    @Volatile var currentPlayerProvider: (() -> androidx.media3.exoplayer.ExoPlayer?)? = null
+
     /** What the mini needs to save progress and to reopen the full player. */
     data class Info(
         /** streamUrl the route handed VODPlayerScreen; the adopt match key. */
@@ -288,12 +292,6 @@ fun PhoneVodMiniRoute(
     val context = LocalContext.current
     val isPhone = remember(context) { !context.isTelevision() }
     if (!isPhone) return
-    val companionHost = remember(context) {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            PlayerScreenEntryPoint::class.java,
-        ).companionHost()
-    }
     val latestInfo by rememberUpdatedState(info)
     val latestPop by rememberUpdatedState(onPop)
 
@@ -309,7 +307,7 @@ fun PhoneVodMiniRoute(
     BackHandler(enabled = info != null) {
         val i = latestInfo
         // VODPlayerScreen registers its current ExoPlayer here while mounted.
-        val player = companionHost.externalPlayerProvider?.invoke()
+        val player = PhoneVodMini.currentPlayerProvider?.invoke()
         if (i != null && PhoneVodMini.minimize(player, i)) token.minimized = true
         latestPop()
     }
@@ -321,11 +319,11 @@ fun PhoneVodMiniRoute(
         // then give that seek a beat to land before handing off.
         var waited = 0L
         while (waited < START_IN_MINI_TIMEOUT_MS) {
-            val p = companionHost.externalPlayerProvider?.invoke()
+            val p = PhoneVodMini.currentPlayerProvider?.invoke()
             if (p != null && p.playerError != null) return@LaunchedEffect
             if (p != null && p.playbackState == Player.STATE_READY) {
                 delay(700L)
-                val ready = companionHost.externalPlayerProvider?.invoke()
+                val ready = PhoneVodMini.currentPlayerProvider?.invoke()
                 if (PhoneVodMini.minimize(ready, latestInfo ?: i)) {
                     token.minimized = true
                     latestPop()

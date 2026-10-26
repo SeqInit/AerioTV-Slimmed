@@ -21,8 +21,8 @@ import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
 import androidx.media3.exoplayer.video.VideoRendererEventListener
 
 /**
- * Shared renderers factory for every player in the app (live holder, VOD,
- * multiview tiles). Two deviations from stock, each gated by a flag:
+ * Shared renderers factory for every player in the app (live holder and
+ * VOD). Two deviations from stock, each gated by a flag:
  *
  * [audioPassthrough] false (the default preference) builds the audio sink
  * with PCM-only capabilities, so surround bitstreams (AC-3/E-AC-3) are decoded
@@ -68,17 +68,8 @@ fun aerioRenderersFactory(
     // GH #45 HE-AAC routing described above.
     // Scoped to on-demand so live TV's 24/7 hardware-first audio
     // is untouched; a single finite VOD stream is a few % of one core, video
-    // stays hardware-decoded. MUST stay false for the live holder + multiview.
+    // stays hardware-decoded. MUST stay false for the live holder.
     preferSoftwareAudio: Boolean = false,
-    // Multiview tiles only: a gate that swallows audio while the tile is not
-    // the audio-focused one, so the audio TRACK stays selected (no track
-    // re-selection, no source re-load on a focus switch) while no AudioTrack
-    // exists and the tile's clock runs off the wall clock like a muted tile.
-    tileAudioGate: TileAudioGate? = null,
-    // Composited Multiview cast tiles only (2026-10-06): replaces the gated
-    // tile sink around the PCM tile sink (see CompositeTapAudioSink). Needs
-    // [tileAudioGate] non-null so the audio renderer stays clockless.
-    tileAudioSinkWrapper: ((AudioSink) -> AudioSink)? = null,
 ): DefaultRenderersFactory {
     val factory = object : DefaultRenderersFactory(context) {
         override fun buildAudioSink(
@@ -86,16 +77,6 @@ fun aerioRenderersFactory(
             enableFloatOutput: Boolean,
             enableAudioTrackPlaybackParams: Boolean,
         ): AudioSink? {
-            if (tileAudioGate != null) {
-                @Suppress("DEPRECATION")
-                val tileSink = DefaultAudioSink.Builder()
-                    .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .build()
-                tileAudioSinkWrapper?.let { return it(tileSink) }
-                return GatedTileAudioSink(AudioSyncShiftSink(PtsSmoothingAudioSink(tileSink)), tileAudioGate)
-            }
             if (audioPassthrough) {
                 android.util.Log.i("AerioPlayerDiag", "audio sink -> stock context sink (passthrough on)")
                 return super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
@@ -121,54 +102,26 @@ fun aerioRenderersFactory(
             eventListener: androidx.media3.exoplayer.audio.AudioRendererEventListener,
             out: ArrayList<Renderer>,
         ) {
-            if (tileAudioGate == null) {
-                // Stock build first (it also appends the bundled FFmpeg audio
-                // renderer, and its ORDER carries the PREFER/ON semantics), then
-                // swap the platform MediaCodec audio renderer in place for our
-                // subclass so every path gets the 0-channel AAC workaround.
-                val stock = ArrayList<Renderer>()
-                super.buildAudioRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, stock)
-                for (renderer in stock) {
-                    if (renderer.javaClass == androidx.media3.exoplayer.audio.MediaCodecAudioRenderer::class.java) {
-                        out.add(
-                            AerioMediaCodecAudioRenderer(
-                                context, codecAdapterFactory, mediaCodecSelector,
-                                enableDecoderFallback, eventHandler, eventListener, audioSink,
-                                clockless = false,
-                            ),
-                        )
-                    } else if (renderer.javaClass == androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer::class.java) {
-                        out.add(MimeGuardRenderer(renderer, clockless = false))
-                    } else {
-                        out.add(renderer)
-                    }
+            // Stock build first (it also appends the bundled FFmpeg audio
+            // renderer, and its ORDER carries the PREFER/ON semantics), then
+            // swap the platform MediaCodec audio renderer in place for our
+            // subclass so every path gets the 0-channel AAC workaround.
+            val stock = ArrayList<Renderer>()
+            super.buildAudioRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, stock)
+            for (renderer in stock) {
+                if (renderer.javaClass == androidx.media3.exoplayer.audio.MediaCodecAudioRenderer::class.java) {
+                    out.add(
+                        AerioMediaCodecAudioRenderer(
+                            context, codecAdapterFactory, mediaCodecSelector,
+                            enableDecoderFallback, eventHandler, eventListener, audioSink,
+                        ),
+                    )
+                } else if (renderer.javaClass == androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer::class.java) {
+                    out.add(MimeGuardRenderer(renderer))
+                } else {
+                    out.add(renderer)
                 }
-                return
             }
-            // Multiview tile: the audio renderer is NOT a media clock. The tile
-            // runs on ExoPlayer's standalone clock in every state, which is the
-            // clock a tile with no audio track uses (measured smooth on the
-            // Streamer), so muting or unmuting the sink never changes the
-            // clock and never re-selects tracks. The audible tile's sink plays
-            // at the standalone clock's pace; the sync error is bounded by the
-            // AudioTrack start latency, which multiview tolerates.
-            out.add(
-                AerioMediaCodecAudioRenderer(
-                    context, codecAdapterFactory, mediaCodecSelector,
-                    enableDecoderFallback, eventHandler, eventListener, audioSink,
-                    clockless = true,
-                ),
-            )
-            // The bundled FFmpeg renderer behind it, clockless too, exactly
-            // as the live player has it behind the platform renderer
-            // (EXTENSION_RENDERER_MODE_ON). Without it a tile whose audio the
-            // platform cannot decode to PCM (AC-3 on phones with no AC-3
-            // MediaCodec decoder, e.g. the Nothing Phone) had NO audio
-            // renderer: the track stayed unplayed, no PCM ever reached the
-            // tile sink, and the composite cast carried only generated
-            // silence (Nothing Phone log 2026-10-08 14:35: three ESPN tiles,
-            // three video decoders, zero audio decoders created).
-            out.add(MimeGuardRenderer(androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer(eventHandler, eventListener, audioSink), clockless = true))
         }
 
         override fun buildVideoRenderers(
@@ -204,7 +157,7 @@ fun aerioRenderersFactory(
     }
     return factory
         .setEnableDecoderFallback(true)
-        // EXTENSION_RENDERER_MODE_ON (live + multiview default): the bundled
+        // EXTENSION_RENDERER_MODE_ON (live default): the bundled
         // FFmpeg audio renderer sits AFTER the platform MediaCodec renderers, so
         // hardware decoders stay primary and FFmpeg is used only as a fallback
         // for formats the device can't decode in hardware -- notably AC-3 and
@@ -673,8 +626,8 @@ private class AerioMediaCodecVideoRenderer(
 }
 
 /**
- * Audio renderer used by every player in the app (live holder, VOD, multiview
- * tiles). Two deviations from stock:
+ * Audio renderer used by every player in the app (live holder and VOD). One
+ * deviation from stock:
  *
  * 1. Zero-channel AAC (Nothing Phone, Qualcomm yupik, 2026-09-11). Dispatcharr
  *    transcodes some channels' audio to AAC, and a 5.1 source arrives as
@@ -689,8 +642,6 @@ private class AerioMediaCodecVideoRenderer(
  *    the decoder parses the PCE and reports the true layout in its OUTPUT
  *    format, which is the format the audio sink is configured from. Deliberately
  *    narrow: only AAC with a non-positive channel count is touched.
- * 2. [clockless] (multiview tiles only) drops the media clock, so the tile runs
- *    on ExoPlayer's standalone clock whether or not its sink is muted.
  */
 /**
  * Wraps the bundled FFmpeg audio renderer (final, so it cannot be subclassed).
@@ -709,19 +660,14 @@ private class AerioMediaCodecVideoRenderer(
  *    "Invalid data" result is a decode-only skip, not an error). A real
  *    config change (new MIME, channels, rate) still passes through and
  *    re-initializes the decoder as before.
- * 2. [clockless] (Multiview tiles only): never offers the media clock, so a tile
- *    keeps running on ExoPlayer's standalone clock whichever audio renderer
- *    claims the track.
  */
 @OptIn(UnstableApi::class)
 private class MimeGuardRenderer(
     private val inner: Renderer,
-    private val clockless: Boolean,
 ) : Renderer by inner {
     private var original: androidx.media3.exoplayer.source.SampleStream? = null
 
-    override fun getMediaClock(): androidx.media3.exoplayer.MediaClock? =
-        if (clockless) null else inner.mediaClock
+    override fun getMediaClock(): androidx.media3.exoplayer.MediaClock? = inner.mediaClock
     override fun getDurationToProgressUs(positionUs: Long, elapsedRealtimeUs: Long): Long =
         inner.getDurationToProgressUs(positionUs, elapsedRealtimeUs)
     override fun setPlaybackSpeed(currentPlaybackSpeed: Float, targetPlaybackSpeed: Float) =
@@ -807,7 +753,6 @@ private class AerioMediaCodecAudioRenderer(
     eventHandler: Handler?,
     eventListener: androidx.media3.exoplayer.audio.AudioRendererEventListener?,
     audioSink: AudioSink,
-    private val clockless: Boolean,
 ) : androidx.media3.exoplayer.audio.MediaCodecAudioRenderer(
     context,
     codecAdapterFactory,
@@ -818,9 +763,6 @@ private class AerioMediaCodecAudioRenderer(
     audioSink,
 ) {
     private var loggedZeroChannelKey: String? = null
-
-    override fun getMediaClock(): androidx.media3.exoplayer.MediaClock? =
-        if (clockless) null else super.getMediaClock()
 
     override fun getMediaFormat(
         format: Format,
@@ -859,111 +801,6 @@ private class AerioMediaCodecAudioRenderer(
 
     private companion object {
         const val PLACEHOLDER_CHANNEL_COUNT = 2
-    }
-}
-
-/**
- * Per-tile audio gate for multiview. [muted] is flipped from the main thread
- * on audio-focus changes; the sink reads it on the playback thread.
- */
-class TileAudioGate(initiallyMuted: Boolean) {
-    @Volatile var muted: Boolean = initiallyMuted
-}
-
-/**
- * Multiview tile sink (2026-09-02). The tile keeps its audio track selected
- * and decoding at all times; this sink decides what happens to the PCM:
- *
- * - muted: buffers are swallowed at real-time pace (no AudioTrack is ever
- *   created) and the sink reports no position; the tile's audio renderer is
- *   clockless (see buildAudioRenderers), so the tile runs on ExoPlayer's
- *   standalone clock exactly as a tile with no audio track does (smooth).
- * - audible: buffers go to the real [DefaultAudioSink] and its position
- *   takes over once the AudioTrack has started.
- *
- * Flipping the gate never touches track selection, so ExoPlayer never
- * re-selects tracks or re-loads the source (the freeze the old strategy had).
- * Muting drains the real sink on the next playback-thread call.
- */
-@OptIn(UnstableApi::class)
-private class GatedTileAudioSink(
-    sink: AudioSink,
-    private val gate: TileAudioGate,
-) : ForwardingAudioSink(sink) {
-    /** The real sink has received buffers since the last flush (an AudioTrack may exist). */
-    private var realActive = false
-    // Muted pacing: accept audio no faster than real time, like a real sink
-    // would, so the audio renderer neither drains the whole buffer ahead
-    // (which starves it and parks the player in BUFFERING) nor stalls.
-    private var playing = false
-    private var anchorPtsUs = AudioSink.CURRENT_POSITION_NOT_SET
-    private var anchorWallUs = 0L
-    private var endOfStream = false
-
-    private fun wallUs() = android.os.SystemClock.elapsedRealtime() * 1000L
-    private fun pacedNowUs(): Long =
-        if (anchorPtsUs == AudioSink.CURRENT_POSITION_NOT_SET) AudioSink.CURRENT_POSITION_NOT_SET
-        else if (playing) anchorPtsUs + (wallUs() - anchorWallUs) else anchorPtsUs
-    private fun reanchor(ptsUs: Long) { anchorPtsUs = ptsUs; anchorWallUs = wallUs() }
-
-    /** Playback thread: the gate closed while the real sink held audio; drop it. */
-    private fun drainRealIfMuted() {
-        if (gate.muted && realActive) {
-            super.pause()
-            super.flush()
-            realActive = false
-        }
-    }
-
-    override fun handleBuffer(buffer: java.nio.ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
-        drainRealIfMuted()
-        if (gate.muted) {
-            if (anchorPtsUs == AudioSink.CURRENT_POSITION_NOT_SET) reanchor(presentationTimeUs)
-            // Hold the buffer (not consumed) until its time is within a small
-            // cushion of the paced clock; the renderer retries on its next pass.
-            if (presentationTimeUs > pacedNowUs() + MUTED_CUSHION_US) return false
-            buffer.position(buffer.limit())
-            return true
-        }
-        val ok = super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
-        if (ok) { realActive = true; reanchor(presentationTimeUs) }
-        return ok
-    }
-
-    override fun getCurrentPositionUs(sourceEnded: Boolean): Long {
-        drainRealIfMuted()
-        if (!realActive) return AudioSink.CURRENT_POSITION_NOT_SET
-        return super.getCurrentPositionUs(sourceEnded)
-    }
-
-    override fun play() {
-        if (anchorPtsUs != AudioSink.CURRENT_POSITION_NOT_SET) reanchor(pacedNowUs())
-        playing = true
-        super.play()
-    }
-
-    override fun pause() {
-        if (anchorPtsUs != AudioSink.CURRENT_POSITION_NOT_SET) reanchor(pacedNowUs())
-        playing = false
-        super.pause()
-    }
-
-    override fun flush() {
-        realActive = false; anchorPtsUs = AudioSink.CURRENT_POSITION_NOT_SET; endOfStream = false
-        super.flush()
-    }
-
-    override fun reset() {
-        realActive = false; anchorPtsUs = AudioSink.CURRENT_POSITION_NOT_SET; endOfStream = false
-        super.reset()
-    }
-
-    override fun hasPendingData(): Boolean = if (gate.muted) !endOfStream else super.hasPendingData()
-    override fun isEnded(): Boolean = if (gate.muted) endOfStream else super.isEnded()
-    override fun playToEndOfStream() { if (gate.muted) endOfStream = true else super.playToEndOfStream() }
-
-    private companion object {
-        const val MUTED_CUSHION_US = 250_000L
     }
 }
 

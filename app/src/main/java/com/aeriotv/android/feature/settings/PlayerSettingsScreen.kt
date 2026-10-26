@@ -61,8 +61,8 @@ import kotlin.math.roundToInt
 
 /**
  * Settings > Player. Everything about fullscreen playback: the info card, live
- * rewind, playback buffering and recovery, gestures, multiview tiles, and the
- * TV display-mode controls.
+ * rewind, playback buffering and recovery, gestures, and the TV display-mode
+ * controls.
  *
  * Settings phase 1 regroup: rows came from App Behaviors (info card, rewind,
  * skip intervals, gestures, stream recovery, audio, display), Network (buffer
@@ -125,18 +125,9 @@ fun PlayerSettingsScreen(
     val playerBrightnessEdge by viewModel.playerBrightnessEdge
         .collectAsStateWithLifecycle(initialValue = PLAYER_EDGE_LEFT)
 
-    val multiviewStyle by viewModel.multiviewAudioFocusStyle.collectAsStateWithLifecycle(initialValue = "centerIcon")
-    val multiviewPadding by viewModel.multiviewTilePadding.collectAsStateWithLifecycle(initialValue = false)
-    val multiviewRounded by viewModel.multiviewTileCornersRounded.collectAsStateWithLifecycle(initialValue = false)
-    val multiviewShowLogos by viewModel.multiviewShowLogos.collectAsStateWithLifecycle(initialValue = false)
-    val multiviewLogoPosition by viewModel.multiviewLogoPosition.collectAsStateWithLifecycle(initialValue = "top_left")
-    val multiviewLogoSize by viewModel.multiviewLogoSize.collectAsStateWithLifecycle(initialValue = 10)
-
     val startupRefreshRate by viewModel.startupRefreshRate.collectAsStateWithLifecycle(initialValue = "off")
     val matchContentResolution by viewModel.matchContentResolution.collectAsStateWithLifecycle(initialValue = false)
     val matchFrameRate by viewModel.matchFrameRate.collectAsStateWithLifecycle(initialValue = false)
-    val multiviewPickerShowSubtitles by viewModel.multiviewPickerShowSubtitles.collectAsStateWithLifecycle(initialValue = false)
-    val multiviewPickerShowDescriptions by viewModel.multiviewPickerShowDescriptions.collectAsStateWithLifecycle(initialValue = false)
 
     SettingsSubPageHost {
     // Profiles phase 2b: a Child sees only the basics (info card, skip lengths).
@@ -496,95 +487,6 @@ fun PlayerSettingsScreen(
                     }
                 }
 
-                // MARK: Multiview
-                //
-                // Apple has no section footer here: each picker carries its
-                // own copy (pushed page on touch, inline under the options on
-                // TV).
-                if (!childRole) SettingsSection(header = "Multiview") {
-                    SettingsPickerRow(
-                        title = "Audio Focus Indicator",
-                        tvChoiceSheet = true,
-                        inlineTitle = true,
-                        options = AUDIO_FOCUS_OPTIONS.map {
-                            SettingsPickerOption(it.id, it.label, it.detail)
-                        },
-                        selected = AUDIO_FOCUS_OPTIONS.firstOrNull { it.id == multiviewStyle }?.id
-                            ?: AUDIO_FOCUS_OPTIONS.first().id,
-                        onSelect = viewModel::setMultiviewAudioFocusStyle,
-                        // Apple says "Aerio" here; user-facing copy is
-                        // "AerioTV" by standing rule, so that one word differs.
-                        footer = "Choose how AerioTV marks the tile that currently owns audio when watching multiple streams at once.",
-                    )
-                    SettingsToggleRow(
-                        title = "Padding Between Tiles",
-                        subtitle = if (isTv) {
-                            "Insert a small gap between tiles so each stream stands on its own."
-                        } else {
-                            "Insert a small gap between tiles so each stream stands on its own. Off keeps adjacent tiles meeting flush."
-                        },
-                        leadingIcon = if (isTv) Icons.Filled.VerticalSplit else null,
-                        checked = multiviewPadding,
-                        onCheckedChange = viewModel::setMultiviewTilePadding,
-                    )
-                    SettingsPickerRow(
-                        title = "Tile Corners",
-                        tvChoiceSheet = true,
-                        inlineTitle = true,
-                        // Apple icons: square / square.dashed, on both platforms.
-                        options = listOf(
-                            SettingsPickerOption(false, "Square", icon = Icons.Filled.CropSquare),
-                            SettingsPickerOption(true, "Rounded", icon = Icons.Filled.CropFree),
-                        ),
-                        selected = multiviewRounded,
-                        onSelect = viewModel::setMultiviewTileCornersRounded,
-                        footer = "Square keeps the cinema-grid look; rounded softens each tile with a 12pt radius.",
-                    )
-                    SettingsToggleRow(
-                        title = "Show Channel Logos",
-                        subtitle = "Show each channel's logo on its tile so you can tell streams apart.",
-                        leadingIcon = if (isTv) Icons.Filled.Image else null,
-                        checked = multiviewShowLogos,
-                        onCheckedChange = viewModel::setMultiviewShowLogos,
-                    )
-                    SettingsToggleRow(
-                        title = "Show Subtitles",
-                        subtitle = "Show the program subtitle in the Add to Multiview picker",
-                        checked = multiviewPickerShowSubtitles,
-                        onCheckedChange = viewModel::setMultiviewPickerShowSubtitles,
-                    )
-                    SettingsToggleRow(
-                        title = "Show Descriptions",
-                        subtitle = "Show the program description in the Add to Multiview picker",
-                        checked = multiviewPickerShowDescriptions,
-                        onCheckedChange = viewModel::setMultiviewPickerShowDescriptions,
-                    )
-                    if (multiviewShowLogos) {
-                        val corners = listOf(
-                            SettingsPickerOption("top_left", "Top Left"),
-                            SettingsPickerOption("top_right", "Top Right"),
-                            SettingsPickerOption("bottom_left", "Bottom Left"),
-                            SettingsPickerOption("bottom_right", "Bottom Right"),
-                        )
-                        SettingsPickerRow(
-                            title = "Logo Position",
-                            tvChoiceSheet = true,
-                            inlineTitle = true,
-                            options = corners,
-                            selected = corners.firstOrNull { it.value == multiviewLogoPosition }?.value
-                                ?: "top_left",
-                            onSelect = viewModel::setMultiviewLogoPosition,
-                        )
-                        SteppedSliderRow(
-                            label = "Logo Size",
-                            values = listOf(5, 10, 15, 20, 25),
-                            selected = multiviewLogoSize,
-                            format = { "$it%" },
-                            onSelect = viewModel::setMultiviewLogoSize,
-                        )
-                    }
-                }
-
                 // MARK: Display (TV only)
                 //
                 // GH #38 + #40: each switch is a real HDMI mode change (brief
@@ -632,14 +534,6 @@ fun PlayerSettingsScreen(
 /** Apple's playerInfoCardFooter; used by the section and the pushed page. */
 private const val PLAYER_INFO_CARD_FOOTER =
     "Choose what appears on the program info card in the player while the controls are showing."
-
-private data class AudioFocusOption(val id: String, val label: String, val detail: String)
-
-private val AUDIO_FOCUS_OPTIONS: List<AudioFocusOption> = listOf(
-    AudioFocusOption("centerIcon", "Center Icon", "Speaker icon centered on the active tile. Default."),
-    AudioFocusOption("grayPersistent", "Gray Outline", "Subtle gray border always around the active tile."),
-    AudioFocusOption("themeFading", "Accent Outline (Fading)", "Accent-tinted border that auto-hides after 5 seconds."),
-)
 
 data class BufferOption(val id: String, val label: String, val detail: String, val cachingMs: Int)
 

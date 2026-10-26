@@ -34,7 +34,6 @@ import com.aeriotv.android.ui.scale.WithDisplayScale
 fun LiveTVTabContent(
     onChannelClick: (M3UChannel) -> Unit,
     modifier: Modifier = Modifier,
-    onLaunchMultiview: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     /** Catch-up (task #133/#136): play a resolved timeshift URL in the
      *  recording player, carrying programme window + panel timezone for
@@ -151,7 +150,6 @@ fun LiveTVTabContent(
                 canToggleViewMode = canToggle,
                 onToggleViewMode = toggleMode,
                 onOpenSearch = onOpenSearch,
-                onLaunchMultiview = onLaunchMultiview,
                 onPlayCatchup = onPlayCatchup,
             )
         }
@@ -162,7 +160,6 @@ fun LiveTVTabContent(
             viewMode = effectiveMode,
             canToggleViewMode = canToggle,
             onToggleViewMode = toggleMode,
-            onLaunchMultiview = onLaunchMultiview,
             onOpenSearch = onOpenSearch,
             onPlayCatchup = onPlayCatchup,
         )

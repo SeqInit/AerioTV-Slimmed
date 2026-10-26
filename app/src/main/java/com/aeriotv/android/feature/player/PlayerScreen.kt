@@ -59,7 +59,6 @@ import com.aeriotv.android.core.pip.PipState
 import com.aeriotv.android.core.pip.findActivity
 import com.aeriotv.android.feature.livetv.RecordProgramSheet
 import com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel
-import com.aeriotv.android.feature.multiview.AddToMultiviewSheet
 import com.aeriotv.android.feature.playlist.nowPlaying
 import com.aeriotv.android.feature.settings.SettingsViewModel
 import dagger.hilt.android.EntryPointAccessors
@@ -75,8 +74,8 @@ import com.aeriotv.android.core.ui.SkipIntervals
 private const val TAG = "PlayerScreen"
 /**
  * The ONE chrome auto-hide countdown (Logan 2026-09-11: "exactly 3 seconds
- * after the LAST user action"). Shared by the live player, the VOD player and
- * multiview so they cannot drift apart again; it was 4 s in all three.
+ * after the LAST user action"). Shared by the live player and the VOD player
+ * so they cannot drift apart again; it was 4 s in both.
  */
 const val PLAYER_CHROME_HIDE_MS = 3_000L
 
@@ -127,7 +126,6 @@ fun PlayerScreen(
     onReportCatchupPosition: suspend (playbackUrl: String, positionSecs: Double, paused: Boolean) -> Boolean =
         { _, _, _ -> true },
     onClose: () -> Unit = {},
-    onLaunchMultiview: () -> Unit = {},
     /** Remote Control: hold-Down (openSearch action) hands off to the global
      *  search screen; the caller navigates AFTER this screen minimizes. */
     onOpenSearch: () -> Unit = {},
@@ -198,66 +196,6 @@ fun PlayerScreen(
     val exoHolder = remember { playerEntry.exoPlayerHolder() }
     val exoWindowState = remember { playerEntry.exoWindowState() }
     val timeshiftController = remember { playerEntry.timeshiftController() }
-    // Cast Connect (GH #33) sender. isCasting drives the local-vs-remote swap:
-    // while a cast session is connected we stop the local codec and mirror the
-    // channel identity to the Android-TV receiver instead of playing here.
-    val castSender = remember { playerEntry.castSender() }
-    val castReceiver = remember { playerEntry.castReceiver() }
-    val castState by castSender.state.collectAsStateWithLifecycle()
-    // Play Here from the cast play-where prompt keeps this player local for
-    // the rest of the session: no mirror to the receiver, no auto-close.
-    val playHereWhileCasting by com.aeriotv.android.feature.main.PlayWhereRouter.localWhileCasting
-        .collectAsStateWithLifecycle()
-    val isCasting = castState is com.aeriotv.android.core.cast.AerioCastSender.State.Connected &&
-        !playHereWhileCasting
-    // GH #33 companion remote (second-screen): while connected to an AerioTV TV
-    // over the LAN, this screen behaves EXACTLY like the cast flow -- local
-    // playback is suspended, the channel is mirrored to the TV and the screen
-    // closes (the cast card owns the controls). Cast wins when both exist.
-    val companionRemote = remember { playerEntry.companionRemote() }
-    val companionDiscovery = remember { playerEntry.companionDiscovery() }
-    val companionConn by companionRemote.connection.collectAsStateWithLifecycle()
-    // GH #88: once this screen is in remote mode it STAYS remote through a
-    // reconnect (Connecting after a drop). Only a settled Idle/Failed/pairing
-    // state ends it; the old Connected-only gate re-primed local playback
-    // the moment the socket blinked while the phone was backgrounded.
-    var companionSticky by remember { mutableStateOf(false) }
-    LaunchedEffect(companionConn) {
-        when (companionConn) {
-            is com.aeriotv.android.core.cast.companion.CompanionRemoteController.Conn.Connected -> companionSticky = true
-            is com.aeriotv.android.core.cast.companion.CompanionRemoteController.Conn.Connecting -> Unit
-            else -> companionSticky = false
-        }
-    }
-    val isCompanion = !isCasting && (
-        companionConn is com.aeriotv.android.core.cast.companion.CompanionRemoteController.Conn.Connected ||
-            (companionSticky && companionConn is com.aeriotv.android.core.cast.companion.CompanionRemoteController.Conn.Connecting)
-        )
-    // "Some remote screen is playing this, not the phone" -- the shared gate for
-    // every local-playback suppression below.
-    val isRemote = isCasting || isCompanion
-    // Own companion mDNS discovery for the player's whole lifetime (phones only;
-    // the TV is the host, never a client). The cast button reads the devices flow
-    // to decide its own visibility; if the BUTTON owned discovery (it lives inside
-    // the auto-hiding chrome) the browse would restart on every chrome show and
-    // the button would be invisible for the first seconds each time (device test
-    // 2026-07-15). Refcounted with the chooser dialog's own start/stop.
-    val uiModeIsTv = (
-        androidx.compose.ui.platform.LocalContext.current.resources.configuration.uiMode and
-            android.content.res.Configuration.UI_MODE_TYPE_MASK
-        ) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    if (!uiModeIsTv) {
-        DisposableEffect(companionDiscovery) {
-            companionDiscovery.start()
-            onDispose { companionDiscovery.stop() }
-        }
-    }
-    // Set true while the companion "Disconnect" button tears down the remote and
-    // exits the player, so the prime effect (which re-fires when isCompanion flips
-    // false) does NOT resume LOCAL playback on the phone -- that left the channel
-    // playing on BOTH the phone and the TV (device report 2026-07-15).
-    val remoteStoppingState = remember { mutableStateOf(false) }
-    var remoteStopping by remoteStoppingState
 
     // Channel-flip state. The MPV view stays alive across flips; only the
     // current channel index changes and we call playFile again with the new URL.
@@ -373,8 +311,7 @@ fun PlayerScreen(
         currentChannel?.let { ch ->
             if (ch.id.isNotBlank()) {
                 settingsVm.setLastWatchedChannelId(ch.id)
-                // Feed the LRU recents list (AddToMultiview "Recent" section,
-                // iOS RecentChannelsStore parity).
+                // Feed the LRU recents list (iOS RecentChannelsStore parity).
                 settingsVm.recordRecentChannel(ch.id)
             }
             miniPlayerVm.setCurrentChannel(ch)
@@ -391,7 +328,7 @@ fun PlayerScreen(
     // beneath our chrome overlays.
     // Start-in-mini eligibility, resolved once (TV live tunes only; declared
     // here because isTvForm's canonical val sits further down the file).
-    val startMiniEligible = startInMini && !isCatchupMode && !isRemote &&
+    val startMiniEligible = startInMini && !isCatchupMode &&
         (
             context.resources.configuration.uiMode and
                 android.content.res.Configuration.UI_MODE_TYPE_MASK
@@ -423,14 +360,8 @@ fun PlayerScreen(
         }
         // Bring up the MediaSessionService so the session is alive before the
         // first frame. Idempotent -- if it's already running this is a no-op.
-        // NOT while casting: the phone isn't playing locally, so a media FGS would
-        // post a second "Casting to <TV>" notification competing with the
-        // standalone cast chip (GH #33 - re-entering the player from the
-        // Now-Casting mini controller is the path that hit this).
-        if (!isRemote) {
-            com.aeriotv.android.core.playback.AerioMediaPlaybackService
-                .startBackground(context)
-        }
+        com.aeriotv.android.core.playback.AerioMediaPlaybackService
+            .startBackground(context)
     }
 
     // Clear the LAN/WAN failover hook when leaving the player so a backgrounded /
@@ -454,54 +385,17 @@ fun PlayerScreen(
         }
     }
 
-    // Cast Connect (GH #33): free/restore the LOCAL codec + surface as the cast
-    // session comes and goes. Stopping (not just pausing) the holder releases the
-    // MediaCodec and stops phone-side audio while the TV plays; on disconnect we
-    // restore the fullscreen surface and the prime effect above re-tunes locally.
-    LaunchedEffect(isRemote) {
-        if (isRemote) {
-            runCatching { exoHolder.stop() }
-            runCatching { exoWindowState.hide() }
-            // Also stop the media FGS the LOCAL mount started: the phone isn't
-            // playing anything now, and the leftover session (stuck PLAYING with
-            // a stale position) kept an "AerioTV" media notification in the shade
-            // through the whole remote session AND after Disconnect (device test
-            // 2026-07-15). The in-app Controlling/Now-Casting card is the
-            // re-entry point; the notification is purely local playback's.
-            runCatching {
-                com.aeriotv.android.core.playback.AerioMediaPlaybackService.stop(context)
-            }
-        } else {
-            runCatching { exoWindowState.requestFullscreen() }
-        }
-    }
-
-    // Cast card UX (Logan 2026-09-12): the player is NEVER the remote screen any
-    // more. A session that starts while this player is open (the chrome's cast
-    // button) mirrors the current channel to the other screen -- the tune effect
-    // below does that -- and then hands the user back to the page they came from,
-    // where THE cast card is the one control surface (tap it for the remote
-    // sheet). The short delay lets that tune land before this screen pops; no
-    // local playback is resumed on the way out.
-    LaunchedEffect(isRemote) {
-        if (isRemote) {
-            delay(600)
-            onClose()
-        }
-    }
-
-    // GH #33 (receiver side): when THIS TV is playing a cast and the phone flips
-    // the channel, the receiver's Navigation routes the request here instead of
-    // re-navigating. Move currentIndex so the persistent ExoPlayer re-primes to
-    // the new channel in place -- no nav, no PiP-pop. No-op on the sending phone
-    // (the request flow stays null there).
-    val castFlipChannels by rememberUpdatedState(channels)
+    // An aeriotv://channel deep link while this player is up: Navigation
+    // routes the request here instead of re-navigating. Move currentIndex so
+    // the persistent ExoPlayer re-primes to the new channel in place -- no
+    // nav, no PiP-pop.
+    val requestFlipChannels by rememberUpdatedState(channels)
     LaunchedEffect(Unit) {
-        castReceiver.castChannelRequest.collect { requestedId ->
+        LiveChannelRequest.pending.collect { requestedId ->
             if (requestedId == null) return@collect
-            val idx = castFlipChannels.indexOfFirst { it.id == requestedId }
+            val idx = requestFlipChannels.indexOfFirst { it.id == requestedId }
             if (idx >= 0) currentIndex = idx
-            castReceiver.consumeCastChannelRequest()
+            LiveChannelRequest.consume()
         }
     }
 
@@ -509,13 +403,10 @@ fun PlayerScreen(
     // player is on a different channel than the user just selected,
     // swap streams via setMediaSource. The PlayerView at MainActivity
     // root holds the surface across this so no reattach is required.
-    LaunchedEffect(currentChannel?.id, isCasting, isCompanion) {
+    LaunchedEffect(currentChannel?.id) {
         // Task #148 milestone B: catch-up mode never primes the LIVE stream
         // (and never starts a rewind buffer session below).
         if (isCatchupMode) return@LaunchedEffect
-        // Companion Disconnect is tearing this player down -- do not resume local
-        // playback as isCompanion flips false (GH #33 double-play fix).
-        if (remoteStopping) return@LaunchedEffect
         val channelId = currentChannel?.id ?: return@LaunchedEffect
         val ch = currentChannel ?: return@LaunchedEffect
         val url = ch.url
@@ -524,56 +415,6 @@ fun PlayerScreen(
         // play URL (post LAN/WAN failover) before the holder re-primes, so
         // a demotion can freeze the URL its retained filler should dial.
         timeshiftController.noteChannelLeaving()
-        // GH #33 companion remote: mirror the channel to the paired TV over the
-        // LAN socket instead of priming locally. Dedup against the last channel
-        // this phone sent so re-entering the player for the SAME channel (mini
-        // card tap) doesn't needlessly re-tune the TV.
-        if (isCompanion) {
-            if (companionRemote.currentChannelId.value != ch.id) {
-                companionRemote.setRemoteChannel(ch.id, ch.name)
-            }
-            return@LaunchedEffect
-        }
-        // Cast Connect (GH #33): while casting, don't prime the LOCAL codec.
-        // Mirror the channel IDENTITY to the Android-TV receiver, which rebuilds
-        // its own /proxy/ts/ URL and plays with its own ExoPlayer. A channel flip
-        // re-fires this and re-casts. The suspend effect below frees the local
-        // codec so the phone isn't decoding in parallel.
-        if (isCasting) {
-            // Re-tune the receiver ONLY on a genuine channel change. Re-entering
-            // the player from the Now-Casting mini controller re-fires this effect
-            // for the SAME channel; without this guard we'd re-issue setContent()
-            // (an autoplay load) + setRemoteChannel and make the TV needlessly
-            // reload/flicker the feed it is already playing. The sender's current
-            // content mediaId is the source of truth for "what the TV is on".
-            // A cast resumed after an app restart only recovers the channel TITLE
-            // as mediaId (the receiver's bridged MediaSession drops our id), so
-            // also treat a title match as "already on this channel" -- otherwise
-            // re-entering it would needlessly re-tune the TV (GH #33).
-            // On resume mediaId IS the channel name, so a name match on mediaId
-            // covers that case. (Do NOT also match cc.title==ch.name: on a normal
-            // cast that would wrongly suppress a real switch between two channels
-            // sharing a name.)
-            // GH #47: shared in-place cast tune (same dedup guard as before -
-            // see AerioCastSender.tuneLiveChannel). The channel list's tap
-            // handler uses the same path to flip the TV without opening this
-            // screen.
-            castSender.tuneLiveChannel(
-                channelId = ch.id,
-                title = ch.name,
-                subtitle = nowProgramme?.title,
-                artUri = ch.tvgLogo.takeIf { it.isNotBlank() },
-                // Casting rework P1: this URL feeds the phone-local HLS
-                // proxy's ingest. Prefer the holder's post-failover URL when
-                // it is still this channel's (same discipline as the
-                // timeshift filler: the stored channel URL can embed a dead
-                // base after a LAN/WAN failover or server move).
-                localUrl = exoHolder.currentPlayUrl
-                    ?.takeIf { exoHolder.currentChannelId == ch.id } ?: url,
-                headers = httpHeaders,
-            )
-            return@LaunchedEffect
-        }
         // GH #22: also re-prime when the holder claims this channel but is
         // actually IDLE (a stop path that missed clearing currentChannelId).
         // Skipping the prime against a dead player was the silent-black-
@@ -638,7 +479,7 @@ fun PlayerScreen(
         // No-op when the pref is off. Started from fullscreen only; a
         // minimize keeps it rolling behind the mini and expanding the same
         // channel resumes it (the buffer drops only on a channel switch,
-        // user directive 2026-10-25), while multiview ends it.
+        // user directive 2026-10-25).
         // Gate on the tee's own URL test: only raw MPEG-TS is mirrored
         // into the buffer, so an HLS/DASH live channel must not start a
         // session (it would show a transport over a permanently empty
@@ -675,21 +516,14 @@ fun PlayerScreen(
             // Keep Recent Channels Live: a close (X, Back without a mini,
             // hold-Back stop, PiP X) keeps the channel live like a flip.
             // Minimize to the mini keeps PLAYING it (and its buffer rolling;
-            // the mini's X applies this rule later), and multiview launch
-            // hands off to tiles, so neither is retained here.
+            // the mini's X applies this rule later), so it is not retained here.
             // Radio Mode keeps the holder playing exactly like a minimize.
             val toMini = exoWindowState.mode.value == ExoWindowState.Mode.Mini ||
                 com.aeriotv.android.feature.player.RadioMode.isActive
-            val toMultiview = PlayerCloseIntent.consumeMultiviewLaunch()
             val hlsSession = exoHolder.lastTuneWasForcedHls
             if (hlsSession) Log.i("AerioTV", "[FORCE-HLS] keep live skipped on HLS session")
-            val keepOnClose = !toMini && !toMultiview && !hlsSession
-            if (toMini || toMultiview) {
-                Log.i(
-                    "AerioTV",
-                    "[RETAIN] not kept on close: " + if (toMini) "minimized to the mini player" else "multiview launch",
-                )
-            }
+            val keepOnClose = !toMini && !hlsSession
+            if (toMini) Log.i("AerioTV", "[RETAIN] not kept on close: minimized to the mini player")
             timeshiftController.onFullscreenLiveStopped(
                 keepIfEnabled = keepOnClose,
                 toMini = toMini && !hlsSession,
@@ -929,14 +763,6 @@ fun PlayerScreen(
                     onClose()
                 }
             }
-        } else if (isRemote) {
-            // GH #33: while casting / companion-controlling there is NO local
-            // playback to keep alive (LaunchedEffect(isRemote) stopped the local
-            // codec). Back just returns to the scaffold, where the persistent
-            // mini controller (Now Casting / Controlling <TV>) is the re-entry
-            // point. Arming the local audio-only mini here would both start
-            // phone-side background audio AND stack a second card.
-            onClose()
         } else {
             // Phone Back (Logan 2026-09-14, TV parity): minimize to the
             // floating in-app mini window (PhoneMiniPlayer.kt) instead of the
@@ -1277,16 +1103,10 @@ fun PlayerScreen(
     }
     val playbackSpeedSheetState = remember { mutableStateOf<Float?>(null) }
     var playbackSpeedSheet by playbackSpeedSheetState
-    val multiviewPickerOpenState = remember { mutableStateOf(false) }
-    var multiviewPickerOpen by multiviewPickerOpenState
     // True while the chrome's Options menu or Sleep sheet is open; pauses the
     // auto-hide timer so the chrome does not fade mid-interaction.
     val chromeMenuOpenState = remember { mutableStateOf(false) }
     var chromeMenuOpen by chromeMenuOpenState
-    // GH #33: the cast/companion device chooser (rendered inside the auto-hiding
-    // chrome's castSlot) pins the chrome open via interactionLocked below.
-    val castChooserOpenState = remember { mutableStateOf(false) }
-    var castChooserOpen by castChooserOpenState
 
     // Sleep timer: stores the wall-clock millis at which the player should close.
     val sleepEndsAtState = remember { mutableStateOf<Long?>(null) }
@@ -1301,16 +1121,12 @@ fun PlayerScreen(
     // Publish playback state for the activity's leave-the-app handling: video
     // (not audio-only) auto-enters PiP; audio-only instead keeps a background
     // media notification (no PiP). Cleared when the player leaves composition.
-    DisposableEffect(audioOnly, isRemote, currentChannel?.id, nowProgramme?.title) {
+    DisposableEffect(audioOnly, currentChannel?.id, nowProgramme?.title) {
         PipState.nowPlayingTitle = currentChannel?.name ?: "AerioTV"
         PipState.nowPlayingSubtitle = nowProgramme?.title.orEmpty()
         PipState.nowPlayingLogo = currentChannel?.tvgLogo?.takeIf { it.isNotBlank() }
-        // GH #33: while casting, the local player is stopped and the TV is
-        // playing, so leaving the phone app must NOT auto-enter PiP (nor arm a
-        // local audio notification) -- the Now-Casting mini controller is the
-        // re-entry path instead.
-        PipState.videoPlaybackActive.value = !audioOnly && !isRemote
-        PipState.audioPlaybackActive.value = audioOnly && !isRemote
+        PipState.videoPlaybackActive.value = !audioOnly
+        PipState.audioPlaybackActive.value = audioOnly
         onDispose {
             PipState.videoPlaybackActive.value = false
             PipState.audioPlaybackActive.value = false
@@ -1354,8 +1170,7 @@ fun PlayerScreen(
     // video window is now Hidden (0dp) and whose chrome has auto-hidden -- a
     // blank screen that only a force-stop cleared (Z Fold 5 tester repro:
     // play -> HOME/auto-PiP -> close PiP with its X -> reopen app = blank).
-    // Every IN-APP teardown (explicit chrome X, phone Back-to-mini, multiview
-    // launch) already pairs hide() with onClose(); this catches the one path
+    // Every IN-APP teardown (explicit chrome X, phone Back-to-mini) already pairs hide() with onClose(); this catches the one path
     // that can't reach the NavController. Guarded by windowWasShown so the
     // initial mount -- Hidden until LaunchedEffect(Unit) requestFullscreen()s
     // -- never self-pops, and scoped to ON_RESUME so it only fires when we
@@ -1368,13 +1183,7 @@ fun PlayerScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME &&
                 windowWasShown &&
-                exoWindowState.mode.value == ExoWindowState.Mode.Hidden &&
-                // GH #33: while this TV is a live Cast Connect receiver, a channel
-                // change arrives as a cast LOAD that relaunches MainActivity; the
-                // transient Hidden window during that relaunch is NOT a PiP-X
-                // dismiss, so don't pop to the guide -- the incoming deep link
-                // re-tunes the persistent player in place.
-                !castReceiver.isReceivingCast()
+                exoWindowState.mode.value == ExoWindowState.Mode.Hidden
             ) {
                 Log.i(TAG, "resumed onto a hidden player window (PiP X-dismiss) -> popping player")
                 // GH #15: this pop lands on a fresh guide composition with the
@@ -1697,7 +1506,7 @@ fun PlayerScreen(
                         else -> com.aeriotv.android.ui.tv.TvFocusTrace.nameOf(event)
                     }?.let { k ->
                         com.aeriotv.android.ui.tv.TvFocusTrace.player(
-                            "key $k chrome=$chromeVisible mvSheet=$multiviewPickerOpen",
+                            "key $k chrome=$chromeVisible",
                         )
                     }
                 }
@@ -1906,8 +1715,7 @@ fun PlayerScreen(
                 // overlay Box would win hit testing and swallow every tap.
                 // Tablets (iPad parity): a pinch in below 0.85 also minimizes
                 // to the corner mini, through the same Back path as the
-                // top-strip swipe. This screen is a single stream (multiview
-                // has its own screen) and is never shown while minimized.
+                // top-strip swipe. This screen is never shown while minimized.
                 .videoScalePinch(
                     settingsVm,
                     enabled = !isTvForm,
@@ -1917,7 +1725,7 @@ fun PlayerScreen(
                 // catch-up cannot minimize yet, so it gets no gesture); cancels
                 // the channel-flip swipe above when it starts there. Must stay
                 // LAST in this chain (PhoneMiniPlayer.kt).
-                .playerTopSwipeDown(enabled = !isTvForm && !isCatchupMode, drivesWindow = !isRemote),
+                .playerTopSwipeDown(enabled = !isTvForm && !isCatchupMode, drivesWindow = true),
         )
 
         // Transient "Fit" / "Fill" label for the pinch gesture above (no-op on
@@ -1966,9 +1774,6 @@ fun PlayerScreen(
             settingsVm = settingsVm,
             miniPlayerVm = miniPlayerVm,
             exoWindowState = exoWindowState,
-            castSender = castSender,
-            companionRemote = companionRemote,
-            companionDiscovery = companionDiscovery,
             scope = scope,
             currentChannel = currentChannel,
             nowProgramme = nowProgramme,
@@ -1998,9 +1803,7 @@ fun PlayerScreen(
             switchStreamState = switchStreamState,
             switchedStreamIdState = switchedStreamIdState,
             playbackSpeedSheetState = playbackSpeedSheetState,
-            multiviewPickerOpenState = multiviewPickerOpenState,
             chromeMenuOpenState = chromeMenuOpenState,
-            castChooserOpenState = castChooserOpenState,
             sleepEndsAtState = sleepEndsAtState,
             sleepRemainingMillisState = sleepRemainingMillisState,
             commitScrubCatchup = commitScrubCatchup,
@@ -2071,7 +1874,7 @@ fun PlayerScreen(
     // panel up until it is dismissed.
     val interactionLocked = chromeMenuOpen || recordTarget != null || streamInfo != null ||
         subtitles != null || audioTracks != null || playbackSpeedSheet != null ||
-        switchStream != null || multiviewPickerOpen || castChooserOpen
+        switchStream != null
     // Publish whether the surf keys should stay at the activity layer (see
     // ExoWindowState.dpadVerticalCaptured). Chrome, scrub HUD, menus/sheets
     // and the Recently Watched overlay all release UP/DOWN to Compose focus.
@@ -2305,13 +2108,6 @@ fun PlayerScreen(
         }
     }
 
-    // GH #33: read cast state LIVE at expiry. The effect is keyed only on
-    // sleepEndsAt, so a timer armed before the cast state changes (start/stop
-    // casting after arming) would otherwise branch on the stale captured value
-    // -- closing the player mid-cast, or no-op'ing stopCasting on a dead session
-    // and never closing the resumed local player.
-    val isCastingAtExpiry by rememberUpdatedState(isCasting)
-    val isCompanionAtExpiry by rememberUpdatedState(isCompanion)
     LaunchedEffect(sleepEndsAt) {
         val target = sleepEndsAt
         if (target == null) {
@@ -2323,15 +2119,7 @@ fun PlayerScreen(
             if (remaining <= 0L) {
                 sleepRemainingMillis = null
                 sleepEndsAt = null
-                // GH #33: a sleep timer set from the cast remote ends the CAST
-                // (the local player is already suspended); from the companion
-                // remote it pauses the TV (the TV keeps running -- it's the
-                // user's own device, unlike a cast session); otherwise close.
-                when {
-                    isCastingAtExpiry -> castSender.stopCasting()
-                    isCompanionAtExpiry -> { companionRemote.pause(); onClose() }
-                    else -> onClose()
-                }
+                onClose()
                 break
             }
             sleepRemainingMillis = remaining
@@ -2343,14 +2131,9 @@ fun PlayerScreen(
         exoHolder = exoHolder,
         exoWindowState = exoWindowState,
         miniPlayerVm = miniPlayerVm,
-        castSender = castSender,
-        companionRemote = companionRemote,
-        isCasting = isCasting,
-        isCompanion = isCompanion,
         currentChannel = currentChannel,
         nowProgramme = nowProgramme,
         recordTargetState = recordTargetState,
-        multiviewPickerOpenState = multiviewPickerOpenState,
         streamInfoState = streamInfoState,
         subtitlesState = subtitlesState,
         audioTracksState = audioTracksState,
@@ -2363,7 +2146,6 @@ fun PlayerScreen(
         onRecheckSwitchStreamAllowed = onRecheckSwitchStreamAllowed,
         onLoadChannelStreamsForReorder = onLoadChannelStreams,
         onLoadCurrentStreamUrl = onLoadCurrentStreamUrl,
-        onLaunchMultiview = onLaunchMultiview,
     )
 
     DisposableEffect(Unit) {
@@ -2458,7 +2240,7 @@ private fun RecentsOverlaySection(
 }
 
 // Modal sheets + pickers hosted by PlayerScreen (task #257 extraction:
-// record, multiview picker, stream info, subtitles, audio tracks, switch
+// record, stream info, subtitles, audio tracks, switch
 // stream, playback speed). Bodies moved verbatim; state objects are the
 // parent's so reads/writes hit identical snapshots.
 @Composable
@@ -2466,14 +2248,9 @@ private fun PlayerSheets(
     exoHolder: com.aeriotv.android.core.playback.AerioExoPlayerHolder,
     exoWindowState: ExoWindowState,
     miniPlayerVm: MiniPlayerViewModel,
-    castSender: com.aeriotv.android.core.cast.AerioCastSender,
-    companionRemote: com.aeriotv.android.core.cast.companion.CompanionRemoteController,
-    isCasting: Boolean,
-    isCompanion: Boolean,
     currentChannel: M3UChannel?,
     nowProgramme: EPGProgramme?,
     recordTargetState: MutableState<ProgramInfoTarget?>,
-    multiviewPickerOpenState: MutableState<Boolean>,
     streamInfoState: MutableState<StreamInfoSnapshot?>,
     subtitlesState: MutableState<SubtitlesState?>,
     audioTracksState: MutableState<AudioTracksState?>,
@@ -2486,11 +2263,9 @@ private fun PlayerSheets(
     onRecheckSwitchStreamAllowed: suspend (String) -> Boolean,
     onLoadChannelStreamsForReorder: suspend (Int) -> List<StreamOption>,
     onLoadCurrentStreamUrl: suspend (String) -> String?,
-    onLaunchMultiview: () -> Unit,
 ) {
     val context = LocalContext.current
     var recordTarget by recordTargetState
-    var multiviewPickerOpen by multiviewPickerOpenState
     var streamInfo by streamInfoState
     var subtitles by subtitlesState
     var audioTracks by audioTracksState
@@ -2503,48 +2278,6 @@ private fun PlayerSheets(
         RecordProgramSheet(
             target = target,
             onDismiss = { recordTarget = null },
-        )
-    }
-    if (multiviewPickerOpen) {
-        val multiviewStore = com.aeriotv.android.feature.multiview.rememberMultiviewStoreHandle()
-        // Snapshot the pre-open staged set so Cancel restores it EXACTLY
-        // (protects any Guide-staged selection from being wiped). Captured at
-        // composition time, i.e. BEFORE the seed LaunchedEffect below runs.
-        val mvSnapshot = remember { multiviewStore.selected.value }
-        val mvSnapshotFocus = remember { multiviewStore.audioFocusedIndex.value }
-        // Seed the now-playing channel as Tile 1 (index 0 = audio focus),
-        // preserving any already-staged tiles behind it. Keyed on Unit so it
-        // runs once per open, never re-clobbering the user's picks.
-        LaunchedEffect(Unit) { currentChannel?.let { multiviewStore.seedCurrent(it) } }
-        AddToMultiviewSheet(
-            currentChannel = currentChannel,
-            multiviewStore = multiviewStore,
-            onLaunch = {
-                multiviewPickerOpen = false
-                PlayerCloseIntent.markMultiviewLaunch()
-                // Stop the single-stream player BEFORE navigating so only the
-                // multiview tiles produce audio (no double-audio). Same teardown
-                // as the proven X-close path; onLaunchMultiview() is LAST because
-                // it pops PLAYER (this very composable) off the back stack.
-                miniPlayerVm.dismiss()
-                exoWindowState.hide()
-                exoHolder.stop()
-                com.aeriotv.android.core.playback.AerioMediaPlaybackService
-                    .stop(context.applicationContext)
-                onLaunchMultiview()
-            },
-            onCancel = {
-                multiviewPickerOpen = false
-                // Restore the exact pre-open selection (NOT clear()), so a
-                // Guide-staged set survives an opened-then-cancelled picker.
-                multiviewStore.restore(mvSnapshot, mvSnapshotFocus)
-            },
-            // BACK / scrim / swipe KEEPS whatever the user just toggled (mirrors
-            // MultiviewScreen's re-entrant picker). Only the explicit "Cancel"
-            // text button (onCancel) reverts to the pre-open snapshot. Without
-            // this, onDismiss defaulted to onCancel and BACK silently discarded
-            // the picks the user added while watching.
-            onDismiss = { multiviewPickerOpen = false },
         )
     }
     streamInfo?.let { snapshot ->
@@ -2661,22 +2394,6 @@ private fun PlayerSheets(
                         }
 
                         Toast.makeText(context, "Switching stream...", Toast.LENGTH_SHORT).show()
-                        // GH #33: while casting, the phone must NOT start a local decode.
-                        // change_stream already landed server-side (confirmed above), so the
-                        // channel's /proxy/ts/ URL now serves the switched upstream -- re-tune
-                        // the RECEIVER to the same channel and let the TV follow. Re-priming
-                        // the local player here would spin up a parallel decode (and phone-side
-                        // audio) alongside the cast. The switch follow below is local-only.
-                        if (isCasting) {
-                            castSender.setRemoteChannel(ch.id)
-                            return@launch
-                        }
-                        if (isCompanion) {
-                            // Same reasoning for the companion path: the switch
-                            // landed server-side; re-tune the TV, never the phone.
-                            companionRemote.setRemoteChannel(ch.id, ch.name)
-                            return@launch
-                        }
                         // Follow the switched upstream on the kept connection (see
                         // AerioExoPlayerHolder.followStreamSwitch).
                         exoHolder.followStreamSwitch(
@@ -2772,9 +2489,6 @@ private fun LiveRewindChromeSection(
     settingsVm: SettingsViewModel,
     miniPlayerVm: MiniPlayerViewModel,
     exoWindowState: ExoWindowState,
-    castSender: com.aeriotv.android.core.cast.AerioCastSender,
-    companionRemote: com.aeriotv.android.core.cast.companion.CompanionRemoteController,
-    companionDiscovery: com.aeriotv.android.core.cast.companion.CompanionDiscovery,
     scope: kotlinx.coroutines.CoroutineScope,
     currentChannel: M3UChannel?,
     nowProgramme: EPGProgramme?,
@@ -2804,9 +2518,7 @@ private fun LiveRewindChromeSection(
     switchStreamState: MutableState<SwitchStreamState?>,
     switchedStreamIdState: MutableState<Int?>,
     playbackSpeedSheetState: MutableState<Float?>,
-    multiviewPickerOpenState: MutableState<Boolean>,
     chromeMenuOpenState: MutableState<Boolean>,
-    castChooserOpenState: MutableState<Boolean>,
     sleepEndsAtState: MutableState<Long?>,
     sleepRemainingMillisState: MutableState<Long?>,
     commitScrubCatchup: (Long) -> Unit,
@@ -2859,9 +2571,7 @@ private fun LiveRewindChromeSection(
     var switchStream by switchStreamState
     var switchedStreamId by switchedStreamIdState
     var playbackSpeedSheet by playbackSpeedSheetState
-    var multiviewPickerOpen by multiviewPickerOpenState
     var chromeMenuOpen by chromeMenuOpenState
-    var castChooserOpen by castChooserOpenState
     var sleepEndsAt by sleepEndsAtState
     var sleepRemainingMillis by sleepRemainingMillisState
     // Live Rewind: the ticker that keeps the buffer window and
@@ -3019,21 +2729,6 @@ private fun LiveRewindChromeSection(
         chromeVisible = chromeVisible && !sidebarChrome,
         pillVisible = pillVisible && !(sidebarChrome && chromeVisible),
         isTv = isTvForm,
-        // Cast Connect (GH #33): phone/tablet Cast button, only on a build
-        // with a registered Cast App ID. Live channels cast their identity to
-        // the Android-TV receiver.
-        castSlot = if (!isTvForm && castSender.castConfigured) {
-            {
-                com.aeriotv.android.feature.cast.CastIconButton(
-                    sender = castSender,
-                    companionRemote = companionRemote,
-                    companionDiscovery = companionDiscovery,
-                    onChooserOpenChange = { castChooserOpen = it },
-                )
-            }
-        } else {
-            null
-        },
         // Focusable Retry in the standard controls while the stream is
         // unavailable (the center card's button can't take remote focus).
         connectionIssue = streamUnavailable,
@@ -3081,7 +2776,6 @@ private fun LiveRewindChromeSection(
                 .stop(context)
             onClose()
         },
-        onAddToMultiview = { multiviewPickerOpen = true },
         onShowRecord = { target -> recordTarget = target },
         onShowStreamInfo = {
             streamInfo = exoHolder.player?.captureStreamInfo() ?: StreamInfoSnapshot(
@@ -3149,8 +2843,8 @@ private fun LiveRewindChromeSection(
         videoScaleLabel = videoScaleLabel(videoScaleMode),
         onCycleVideoScale = { settingsVm.cycleVideoScaleMode(videoScaleMode) },
         // Radio Mode (Android#127): keep this channel's audio, drop to the
-        // Live TV tab with the Radio card. Hidden while casting or remote.
-        onRadioMode = if (castSender.state.value is com.aeriotv.android.core.cast.AerioCastSender.State.Connected || isCatchupMode || currentChannel == null) null else ({
+        // Live TV tab with the Radio card.
+        onRadioMode = if (isCatchupMode || currentChannel == null) null else ({
             currentChannel?.let { ch ->
                 com.aeriotv.android.feature.player.RadioMode.start(context, ch)
                 miniPlayerVm.dismiss()
@@ -3494,19 +3188,6 @@ interface PlayerScreenEntryPoint {
     fun exoPlayerHolder(): com.aeriotv.android.core.playback.AerioExoPlayerHolder
     fun exoWindowState(): ExoWindowState
     fun timeshiftController(): com.aeriotv.android.core.timeshift.TimeshiftController
-    fun castSender(): com.aeriotv.android.core.cast.AerioCastSender
-    fun castReceiver(): com.aeriotv.android.core.cast.AerioCastReceiverController
-    fun companionRemote(): com.aeriotv.android.core.cast.companion.CompanionRemoteController
-    fun companionDiscovery(): com.aeriotv.android.core.cast.companion.CompanionDiscovery
-    fun companionHost(): com.aeriotv.android.core.cast.companion.CompanionHostController
-}
-
-/** One-shot marker so the Live Rewind dispose can tell a multiview launch
- *  (not retained) from a user close (retained with Keep Recent Channels Live). */
-internal object PlayerCloseIntent {
-    @Volatile private var multiview = false
-    fun markMultiviewLaunch() { multiview = true }
-    fun consumeMultiviewLaunch(): Boolean = multiview.also { multiview = false }
 }
 
 

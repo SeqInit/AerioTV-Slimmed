@@ -122,7 +122,6 @@ import com.aeriotv.android.feature.livetv.RecordProgramSheet
 import com.aeriotv.android.feature.livetv.computeDisplayChannels
 import com.aeriotv.android.feature.livetv.orderGroups
 import com.aeriotv.android.feature.livetv.rememberLiveTvFormFactor
-import com.aeriotv.android.feature.multiview.rememberMultiviewStoreHandle
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.feature.reminders.RemindersViewModel
 import com.aeriotv.android.feature.settings.SettingsViewModel
@@ -147,7 +146,6 @@ fun GuideScreen(
     viewMode: LiveTVViewMode,
     canToggleViewMode: Boolean,
     onToggleViewMode: () -> Unit,
-    onLaunchMultiview: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onPlayCatchup: (
         channelId: String,
@@ -171,7 +169,6 @@ fun GuideScreen(
     val favoritesVm: FavoritesViewModel = hiltViewModel()
     val remindersVm: RemindersViewModel = hiltViewModel()
     val collectionsVm: CollectionsViewModel = hiltViewModel()
-    val multiviewStore = rememberMultiviewStoreHandle()
     val miniPlayerVm: MiniPlayerViewModel = hiltViewModel()
     val miniState by miniPlayerVm.state.collectAsStateWithLifecycle()
     val miniActive = miniState is MiniPlayerSession.State.Active
@@ -223,9 +220,6 @@ fun GuideScreen(
     val reminders by remindersVm.all.collectAsStateWithLifecycle()
     val reminderKeys = remember(reminders) { reminders.mapTo(HashSet()) { it.reminderKey } }
     val collections by collectionsVm.collections.collectAsStateWithLifecycle()
-    val stagedMultiview by multiviewStore.selected.collectAsStateWithLifecycle(initialValue = emptyList())
-    val stagingOn by multiviewStore.isStaging.collectAsStateWithLifecycle()
-    val mvPlayingSeed by multiviewStore.playingSeed.collectAsStateWithLifecycle()
     val groupSelector by settingsVm.guideGroupSelector.collectAsStateWithLifecycle()
     // ANDROID: Sidebar-style TV interface. It implies its own guide layout
     // (preview header, groups in a left panel over the guide) whatever the
@@ -727,7 +721,7 @@ fun GuideScreen(
     val gridFocus = remember { FocusRequester() }
     val pillsFocus = remember { FocusRequester() }
     val bannerFocus = remember { FocusRequester() }
-    val stagingPlayFocus = remember { FocusRequester() }
+    val radioBannerFocus = remember { FocusRequester() }
     var clockSelectTrigger by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val previewProgram: EPGProgramme? = if (previewMode) grid.focusedCell() else null
     val previewChannel: M3UChannel? = if (previewMode && grid.focusRow in 0 until grid.rows.size) grid.rows.channel(grid.focusRow) else null
@@ -879,12 +873,10 @@ fun GuideScreen(
     // focus is outside the guide AND outside the nav, i.e. genuinely nowhere,
     // and only while no overlay is up, so this never fights the single-owner
     // model or pulls focus off chrome that legitimately has it.
-    // GH #138: the route must also be RESUMED. Play on the staging banner
-    // navigates to Multiview and the banner leaves with focus on it; while
-    // MAIN is still composed for the exit transition (STARTED, no longer
-    // RESUMED) this watchdog used to fire, pull focus back to a guide cell
-    // and strand it on "none" when MAIN left, stealing it from the
-    // Multiview grid host so no key reached the tiles.
+    // GH #138: the route must also be RESUMED. While MAIN is still composed
+    // for a navigation's exit transition (STARTED, no longer RESUMED) this
+    // watchdog used to fire, pull focus back to a guide cell and strand it
+    // on "none" when MAIN left, stealing focus from the next screen.
     val guideResumed by androidx.compose.runtime.produceState(guideLifecycle.currentState, guideLifecycle) { guideLifecycle.currentStateFlow.collect { value = it } }
     if (isTv) {
         val stranded = guideResumed.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) &&
@@ -1020,9 +1012,7 @@ fun GuideScreen(
         when (action) {
             com.aeriotv.android.core.remote.GuideRemoteAction.FOCUS_GROUP_PILLS -> openGroupMenu()
             com.aeriotv.android.core.remote.GuideRemoteAction.RESUME_PLAYER -> {
-                // A Multiview left with Back to Guide: Play/Pause returns to it.
-                if (isTv && com.aeriotv.android.feature.multiview.MultiviewBackground.state.value != null) onLaunchMultiview()
-                else if (miniActive) miniPlayerVm.session.requestResume()
+                if (miniActive) miniPlayerVm.session.requestResume()
                 true
             }
             com.aeriotv.android.core.remote.GuideRemoteAction.CLOSE_MINI_PLAYER -> {
@@ -1486,18 +1476,12 @@ fun GuideScreen(
             onDown = { runCatching { gridFocus.requestFocus() }.getOrDefault(false) },
             leadInset = railWidth,
         )
-        // Multiview staging banner (iOS EPGGuideView.stagingBanner), shared
-        // with the List, below the header / pills and above the grid (iOS
-        // placement); restored after the guide rebuild dropped it.
-        // Phones and tablets show the Multiview dock card above the nav bar
-        // instead (MainScaffold); only TV keeps this in-view banner.
-        if (isTv) com.aeriotv.android.feature.multiview.MultiviewStagingBanner(
-            store = multiviewStore,
-            isTv = isTv,
-            onLaunchMultiview = onLaunchMultiview,
+        // Radio Mode dock card (Android#127), below the header / pills and
+        // above the grid.
+        if (isTv) com.aeriotv.android.feature.player.RadioTvBannerSlot(
             // The grid restores the cell it last focused.
             onReturnFocus = { runCatching { gridFocus.requestFocus() }.getOrDefault(false) },
-            playFocusRequester = stagingPlayFocus,
+            playFocusRequester = radioBannerFocus,
             upTarget = if (!sidebarGroupMode && !favoritesOnly && pillItems.isNotEmpty()) pillsFocus else null,
             downTarget = gridFocus,
             // Radio start keeps focus on the chosen cell (Logan 2026-10-15).
@@ -1602,14 +1586,11 @@ fun GuideScreen(
                 // requester landed on the leftmost pill and, with
                 // selection-follows-focus, switched to Live TV.
                 onLeaveTop = {
-                    // The background Multiview banner shares the Play slot.
-                    val bannerUp = (stagingOn && stagedMultiview.isNotEmpty()) ||
-                        com.aeriotv.android.feature.multiview.MultiviewBackground.state.value != null ||
-                        com.aeriotv.android.feature.player.RadioMode.isActive
-                    val stagingUp = isTv && bannerUp &&
-                        runCatching { stagingPlayFocus.requestFocus() }.getOrDefault(false)
-                    com.aeriotv.android.ui.tv.TvFocusTrace.guide("leave-top staging-banner=$stagingUp")
-                    if (stagingUp) true else when {
+                    val bannerUp = com.aeriotv.android.feature.player.RadioMode.isActive
+                    val bannerFocused = isTv && bannerUp &&
+                        runCatching { radioBannerFocus.requestFocus() }.getOrDefault(false)
+                    com.aeriotv.android.ui.tv.TvFocusTrace.guide("leave-top radio-banner=$bannerFocused")
+                    if (bannerFocused) true else when {
                         // Channel Preview with no pill row: the banner's
                         // description is the next stop above the clock.
                         previewMode && (favoritesOnly || sidebarGroupMode) && previewProgram?.description?.isNotBlank() == true ->
@@ -1869,27 +1850,12 @@ fun GuideScreen(
     menuFor?.let { (channel, cell) ->
         val notEnded = cell.endMillis > nowMs
         val isLive = nowMs in cell.startMillis until cell.endMillis
-        // Apple liveTVMultiviewMenuState (Logan 2026-10-11): the channel in
-        // the mini player is already staged channel 1, so its item stays
-        // "Add to Multiview", disabled; others stage on top of it.
-        val mvMenu = com.aeriotv.android.feature.multiview.multiviewMenuState(
-            channel.id, mvPlayingSeed?.id, stagedMultiview,
-        )
-        val inMultiview = mvMenu == com.aeriotv.android.feature.multiview.MultiviewMenuState.Remove
-        val mvPlayingHere = mvMenu == com.aeriotv.android.feature.multiview.MultiviewMenuState.AddDisabled
         val key = reminderKey(channel.name, cell.title, cell.startMillis)
         val isFavorite = channel.id in favoriteIds
         val isRecent = channel.id in recentChannelIds
-        // A Multiview running in the background takes adds up to its own
-        // tile limit (MultiviewBackground.toggleTile), not the staging 4.
-        val mvCap = if (com.aeriotv.android.feature.multiview.MultiviewBackground.state.value != null) {
-            multiviewStore.maxTiles
-        } else 4
-        val atCap = stagedMultiview.size >= mvCap
-        val canAddToMultiview = channel.url.isNotBlank() && (!atCap || inMultiview) && !mvPlayingHere
         val canRecord = dvrCanRecord && notEnded && (isLive || canRecordToServer)
         val replayable = !cell.isPlaceholder && channel.canReplay(cell, nowMs)
-        // Apple TV order (Logan 2026-09-02): Favorites, Multiview, Collection,
+        // Apple TV order (Logan 2026-09-02): Favorites, Collection,
         // Program Info, Record from Now, then the Android-only extras.
         val watchFromStart: () -> Unit = { startCatchup(channel, cell) }
         val reminderSet = key in reminderKeys
@@ -1909,7 +1875,6 @@ fun GuideScreen(
                 add(TvMenuAction(if (isFavorite) "Remove from Favorites" else "Add to Favorites", if (isFavorite) Icons.Outlined.StarOutline else Icons.Filled.Star) { favoritesVm.toggle(channel) })
                 // GH #130 (Apple d051505): only while the channel is in Recently Watched.
                 if (isRecent) add(TvMenuAction("Remove from Recently Watched", Icons.Outlined.History, destructive = true) { settingsVm.removeRecentChannel(channel.id) })
-                add(TvMenuAction(if (inMultiview) "Remove from Multiview" else "Add to Multiview", Icons.Outlined.GridView, enabled = canAddToMultiview) { multiviewStore.stageToggle(channel) })
                 add(TvMenuAction("Add Channel to Collection", Icons.Outlined.CreateNewFolder) { collectionPickerFor = channel.id to channel.name })
                 if (!cell.isPlaceholder) {
                     add(TvMenuAction("Program Info", Icons.Outlined.Info) { programInfoTarget = cell.toInfoTarget(channel.name, channel.dispatcharrChannelId) })
@@ -1935,7 +1900,6 @@ fun GuideScreen(
             com.aeriotv.android.feature.player.radioFlagMenuAction(context, channel, state.playlist, viewModel)?.let { add(it) }
             add(TvMenuAction(if (isFavorite) "Remove from Favorites" else "Add to Favorites") { favoritesVm.toggle(channel) })
             if (isRecent) add(TvMenuAction("Remove from Recently Watched", destructive = true) { settingsVm.removeRecentChannel(channel.id) })
-            add(TvMenuAction(if (inMultiview) "Remove from Multiview" else "Add to Multiview", enabled = canAddToMultiview) { multiviewStore.stageToggle(channel) })
             add(TvMenuAction("Add Channel to Collection") { collectionPickerFor = channel.id to channel.name })
             // Jump To and Back to Now live on the clock cell now (tvOS parity).
             if (!cell.isPlaceholder) {

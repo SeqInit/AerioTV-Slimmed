@@ -334,22 +334,6 @@ class PlaylistViewModel @Inject constructor(
     val guideJumpRequests: SharedFlow<DeepLinkTarget.GuideProgram> = _guideJumpRequests.asSharedFlow()
 
     /**
-     * Companion remote X (GH #33): "put the tab shell back on Live TV".
-     *
-     * Separate from [guideJumpRequests] because there is no programme to jump
-     * to and because this one must NOT replay: a replayed value would yank a
-     * later, deliberate tab choice back to Live TV the next time MainScaffold
-     * recomposed its collector.
-     */
-    private val _liveTvTabRequests =
-        kotlinx.coroutines.flow.MutableSharedFlow<Unit>(
-            replay = 0,
-            extraBufferCapacity = 1,
-            onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
-        )
-    val liveTvTabRequests: SharedFlow<Unit> = _liveTvTabRequests.asSharedFlow()
-
-    /**
      * Pending `aeriotv://settings/<page>` screenshot deep link, or null.
      *
      * A StateFlow rather than a SharedFlow because SettingsTabContent is NOT
@@ -381,11 +365,6 @@ class PlaylistViewModel @Inject constructor(
     /** Clear the pending settings deep link once it has been applied. */
     fun consumeSettingsPage() {
         _settingsPageRequest.value = null
-    }
-
-    /** Select the Live TV tab (companion X / exit-to-Live-TV). */
-    fun requestLiveTvTab() {
-        _liveTvTabRequests.tryEmit(Unit)
     }
 
     /** Called when a Search EPG result is tapped: stash + broadcast the

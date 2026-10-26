@@ -146,7 +146,6 @@ import com.aeriotv.android.feature.livetv.LiveTVViewMode
 import com.aeriotv.android.feature.livetv.ManageGroupsSheet
 import com.aeriotv.android.feature.livetv.ProgramInfoSheet
 import com.aeriotv.android.feature.livetv.RecordProgramSheet
-import com.aeriotv.android.feature.multiview.rememberMultiviewStoreHandle
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.feature.playlist.SortMode
 import com.aeriotv.android.feature.playlist.nowPlaying
@@ -166,8 +165,6 @@ fun ChannelListScreen(
     canToggleViewMode: Boolean = false,
     onToggleViewMode: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
-    /** Play on the Multiview staging banner. */
-    onLaunchMultiview: () -> Unit = {},
     /** Catch-up (task #137): play a resolved timeshift URL in the recording
      *  player; same shape as GuideScreen's onPlayCatchup. */
     onPlayCatchup: (
@@ -251,11 +248,6 @@ fun ChannelListScreen(
     val edgeSwipeSetting by settingsVm.liveTvEdgeSwipeOpensSidebar.collectAsStateWithLifecycle(initialValue = false)
     val edgeSwipeMode = phoneSidebarMode && edgeSwipeSetting
     val edgeDrawerDrag = remember { com.aeriotv.android.feature.livetv.EdgeDrawerDragState() }
-    // Multiview staging for the phone row menu (same store the guide's cell
-    // menu toggles).
-    val multiviewStore = rememberMultiviewStoreHandle()
-    val stagedMultiview by multiviewStore.selected.collectAsStateWithLifecycle(initialValue = emptyList())
-    val mvPlayingSeed by multiviewStore.playingSeed.collectAsStateWithLifecycle()
 
     // Channel Collections (#45): user-named channel groupings as extra filter
     // pills + row-menu actions. Mirrors the guide's wiring; both screens share
@@ -626,16 +618,9 @@ fun ChannelListScreen(
             thickness = 0.5.dp,
         )
 
-        // Multiview staging banner, same placement as the guide: below the
-        // header / pills, above the rows (iOS ChannelListView). Staging from a
-        // row's long-press menu used to show nothing in List view.
-        // Phones and tablets show the Multiview dock card above the nav bar
-        // instead (MainScaffold); only TV keeps this in-view banner.
-        if (isTv) com.aeriotv.android.feature.multiview.MultiviewStagingBanner(
-            store = multiviewStore,
-            isTv = isTv,
-            onLaunchMultiview = onLaunchMultiview,
-        )
+        // Radio Mode dock card (Android#127), same placement as the guide:
+        // below the header / pills, above the rows.
+        if (isTv) com.aeriotv.android.feature.player.RadioTvBannerSlot()
 
         // Audit task #51 (partial): pull-to-refresh on the Live TV list.
         // Drags the spinner from the top of the LazyColumn and invokes
@@ -782,14 +767,6 @@ fun ChannelListScreen(
                         showLogo = showChannelLogos,
                         showNumber = showChannelNumbers,
                         collectionsMenu = collectionsMenu,
-                        multiviewMenu = com.aeriotv.android.feature.multiview.multiviewMenuState(
-                            channel.id, mvPlayingSeed?.id, stagedMultiview,
-                        ),
-                        onToggleMultiview = if (channel.url.isNotBlank()) {
-                            { multiviewStore.stageToggle(channel) }
-                        } else {
-                            null
-                        },
                         onWatchPast = if (channel.hasCatchup) {
                             { prog -> onCatchupResolve(channel, prog) }
                         } else {
@@ -1033,13 +1010,6 @@ internal fun ChannelRow(
      *  expanded schedule panel then lists recently aired programmes with a
      *  Watch action on the replayable ones. */
     onWatchPast: ((EPGProgramme) -> Unit)? = null,
-    /** Phone row menu (Apple cardMenuItems): Add to / Remove from Multiview.
-     *  Null = not offered (Favorites tab, no stream URL). */
-    onToggleMultiview: (() -> Unit)? = null,
-    // Apple liveTVMultiviewMenuState: AddDisabled for the channel playing
-    // in the mini player (staged channel 1), Remove for a staged channel.
-    multiviewMenu: com.aeriotv.android.feature.multiview.MultiviewMenuState =
-        com.aeriotv.android.feature.multiview.MultiviewMenuState.Add,
     /** GH #130: non-null while the channel is in Recently Watched; the
      *  long-press menu then offers "Remove from Recently Watched". */
     onRemoveFromRecents: (() -> Unit)? = null,
@@ -1586,7 +1556,7 @@ internal fun ChannelRow(
                 // Phone and tablet: Material 3 modal bottom sheet, the same
                 // surface the guide cell uses (Logan 2026-09-09). Apple
                 // cardMenuItems order (ChannelListView.swift:3217): Watch,
-                // Favorites, Multiview, Collection, Program Info, Record.
+                // Favorites, Collection, Program Info, Record.
                 com.aeriotv.android.feature.livetv.LiveTvActionSheet(
                     title = channel.name,
                     subtitle = nowProgramme?.title ?: " ",
@@ -1602,16 +1572,6 @@ internal fun ChannelRow(
                         )
                         onRemoveFromRecents?.let { remove ->
                             add(TvMenuAction("Remove from Recently Watched", Icons.Outlined.History, destructive = true) { remove() })
-                        }
-                        onToggleMultiview?.let { toggle ->
-                            val mvRemove = multiviewMenu == com.aeriotv.android.feature.multiview.MultiviewMenuState.Remove
-                            add(
-                                TvMenuAction(
-                                    if (mvRemove) "Remove from Multiview" else "Add to Multiview",
-                                    Icons.Outlined.GridView,
-                                    enabled = multiviewMenu != com.aeriotv.android.feature.multiview.MultiviewMenuState.AddDisabled,
-                                ) { toggle() },
-                            )
                         }
                         collectionsMenu?.let { cm ->
                             add(TvMenuAction("Add Channel to Collection", Icons.Outlined.Folder) { cm.onOpenPicker(channel.id, channel.name, -1, 0L) })

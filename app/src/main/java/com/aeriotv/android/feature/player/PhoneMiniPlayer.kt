@@ -438,47 +438,6 @@ private fun Modifier.phoneMiniDrag(
 }
 
 /**
- * Casting / companion control (GH #33 rule, as the old audio chip): the phone
- * is a remote then, so a local mini must never keep playing next to the cast
- * card. The moment a session connects while the mini is up, stop local
- * playback with the X teardown; the cast card is the one control surface.
- */
-@Composable
-fun PhoneMiniCastGuard(
-    holder: AerioExoPlayerHolder,
-    state: ExoWindowState,
-    session: MiniPlayerSession,
-) {
-    val context = LocalContext.current
-    val entry = remember(context) {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            com.aeriotv.android.feature.main.MainScaffoldEntryPoint::class.java,
-        )
-    }
-    val castState by entry.castSender().state
-        .collectAsStateWithLifecycle()
-    val companionConn by entry.companionRemote().connection
-        .collectAsStateWithLifecycle()
-    val mode by state.mode.collectAsStateWithLifecycle()
-    val playHereWhileCasting by com.aeriotv.android.feature.main.PlayWhereRouter.localWhileCasting
-        .collectAsStateWithLifecycle()
-    // Play Here (cast play-where prompt) keeps the local mini alive.
-    val remoteActive = (castState is com.aeriotv.android.core.cast.AerioCastSender.State.Connected &&
-        !playHereWhileCasting) ||
-        companionConn is com.aeriotv.android.core.cast.companion.CompanionRemoteController.Conn.Connected
-    LaunchedEffect(remoteActive, mode) {
-        if (remoteActive && mode == ExoWindowState.Mode.Mini) {
-            PhoneVodMini.close()
-            session.dismiss()
-            state.hide()
-            holder.stop()
-            com.aeriotv.android.core.playback.AerioMediaPlaybackService.stop(context)
-        }
-    }
-}
-
-/**
  * Tap-to-expand and the stop X, drawn inside the mini frame over the video.
  * Only composed while the phone mini is up and not in system PiP.
  */

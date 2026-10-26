@@ -284,8 +284,8 @@ class AerioExoPlayerHolder @Inject constructor(
         prefScope.launch {
             appPreferences.liveStartBufferMs.collect { cachedLiveStartBuffers = it }
         }
-        // Developer Force HLS: mirrored into ForceHls so the next tune (main
-        // player and Multiview tiles) picks a flip up with no restart.
+        // Developer Force HLS: mirrored into ForceHls so the next tune picks a
+        // flip up with no restart.
         prefScope.launch {
             appPreferences.developerForceHls.collect {
                 ForceHls.enabled = it
@@ -373,7 +373,6 @@ class AerioExoPlayerHolder @Inject constructor(
         learnHlsLiveOffsetFor(channelId, snapshot.worstGapMs)
     }
 
-    /** Shared with Multiview tiles via [ForceHls.learnLiveOffset]. */
     private fun learnHlsLiveOffsetFor(channelId: String, worstGapMs: Long) {
         val key = channelId + FORCE_HLS_OFFSET_KEY_SUFFIX
         val now = System.currentTimeMillis()
@@ -426,11 +425,6 @@ class AerioExoPlayerHolder @Inject constructor(
         prefScope.launch {
             cachedLiveStartBuffers = appPreferences.setLiveStartBufferMs(key, entry.ms, now)
         }
-    }
-    init {
-        // Multiview tiles read the same per-channel target/learned offset.
-        ForceHls.liveOffsetLookup = { id -> hlsLiveOffsetFor(id) }
-        ForceHls.learnLiveOffset = { id, gapMs -> learnHlsLiveOffsetFor(id, gapMs) }
     }
 
     /** Offset target for the in-flight forced HLS tune, stamped by playUrl. */
@@ -2029,8 +2023,8 @@ class AerioExoPlayerHolder @Inject constructor(
         return fresh
     }
 
-    /** Developer Force HLS warm join + trough ramp (shared with Multiview tiles). */
-    private val forceHlsCushion = ForceHlsCushion("main")
+    /** Developer Force HLS warm join + trough ramp. */
+    private val forceHlsCushion = ForceHlsCushion()
 
     private fun resetForceHlsCushion(reason: String) = forceHlsCushion.reset(player, reason)
 

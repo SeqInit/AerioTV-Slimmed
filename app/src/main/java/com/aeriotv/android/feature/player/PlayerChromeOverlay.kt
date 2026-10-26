@@ -166,11 +166,7 @@ fun PlayerChromeOverlay(
     /** "ExoPlayer · TS" for the LEFT edge of the band (Apple "AVPlayer ·
      *  Remux TS" parity); null hides it. Same surfaces as [formatBadge]. */
     pipelineLabel: String? = null,
-    /** Cast Connect (GH #33): phone-only Cast button slot rendered in the top
-     *  bar. Null on TV and on any Cast-disabled build. */
-    castSlot: (@Composable () -> Unit)? = null,
     onClose: () -> Unit,
-    onAddToMultiview: () -> Unit,
     onShowRecord: (ProgramInfoTarget) -> Unit,
     onShowStreamInfo: () -> Unit,
     onShowSwitchStream: () -> Unit,
@@ -337,7 +333,7 @@ fun PlayerChromeOverlay(
 
             if (isTv) {
             // Android TV (tvOS parity): a centered row of action pills at the
-            // bottom -- Record | Rewind | Pause | Forward | Multiview | Options.
+            // bottom -- Record | Rewind | Pause | Forward | Options.
             // With Live Rewind
             // buffering, a read-only timeline rides above the row and the
             // transport joins the SAME focus row as pills (identical focus
@@ -397,8 +393,8 @@ fun PlayerChromeOverlay(
             // tvOS modern player chrome (Logan 2026-09-11): each control is an
             // icon-only frosted circle and only the FOCUSED one names itself,
             // in a fixed-height caption slot under the row so nothing jumps as
-            // focus moves. Order is Record, Rewind, Pause, Forward, Multiview,
-            // Options with Pause anchored on the SCREEN center, so the center
+            // focus moves. Order is Record, Rewind, Pause, Forward, Options
+            // with Pause anchored on the SCREEN center, so the center
             // never shifts when a side control's presence changes (Record is
             // hidden on non-Dispatcharr playlists and during a catch-up
             // replay, Go Live only exists while the buffer is scrubbed back).
@@ -432,7 +428,7 @@ fun PlayerChromeOverlay(
                     )
                 }
                 // Task #148 milestone B: an archive replay can't be recorded
-                // or joined by live tiles (tvOS parity: catch-up gates both).
+                // (tvOS parity: catch-up gates it).
                 if (canRecord && !catchupMode) {
                     PlayerControlCircle(
                         icon = Icons.Filled.FiberManualRecord,
@@ -476,15 +472,6 @@ fun PlayerChromeOverlay(
                         icon = Icons.Filled.PlayArrow,
                         title = "Go Live",
                         onClick = onGoLive,
-                            onInteraction = onInteraction,
-                        )
-                }
-                if (!catchupMode) {
-                    PlayerControlCircle(
-                        icon = Icons.Outlined.GridView,
-                        title = "Multiview",
-                        contentDescription = "Add a multiview tile",
-                        onClick = onAddToMultiview,
                             onInteraction = onInteraction,
                         )
                 }
@@ -715,10 +702,6 @@ fun PlayerChromeOverlay(
                         },
                     )
                 }
-                if (castSlot != null && !isTv) {
-                    Spacer(Modifier.width(8.dp))
-                    castSlot()
-                }
                 if (pipAvailable) {
                     Spacer(Modifier.width(8.dp))
                     CircleIconButton(
@@ -727,12 +710,6 @@ fun PlayerChromeOverlay(
                         onClick = { context.findActivity()?.enterPip16x9() },
                     )
                 }
-                Spacer(Modifier.width(8.dp))
-                CircleIconButton(
-                    icon = Icons.Filled.Add,
-                    contentDescription = "Add to Multiview",
-                    onClick = onAddToMultiview,
-                )
             }
 
             Column(
@@ -992,7 +969,7 @@ private fun CircleIconButton(
 /**
  * tvOS-style action pill: a rounded capsule with a leading icon + label and
  * a clear D-pad focus treatment (brighter fill + white border + grow).
- * Mirrors PlaybackBottomChrome_tvOS's Options / Record / Multiview pills.
+ * Mirrors PlaybackBottomChrome_tvOS's Options / Record pills.
  */
 /**
  * Three-slot control row: [center] is placed at the SCREEN center, [left] ends

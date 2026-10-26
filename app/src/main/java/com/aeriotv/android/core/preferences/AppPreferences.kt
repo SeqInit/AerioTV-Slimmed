@@ -79,8 +79,42 @@ private val Context.appDataStore: DataStore<Preferences> by preferencesDataStore
                     }
                 override suspend fun cleanUp() {}
             },
+            // Slimmed fork: drop values for features this build no longer has
+            // ([RETIRED_PREF_KEYS]). Idempotent: runs only while one is present.
+            object : DataMigration<Preferences> {
+                override suspend fun shouldMigrate(currentData: Preferences): Boolean =
+                    currentData.asMap().keys.any { it.name in RETIRED_PREF_KEYS }
+                override suspend fun migrate(currentData: Preferences): Preferences =
+                    currentData.toMutablePreferences().apply {
+                        currentData.asMap().keys
+                            .filter { it.name in RETIRED_PREF_KEYS }
+                            .forEach { remove(it) }
+                    }
+                override suspend fun cleanUp() {}
+            },
         )
     },
+)
+
+/**
+ * Preference keys of features removed from the slimmed TV build. Their stored
+ * values are dropped on the next DataStore open (see the migration above).
+ */
+private val RETIRED_PREF_KEYS = setOf(
+    // Cast (developer transcode switches)
+    "cast_force_hevc_transcode",
+    "cast_transcode_down_profile",
+    // Multiview
+    "multiview_audio_focus_style",
+    "multiview_tile_padding",
+    "multiview_tile_corners_rounded",
+    "multiview_layout_mode",
+    "multiview_show_logos",
+    "multiview_logo_position",
+    "multiview_logo_size",
+    "multiview_perf_warning_suppressed",
+    "multiview_picker_show_subtitles",
+    "multiview_picker_show_descriptions",
 )
 
 /** Guide timeline zoom bounds. 0.5x = twice the hours on screen, 2x = half. */
@@ -101,7 +135,7 @@ const val SUBTEXT_SCALE_MAX = 1.50f
  * and a suspend setter so screen state can stay reactive via collectAsState.
  *
  * Phase 8a lands the keys with visible UI: selectedTheme + defaultLiveTVView.
- * Remaining keys (App Behaviors / Multiview / Network / Sync / DVR / Developer)
+ * Remaining keys (App Behaviors / Network / Sync / DVR / Developer)
  * follow as their sub-screens land.
  */
 @Singleton
@@ -964,11 +998,6 @@ class AppPreferences @Inject constructor(
         store.edit { it[KEY_DEBUG_LOGGING_ENABLED] = value }
     }
 
-    /**
-     * iOS `castForceHEVCTranscode` parity (DeveloperSettingsView, 2026-09-26):
-     * re-encode every H.264 cast channel on the phone, HEVC when the receiver
-     * presents it, else the H.264 profile below. Per device, never synced.
-     */
     /** Developer: request Dispatcharr HLS output for live channels (test). Per device, never synced. */
     val developerForceHls: Flow<Boolean> = store.data.map { it[KEY_DEVELOPER_FORCE_HLS] ?: false }
     suspend fun setDeveloperForceHls(value: Boolean) {
@@ -981,21 +1010,6 @@ class AppPreferences @Inject constructor(
     val serverHlsHosts: Flow<Set<String>> = store.data.map { it[KEY_SERVER_HLS_HOSTS] ?: emptySet() }
     suspend fun setServerHlsHosts(value: Set<String>) {
         store.edit { it[KEY_SERVER_HLS_HOSTS] = value }
-    }
-
-    val castForceHevcTranscode: Flow<Boolean> = store.data.map { it[KEY_CAST_FORCE_HEVC_TRANSCODE] ?: false }
-    suspend fun setCastForceHevcTranscode(value: Boolean) {
-        store.edit { it[KEY_CAST_FORCE_HEVC_TRANSCODE] = value }
-    }
-
-    /**
-     * iOS `castTranscodeDownProfile` parity: the H.264 transcode shape when
-     * the receiver cannot present the source or HEVC, "720p60" (default) or
-     * "1080p30". Per device, never synced.
-     */
-    val castTranscodeDownProfile: Flow<String> = store.data.map { it[KEY_CAST_TRANSCODE_DOWN_PROFILE] ?: "720p60" }
-    suspend fun setCastTranscodeDownProfile(value: String) {
-        store.edit { it[KEY_CAST_TRANSCODE_DOWN_PROFILE] = value }
     }
 
     /**
@@ -1042,8 +1056,7 @@ class AppPreferences @Inject constructor(
      * LRU list of recently-played channel ids, most-recent first. Mirrors iOS
      * RecentChannelsStore (@AppStorage `recentChannelIDs`). Stored newline-
      * delimited to preserve order (a Preferences string Set would not).
-     * Capped at [RECENT_CHANNELS_CAP]; the AddToMultiview sheet shows the
-     * first few as its "Recent" section. PlayerScreen records on each flip.
+     * Capped at [RECENT_CHANNELS_CAP]. PlayerScreen records on each flip.
      */
     val recentChannelIds: Flow<List<String>> = scopedData.map { prefs ->
         val raw = prefs[KEY_RECENT_CHANNEL_IDS.s()] ?: ""
@@ -1373,106 +1386,6 @@ class AppPreferences @Inject constructor(
 
     suspend fun setEpgCacheEpochFor(playlistId: String, value: Int) {
         store.edit { it[intPreferencesKey("epg_cache_epoch.$playlistId")] = value }
-    }
-
-    // ── Multiview ────────────────────────────────────────────────────────
-
-    /**
-     * iOS `multiviewAudioFocusStyle` parity. One of "centerIcon" (default)
-     * / "grayPersistent" / "themeFading". Controls how the multiview grid
-     * indicates which tile owns audio.
-     */
-    val multiviewAudioFocusStyle: Flow<String> = store.data.map {
-        it[KEY_MULTIVIEW_AUDIO_FOCUS_STYLE] ?: "centerIcon"
-    }
-    suspend fun setMultiviewAudioFocusStyle(value: String) {
-        store.edit { it[KEY_MULTIVIEW_AUDIO_FOCUS_STYLE] = value }
-    }
-
-    /**
-     * iOS `multiviewTilePadding` parity. Adds gaps between tiles. Default ON
-     * (iOS 56fe163ad flipped the default to 8pt gutters); users who set it
-     * explicitly keep their choice.
-     */
-    val multiviewTilePadding: Flow<Boolean> = store.data.map {
-        it[KEY_MULTIVIEW_TILE_PADDING] ?: true
-    }
-    suspend fun setMultiviewTilePadding(value: Boolean) {
-        store.edit { it[KEY_MULTIVIEW_TILE_PADDING] = value }
-    }
-
-    /** iOS `multiviewTileCornersRounded` parity. Rounds tile corners. */
-    val multiviewTileCornersRounded: Flow<Boolean> = store.data.map {
-        it[KEY_MULTIVIEW_TILE_CORNERS_ROUNDED] ?: false
-    }
-    suspend fun setMultiviewTileCornersRounded(value: Boolean) {
-        store.edit { it[KEY_MULTIVIEW_TILE_CORNERS_ROUNDED] = value }
-    }
-
-    /** Discord request: draw each tile's channel logo on the tile. Default off. */
-    val multiviewShowLogos: Flow<Boolean> = store.data.map {
-        it[KEY_MULTIVIEW_SHOW_LOGOS] ?: false
-    }
-    suspend fun setMultiviewShowLogos(value: Boolean) {
-        store.edit { it[KEY_MULTIVIEW_SHOW_LOGOS] = value }
-    }
-
-    /** Logo corner: top_left (default), top_right, bottom_left, bottom_right. */
-    val multiviewLogoPosition: Flow<String> = store.data.map {
-        it[KEY_MULTIVIEW_LOGO_POSITION] ?: "top_left"
-    }
-    suspend fun setMultiviewLogoPosition(value: String) {
-        store.edit { it[KEY_MULTIVIEW_LOGO_POSITION] = value }
-    }
-
-    /** Logo height as a percent of the video picture height, 5 to 25 in steps of 5. Default 10. */
-    val multiviewLogoSize: Flow<Int> = store.data.map {
-        (it[KEY_MULTIVIEW_LOGO_SIZE] ?: 10).coerceIn(5, 25)
-    }
-    suspend fun setMultiviewLogoSize(value: Int) {
-        store.edit { it[KEY_MULTIVIEW_LOGO_SIZE] = value.coerceIn(5, 25) }
-    }
-
-    /**
-     * iOS `multiviewPerfWarningSuppressed` parity (issue #46). Set by the
-     * "Don't Show Again" button on the soft-limit performance warning;
-     * device-local, never reset (no Settings toggle on iOS either).
-     */
-    val multiviewPerfWarningSuppressed: Flow<Boolean> = store.data.map {
-        it[KEY_MULTIVIEW_PERF_WARNING_SUPPRESSED] ?: false
-    }
-    suspend fun setMultiviewPerfWarningSuppressed(value: Boolean) {
-        store.edit { it[KEY_MULTIVIEW_PERF_WARNING_SUPPRESSED] = value }
-    }
-
-    /** Add to Multiview picker "Show Subtitles" pill: each channel row adds
-     *  the airing program's subtitle (Teamarr carries "Team 1 vs Team 2"
-     *  there). Remembered across launches; default off. */
-    val multiviewPickerShowSubtitles: Flow<Boolean> =
-        store.data.map { it[KEY_MULTIVIEW_PICKER_SHOW_SUBTITLES] ?: false }
-    suspend fun setMultiviewPickerShowSubtitles(value: Boolean) {
-        store.edit { it[KEY_MULTIVIEW_PICKER_SHOW_SUBTITLES] = value }
-    }
-
-    /** Add to Multiview picker "Show Descriptions" pill: each channel row adds
-     *  the program description (two lines max). Default off. */
-    val multiviewPickerShowDescriptions: Flow<Boolean> =
-        store.data.map { it[KEY_MULTIVIEW_PICKER_SHOW_DESCRIPTIONS] ?: false }
-    suspend fun setMultiviewPickerShowDescriptions(value: Boolean) {
-        store.edit { it[KEY_MULTIVIEW_PICKER_SHOW_DESCRIPTIONS] = value }
-    }
-
-    /**
-     * iOS `multiviewLayoutMode` parity. One of "auto" (default) / "evenGrid" /
-     * "spotlight" / "heroCorner". Selectable per-session from the tile context
-     * menu; persisted so the choice survives a relaunch. Unknown values fall
-     * back to "auto".
-     */
-    val multiviewLayoutMode: Flow<String> = store.data.map {
-        it[KEY_MULTIVIEW_LAYOUT_MODE] ?: "auto"
-    }
-    suspend fun setMultiviewLayoutMode(value: String) {
-        store.edit { it[KEY_MULTIVIEW_LAYOUT_MODE] = value }
     }
 
     // ── Channel Collections (issue #45) ─────────────────────────────────
@@ -2519,8 +2432,7 @@ class AppPreferences @Inject constructor(
 
     private companion object {
         /** Max entries kept in [recentChannelIds]. Sized for the player's
-         *  Recently Watched overlay (top 25, Logan 2026-07-20); the
-         *  AddToMultiview sheet still shows only its first few. */
+         *  Recently Watched overlay (top 25, Logan 2026-07-20). */
         const val RECENT_CHANNELS_CAP = 25
         val KEY_RECENT_CHANNEL_IDS = stringPreferencesKey("recent_channel_ids")
         /** Guide rebuild: per-playlist identity fingerprint the EPG cache was built for. */
@@ -2569,10 +2481,8 @@ class AppPreferences @Inject constructor(
         val KEY_SKIP_LOADING_SCREEN = booleanPreferencesKey("app_behaviors_skip_loading_screen")
         val KEY_AUTO_ROTATE = booleanPreferencesKey("app_behaviors_auto_rotate")
         val KEY_DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
-        val KEY_CAST_FORCE_HEVC_TRANSCODE = booleanPreferencesKey("cast_force_hevc_transcode")
         val KEY_DEVELOPER_FORCE_HLS = booleanPreferencesKey("developer_force_hls")
         val KEY_SERVER_HLS_HOSTS = androidx.datastore.preferences.core.stringSetPreferencesKey("server_hls_hosts")
-        val KEY_CAST_TRANSCODE_DOWN_PROFILE = stringPreferencesKey("cast_transcode_down_profile")
         val KEY_APPLE_TV_CHANNEL_FLIP = booleanPreferencesKey("app_behaviors_apple_tv_channel_flip")
         val KEY_PLAYER_BRIGHTNESS_GESTURE = booleanPreferencesKey("in_player_gesture_brightness")
         val KEY_PLAYER_VOLUME_GESTURE = booleanPreferencesKey("in_player_gesture_volume")
@@ -2659,17 +2569,6 @@ class AppPreferences @Inject constructor(
         val KEY_STREAM_BUFFER_SIZE = stringPreferencesKey("stream_buffer_size")
         val KEY_EPG_WINDOW_HOURS = intPreferencesKey("epg_window_hours")
         val KEY_EPG_CACHE_EPOCH = intPreferencesKey("epg_cache_epoch")
-        val KEY_MULTIVIEW_AUDIO_FOCUS_STYLE = stringPreferencesKey("multiview_audio_focus_style")
-        val KEY_MULTIVIEW_TILE_PADDING = booleanPreferencesKey("multiview_tile_padding")
-        val KEY_MULTIVIEW_TILE_CORNERS_ROUNDED = booleanPreferencesKey("multiview_tile_corners_rounded")
-        val KEY_MULTIVIEW_LAYOUT_MODE = stringPreferencesKey("multiview_layout_mode")
-        val KEY_MULTIVIEW_SHOW_LOGOS = booleanPreferencesKey("multiview_show_logos")
-        val KEY_MULTIVIEW_LOGO_POSITION = stringPreferencesKey("multiview_logo_position")
-        val KEY_MULTIVIEW_LOGO_SIZE = intPreferencesKey("multiview_logo_size")
-        val KEY_MULTIVIEW_PERF_WARNING_SUPPRESSED =
-            booleanPreferencesKey("multiview_perf_warning_suppressed")
-        val KEY_MULTIVIEW_PICKER_SHOW_SUBTITLES = booleanPreferencesKey("multiview_picker_show_subtitles")
-        val KEY_MULTIVIEW_PICKER_SHOW_DESCRIPTIONS = booleanPreferencesKey("multiview_picker_show_descriptions")
         val KEY_CHANNEL_COLLECTIONS = stringPreferencesKey("channel_collections")
         val KEY_DVR_MAX_LOCAL_STORAGE_MB = intPreferencesKey("dvr_max_local_storage_mb")
         val KEY_DVR_DEFAULT_PRE_ROLL = intPreferencesKey("dvr_default_pre_roll_mins")

@@ -584,16 +584,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setDeveloperForceHls(value) }
     }
 
-    val castForceHevcTranscode: Flow<Boolean> = prefs.castForceHevcTranscode
-    fun setCastForceHevcTranscode(value: Boolean) {
-        viewModelScope.launch { prefs.setCastForceHevcTranscode(value) }
-    }
-
-    val castTranscodeDownProfile: Flow<String> = prefs.castTranscodeDownProfile
-    fun setCastTranscodeDownProfile(value: String) {
-        viewModelScope.launch { prefs.setCastTranscodeDownProfile(value) }
-    }
-
     val autoResumeLastChannel: Flow<Boolean> = prefs.autoResumeLastChannel
     fun setAutoResumeLastChannel(value: Boolean) {
         viewModelScope.launch { prefs.setAutoResumeLastChannel(value) }
@@ -604,7 +594,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setLastWatchedChannelId(value) }
     }
 
-    /** LRU recent channel ids (most-recent first). Powers the AddToMultiview "Recent" section. */
+    /** LRU recent channel ids (most-recent first). Feeds Recently Watched. */
     val recentChannelIds: Flow<List<String>> = prefs.recentChannelIds
     fun recordRecentChannel(channelId: String) {
         viewModelScope.launch { prefs.recordRecentChannel(channelId) }
@@ -689,54 +679,6 @@ class SettingsViewModel @Inject constructor(
     val backgroundRefreshMinute: Flow<Int> = prefs.backgroundRefreshMinute
     fun setBackgroundRefreshTime(hour: Int, minute: Int) {
         viewModelScope.launch { prefs.setBackgroundRefreshTime(hour, minute) }
-    }
-
-    // Multiview (Phase 11c)
-    val multiviewAudioFocusStyle: Flow<String> = prefs.multiviewAudioFocusStyle
-    fun setMultiviewAudioFocusStyle(value: String) {
-        viewModelScope.launch { prefs.setMultiviewAudioFocusStyle(value) }
-    }
-
-    val multiviewTilePadding: Flow<Boolean> = prefs.multiviewTilePadding
-    fun setMultiviewTilePadding(value: Boolean) {
-        viewModelScope.launch { prefs.setMultiviewTilePadding(value) }
-    }
-
-    val multiviewShowLogos: Flow<Boolean> = prefs.multiviewShowLogos
-    fun setMultiviewShowLogos(value: Boolean) {
-        viewModelScope.launch { prefs.setMultiviewShowLogos(value) }
-    }
-    val multiviewLogoPosition: Flow<String> = prefs.multiviewLogoPosition
-    fun setMultiviewLogoPosition(value: String) {
-        viewModelScope.launch { prefs.setMultiviewLogoPosition(value) }
-    }
-    val multiviewLogoSize: Flow<Int> = prefs.multiviewLogoSize
-    fun setMultiviewLogoSize(value: Int) {
-        viewModelScope.launch { prefs.setMultiviewLogoSize(value) }
-    }
-
-    val multiviewTileCornersRounded: Flow<Boolean> = prefs.multiviewTileCornersRounded
-    fun setMultiviewTileCornersRounded(value: Boolean) {
-        viewModelScope.launch { prefs.setMultiviewTileCornersRounded(value) }
-    }
-
-    val multiviewLayoutMode: Flow<String> = prefs.multiviewLayoutMode
-    fun setMultiviewLayoutMode(value: String) {
-        viewModelScope.launch { prefs.setMultiviewLayoutMode(value) }
-    }
-
-    val multiviewPerfWarningSuppressed: Flow<Boolean> = prefs.multiviewPerfWarningSuppressed
-    fun setMultiviewPerfWarningSuppressed(value: Boolean) {
-        viewModelScope.launch { prefs.setMultiviewPerfWarningSuppressed(value) }
-    }
-
-    val multiviewPickerShowSubtitles: Flow<Boolean> = prefs.multiviewPickerShowSubtitles
-    fun setMultiviewPickerShowSubtitles(value: Boolean) {
-        viewModelScope.launch { prefs.setMultiviewPickerShowSubtitles(value) }
-    }
-    val multiviewPickerShowDescriptions: Flow<Boolean> = prefs.multiviewPickerShowDescriptions
-    fun setMultiviewPickerShowDescriptions(value: Boolean) {
-        viewModelScope.launch { prefs.setMultiviewPickerShowDescriptions(value) }
     }
 
     // DVR (Phase 9b-3)

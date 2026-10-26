@@ -105,7 +105,7 @@ import java.util.Date
  *  1. Playlists  - inline list of every saved playlist with tap-to-activate
  *                  (tap the active row again for details, edit, delete) and an
  *                  Add Playlist row. Footer surfaces the matching hints.
- *  2. App Settings - Appearance / App Behaviors / Multiview / Network rows
+ *  2. App Settings - Appearance / App Behaviors / Network rows
  *                  inside a single grouped card.
  *  3. Sync       - current cut routes through to the full SyncSettingsScreen.
  *                  iOS surfaces the toggle inline here; that follow-up lands
@@ -1095,7 +1095,7 @@ enum class SettingsSection(
     ),
     Player(
         title = "Player",
-        subtitle = "Info card, rewind, gestures, multiview",
+        subtitle = "Info card, rewind, gestures",
         icon = Icons.Outlined.PlayCircle,
     ),
     MoviesAndTvShows(

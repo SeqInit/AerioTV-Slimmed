@@ -25,8 +25,6 @@ object ForceHls {
      *  persisted to AppPreferences.serverHlsHosts by AerioExoPlayerHolder. */
     private val serverHlsHosts = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
-    /** Bumped on every learn/forget so Compose readers (Multiview tiles) re-derive. */
-    val serverHlsVersion = androidx.compose.runtime.mutableIntStateOf(0)
 
     /** Called with the full learned set after it changes (persistence hook). */
     @Volatile var onServerHlsChanged: (Set<String>) -> Unit = {}
@@ -47,7 +45,6 @@ object ForceHls {
         val key = hostKey(entryUrl) ?: return
         Log.i(TAG, "[FORCE-HLS] server answers HLS for $key; live tunes use the HLS session path")
         if (serverHlsHosts.add(key)) {
-            serverHlsVersion.intValue++
             onServerHlsChanged(serverHlsHosts.toSet())
         }
     }
@@ -56,7 +53,6 @@ object ForceHls {
         val key = hostKey(url) ?: return
         if (serverHlsHosts.remove(key)) {
             Log.i(TAG, "[FORCE-HLS] $key answers TS again; forgetting server HLS")
-            serverHlsVersion.intValue++
             onServerHlsChanged(serverHlsHosts.toSet())
         }
     }
@@ -91,13 +87,6 @@ object ForceHls {
     /** Default live offset target for a forced HLS tune. */
     const val DEFAULT_TARGET_OFFSET_MS = 12_000
 
-    /** Per-channel target/learned live offset, installed by AerioExoPlayerHolder
-     *  so Multiview tiles use the same value as the main player. */
-    @Volatile var liveOffsetLookup: (String?) -> Int = { DEFAULT_TARGET_OFFSET_MS }
-
-    /** Raises the learned live offset for a channel by a stall's worst feed
-     *  gap (same rule as the main player); installed by AerioExoPlayerHolder. */
-    @Volatile var learnLiveOffset: (String, Long) -> Unit = { _, _ -> }
 
     /** The holder's channel id ("disp:<uuid>") for a Dispatcharr live URL. */
     fun channelKeyFor(url: String): String? {
@@ -288,82 +277,6 @@ class ServerHlsGuard(
 }
 
 /**
- * Developer Force HLS, Multiview: one server session per tile. Media3 reloads
- * a live playlist from the URI it was handed, so a tile given the entry URL
- * would follow the 302 (and mint a new server client) on every reload. The
- * wrapped factory resolves the entry URL ONCE (on the loader thread, which is
- * off the main thread) and rewrites every later request for it to the token
- * playlist. [end] DELETEs the session when the tile goes away.
- */
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class ForceHlsTileSession(
-    private val label: String,
-    private val headers: Map<String, String>,
-) {
-    private val lock = Any()
-    private var entry: String? = null
-    private var session: ForceHls.Session? = null
-
-    fun wrap(upstream: androidx.media3.datasource.DataSource.Factory): androidx.media3.datasource.DataSource.Factory =
-        androidx.media3.datasource.ResolvingDataSource.Factory(upstream) { spec ->
-            val u = spec.uri.toString()
-            if (!ForceHls.isEntryUrl(u)) return@Factory spec
-            val s = sessionFor(u) ?: return@Factory spec
-            spec.withUri(android.net.Uri.parse(s.playlistUrl))
-        }
-
-    private fun sessionFor(u: String): ForceHls.Session? {
-        var stale: ForceHls.Session? = null
-        val resolved = synchronized(lock) {
-            if (entry == u && session != null) return session
-            if (entry != u) {
-                stale = session
-                session = null
-            }
-            val s = ForceHls.resolveSession(u, headers)
-            entry = u
-            session = s
-            if (s != null) {
-                Log.i(ForceHls.TAG, "[FORCE-HLS] tile $label session token=${s.token?.take(8) ?: "none"}")
-            } else {
-                Log.w(ForceHls.TAG, "[FORCE-HLS] tile $label could not resolve the entry redirect; using the entry URL")
-            }
-            s
-        }
-        stale?.let { old ->
-            Log.i(ForceHls.TAG, "[FORCE-HLS] tile $label channel changed; ending old session")
-            ForceHls.endSession(old, headers)
-        }
-        return resolved
-    }
-
-    /** Adopts the session a redirected plain open already minted for [entryUrl]
-     *  (the HLS-rewritten entry), ending any previous session off the main thread. */
-    fun adopt(entryUrl: String, s: ForceHls.Session) {
-        val stale = synchronized(lock) {
-            val old = session
-            entry = entryUrl
-            session = s
-            old?.takeIf { it.playlistUrl != s.playlistUrl }
-        }
-        Log.i(ForceHls.TAG, "[FORCE-HLS] tile $label adopted the redirect's session token=${s.token?.take(8) ?: "none"}")
-        stale?.let { old -> Thread({ ForceHls.endSession(old, headers) }, "ForceHlsTileEnd").start() }
-    }
-
-    /** Drops the cached session (DELETE off the main thread); the next load re-resolves. */
-    fun end(reason: String) {
-        val s = synchronized(lock) {
-            val cur = session
-            session = null
-            entry = null
-            cur
-        } ?: return
-        Log.i(ForceHls.TAG, "[FORCE-HLS] tile $label ending session ($reason)")
-        Thread({ ForceHls.endSession(s, headers) }, "ForceHlsTileEnd").start()
-    }
-}
-
-/**
  * Developer Force HLS: warm join + trough-based slow ramp for one player.
  * Dispatcharr's playlist has no PROGRAM-DATE-TIME, so Media3 never steers to
  * the live offset target. At the first READY: if the window already holds
@@ -373,7 +286,7 @@ class ForceHlsTileSession(
  * second, [reset] on every prime and stop.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class ForceHlsCushion(private val label: String) {
+class ForceHlsCushion {
     /** 0 = idle, 1 = ramping, 2 = holding (watching for a slip). */
     @Volatile private var state = 0
     private var checkAtMs = 0L
@@ -381,12 +294,11 @@ class ForceHlsCushion(private val label: String) {
     private var rearms = 0
     private val samples = ArrayDeque<Pair<Long, Long>>()
 
-    private fun tag(): String = if (label == "main") "" else "tile $label "
 
     fun reset(p: androidx.media3.common.Player?, reason: String) {
         if (state == 1 && p != null && p.playbackParameters.speed != 1.0f) {
             p.playbackParameters = androidx.media3.common.PlaybackParameters(1.0f, 1.0f)
-            Log.i(ForceHls.TAG, "[FORCE-HLS] ${tag()}cushion reset on $reason, speed 1.0")
+            Log.i(ForceHls.TAG, "[FORCE-HLS] cushion reset on $reason, speed 1.0")
         }
         state = 0
         checkAtMs = 0L
@@ -414,7 +326,7 @@ class ForceHlsCushion(private val label: String) {
         if (!w.isLive() || w.durationMs == androidx.media3.common.C.TIME_UNSET) return
         val have = (w.durationMs - p.currentPosition).coerceAtLeast(0L)
         if (state == 0 && samples.isEmpty() && w.durationMs >= target + WARM_JOIN_MARGIN_MS) {
-            Log.i(ForceHls.TAG, "[FORCE-HLS] ${tag()}warm join seek to edge-$target ms (window ${w.durationMs} ms)")
+            Log.i(ForceHls.TAG, "[FORCE-HLS] warm join seek to edge-$target ms (window ${w.durationMs} ms)")
             p.seekTo(p.currentMediaItemIndex, w.durationMs - target)
             state = 2
             checkAtMs = now + WINDOW_MS
@@ -430,14 +342,14 @@ class ForceHlsCushion(private val label: String) {
             0 -> {
                 if (minHave >= target) {
                     if (!fullWindow) return
-                    Log.i(ForceHls.TAG, "[FORCE-HLS] ${tag()}cushion reached min $minHave ms (now $have ms), speed 1.0")
+                    Log.i(ForceHls.TAG, "[FORCE-HLS] cushion reached min $minHave ms (now $have ms), speed 1.0")
                     state = 2
                     return
                 }
                 ramp(p, now)
                 Log.i(
                     ForceHls.TAG,
-                    "[FORCE-HLS] ${tag()}building cushion at ${SPEED}x (have min $minHave ms, now $have ms, target $target ms)",
+                    "[FORCE-HLS] building cushion at ${SPEED}x (have min $minHave ms, now $have ms, target $target ms)",
                 )
             }
             1 -> {
@@ -447,7 +359,7 @@ class ForceHlsCushion(private val label: String) {
                     p.playbackParameters = androidx.media3.common.PlaybackParameters(1.0f, 1.0f)
                     Log.i(
                         ForceHls.TAG,
-                        "[FORCE-HLS] ${tag()}cushion reached min $minHave ms (now $have ms) after " +
+                        "[FORCE-HLS] cushion reached min $minHave ms (now $have ms) after " +
                             "${now - startedAtMs} ms, speed 1.0",
                     )
                     state = 2
@@ -456,7 +368,7 @@ class ForceHlsCushion(private val label: String) {
             2 -> {
                 if (!fullWindow || minHave >= target - SLIP_MS || rearms >= MAX_REARMS) return
                 rearms++
-                Log.i(ForceHls.TAG, "[FORCE-HLS] ${tag()}cushion slipped to min $minHave ms, ramping again ($rearms/$MAX_REARMS)")
+                Log.i(ForceHls.TAG, "[FORCE-HLS] cushion slipped to min $minHave ms, ramping again ($rearms/$MAX_REARMS)")
                 ramp(p, now)
             }
         }

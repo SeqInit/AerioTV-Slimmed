@@ -26,7 +26,6 @@ import com.aeriotv.android.core.network.DispatcharrWarmupCoordinator
 import com.aeriotv.android.core.security.SafeUrlInterceptor
 import okhttp3.OkHttpClient
 import com.aeriotv.android.core.preferences.AppPreferences
-import com.aeriotv.android.feature.multiview.MultiviewStore
 import com.aeriotv.android.feature.reminders.ReminderBannerBus
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -59,12 +58,8 @@ class AerioTVApplication : Application(), Configuration.Provider, SingletonImage
     @Inject lateinit var appPreferences: AppPreferences
     @Inject lateinit var reminderBannerBus: ReminderBannerBus
     @Inject lateinit var resourceTelemetry: ResourceTelemetry
-    @Inject lateinit var multiviewStore: MultiviewStore
     @Inject lateinit var memoryPressureBus: MemoryPressureBus
     @Inject lateinit var activeCredentials: ActivePlaylistCredentials
-    @Inject lateinit var castReceiver: com.aeriotv.android.core.cast.AerioCastReceiverController
-    @Inject lateinit var castNotificationController: com.aeriotv.android.core.cast.CastNotificationController
-    @Inject lateinit var companionHost: com.aeriotv.android.core.cast.companion.CompanionHostController
     @Inject lateinit var playlistRepository: PlaylistRepository
     @Inject lateinit var playlistDao: PlaylistDao
     @Inject lateinit var profileManager: com.aeriotv.android.core.profiles.ProfileManager
@@ -193,19 +188,6 @@ class AerioTVApplication : Application(), Configuration.Provider, SingletonImage
         // Track foreground state so reminders that fire while the app is open
         // surface as an in-app banner instead of a system notification.
         reminderBannerBus.bind()
-        // Cast Connect receiver (GH #33). No-op on phones/tablets and on any
-        // device without Google Play services; only an Android TV can be
-        // launched as a receiver. Wired here so the receiver is ready the moment
-        // a sender casts, before MainActivity forwards the LAUNCH intent.
-        castReceiver.bootstrap(this)
-        // GH #33: standalone "Casting to <TV>" notification driven by cast state,
-        // so it reappears after a force-close/reopen while the session resumes
-        // (the media FGS notification can't cover that case).
-        castNotificationController.start()
-        // GH #33 companion remote (second-screen): on Android TV, advertise over
-        // mDNS/NSD + run the pairing WebSocket server so a phone can drive this
-        // TV's native player. No-op on phones (FEATURE_LEANBACK-gated internally).
-        companionHost.start()
         // Live Rewind launch sweep (user clarification 2026-07-11: buffers
         // die an hour after the SESSION ends, "which may end up meaning it
         // should be deleted the NEXT time the app is launched").
@@ -342,18 +324,11 @@ class AerioTVApplication : Application(), Configuration.Provider, SingletonImage
      * TRIM_MEMORY_RUNNING_CRITICAL / TRIM_MEMORY_COMPLETE is logged
      * immediately before the system kills us (best diagnostic signal we have
      * for OOM-class TV crashes). Future phases can react here to shed memory
-     * proactively - drop the in-memory EPG cache, close multiview tiles past
-     * the soft limit, etc.
+     * proactively - drop the in-memory EPG cache, etc.
      */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         resourceTelemetry.onTrimMemory(level)
-        // Audit task #35 OOM guard: shed inactive multiview tiles when the
-        // system signals critical pressure. Multiview is the single largest
-        // resource consumer (up to 9 concurrent mpv handles + SurfaceViews +
-        // audio tracks), so dropping non-focused tiles is the most effective
-        // way to keep the process alive. No-op for softer trim levels.
-        multiviewStore.onMemoryPressure(level)
         // Audit task #58 (Phase 144): fan-out to any nav-scoped ViewModel
         // that can drop large in-memory state (PlaylistViewModel's
         // epgByChannel map; future: parsed playlists, large bitmap arenas).

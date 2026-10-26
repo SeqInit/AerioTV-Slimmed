@@ -27,25 +27,9 @@ sealed interface DeepLinkTarget {
      */
     data class GuideProgram(val channelId: String, val startMillis: Long) : DeepLinkTarget
 
-    /** GH #33 companion remote: AUTOPLAY a movie/episode on this TV -- straight
-     *  into the VOD player (unlike [Vod], which lands on the detail screen). */
+    /** Watch Next (audit #47): AUTOPLAY a movie/episode -- straight into the
+     *  VOD player (unlike [Vod], which lands on the detail screen). */
     data class VodPlay(val videoId: String, val isEpisode: Boolean) : DeepLinkTarget
-
-    /** GH #33 companion remote: play a DVR recording / catch-up by its resolved
-     *  playback URL on this TV. */
-    data class RecordingPlay(val playbackUrl: String, val title: String) : DeepLinkTarget
-
-    /**
-     * Companion remote X (Logan 2026-09-12), Apple parity with
-     * PlayerSession.shared.exit(): close whatever player is on top of the tab
-     * shell so the TV lands back on Live TV instead of sitting on a stopped
-     * player. The host already stopped playback before emitting this.
-     */
-    data object ExitPlayer : DeepLinkTarget
-
-    /** Cast Connect multiview.open: the store is already staged; pop any
-     *  player and open Multiview, as TV Play does. */
-    data object OpenMultiview : DeepLinkTarget
 
     /**
      * Open the Settings tab directly on one page, for automated screenshots

@@ -28,7 +28,6 @@ fun radioMenuAction(
         context.applicationContext,
         MainScaffoldEntryPoint::class.java,
     )
-    if (entry.castSender().state.value is com.aeriotv.android.core.cast.AerioCastSender.State.Connected) return null
     val playingHere = RadioMode.state.value?.channel?.id == channel.id
     if (playingHere) {
         return TvMenuAction("Exit Radio Mode", Icons.Filled.Radio) { RadioMode.stop(context, "menu Exit") }
@@ -73,12 +72,11 @@ object RadioSelect {
      * start Radio Mode through the same entry as the long-press Radio Mode
      * item and return true. False (today's behavior) for an unflagged
      * channel, a Watch, while Radio Mode is already on (the pick switches the
-     * audio), while a Multiview runs, or while casting.
+     * audio).
      */
     fun maybeOpen(context: Context, channel: M3UChannel, subtitle: String, beforeStart: () -> Unit = {}): Boolean {
         val declared = com.aeriotv.android.core.playback.DeclaredRadioChannels.isFlagged(channel.id)
         if (!(declared || byDefault) || bypass || RadioMode.isActive) return false
-        if (com.aeriotv.android.feature.multiview.MultiviewBackground.state.value != null) return false
         val action = radioMenuAction(context, channel, subtitle, beforeStart) ?: return false
         android.util.Log.i(TAG, "[RADIO] ${if (declared) "declared radio channel" else "Radio Mode by Default"} pick; opening Radio Mode ch=${channel.name}")
         action.onClick()

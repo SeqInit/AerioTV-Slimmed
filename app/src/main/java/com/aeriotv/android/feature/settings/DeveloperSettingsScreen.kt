@@ -117,8 +117,6 @@ fun DeveloperSettingsScreen(
         entry.debugLogger()
     }
     val loggingEnabled by settingsVm.debugLoggingEnabled.collectAsStateWithLifecycle(initialValue = false)
-    val castForceHevc by settingsVm.castForceHevcTranscode.collectAsStateWithLifecycle(initialValue = false)
-    val castDownProfile by settingsVm.castTranscodeDownProfile.collectAsStateWithLifecycle(initialValue = "720p60")
     val forceHls by settingsVm.developerForceHls.collectAsStateWithLifecycle(initialValue = false)
 
     val isTv = rememberIsTvDevice()
@@ -176,20 +174,11 @@ fun DeveloperSettingsScreen(
                 ForceHlsSection(checked = forceHls, onCheckedChange = settingsVm::setDeveloperForceHls)
             }
             // Section order follows Apple per platform. Phone: Logging, What's
-            // Captured, Cast, Log File. TV: Logging, Log File, What's Captured,
-            // and no Cast section at all (casting is a phone-sender feature).
+            // Captured, Log File. TV: Logging, Log File, What's Captured.
             // Apple's Playback Engine section sits after What's Captured on
             // iOS and after Logging on tvOS; Android has no engine choice yet.
             if (!isTv) {
                 item("captured") { WhatsCapturedSection() }
-                item("cast") {
-                    CastTestSection(
-                        forceTranscode = castForceHevc,
-                        onForceTranscodeChange = settingsVm::setCastForceHevcTranscode,
-                        downProfile = castDownProfile,
-                        onDownProfileChange = settingsVm::setCastTranscodeDownProfile,
-                    )
-                }
             }
             // Apple shows the file rows as soon as logging is on, not only once
             // the first write lands, so the user sees the rows the moment they
@@ -335,41 +324,6 @@ private fun ForceHlsSection(checked: Boolean, onCheckedChange: (Boolean) -> Unit
             subtitle = "Request HLS output from Dispatcharr for every live channel instead of the TS stream. For testing.",
             checked = checked,
             onCheckedChange = onCheckedChange,
-        )
-    }
-}
-
-/**
- * Cast video transcode test switches (iOS DeveloperSettingsView parity,
- * 2026-09-26): re-encode any H.264 source on the phone, HEVC when the
- * receiver presents it, else the H.264 profile picked below (720p at the
- * source rate, or the source size at half rate).
- */
-@Composable
-private fun CastTestSection(
-    forceTranscode: Boolean,
-    onForceTranscodeChange: (Boolean) -> Unit,
-    downProfile: String,
-    onDownProfileChange: (String) -> Unit,
-) {
-    SettingsSection(header = "Cast") {
-        SettingsToggleRow(
-            title = "Transcode Video to HEVC (Test)",
-            subtitle = "Re-encode every H.264 channel; H.264 profile below when the receiver has no HEVC",
-            checked = forceTranscode,
-            onCheckedChange = onForceTranscodeChange,
-        )
-        // Phone only (the section is hidden on TV), where the picker pushes
-        // its choices from a row inside this card.
-        SettingsPickerRow(
-            title = "H.264 Transcode Profile",
-            subtitle = "720p60 keeps motion; 1080p30 keeps resolution",
-            options = listOf(
-                SettingsPickerOption("720p60", "720p60"),
-                SettingsPickerOption("1080p30", "1080p30"),
-            ),
-            selected = if (downProfile == "1080p30") "1080p30" else "720p60",
-            onSelect = onDownProfileChange,
         )
     }
 }

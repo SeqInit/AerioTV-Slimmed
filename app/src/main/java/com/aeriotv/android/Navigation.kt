@@ -46,7 +46,6 @@ import com.aeriotv.android.feature.main.MainScaffoldEntryPoint
 import com.aeriotv.android.feature.miniplayer.MiniPlayerSession
 import com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel
 import com.aeriotv.android.feature.miniplayer.TvMiniPlayerOverlay
-import com.aeriotv.android.feature.multiview.MultiviewScreen
 import com.aeriotv.android.feature.onboarding.ChooseSourceTypeScreen
 import com.aeriotv.android.feature.onboarding.ConfigureSourceScreen
 import com.aeriotv.android.feature.onboarding.SettingUpScreen
@@ -79,7 +78,6 @@ import kotlinx.coroutines.launch
 @InstallIn(SingletonComponent::class)
 interface NavEntryPoint {
     fun appPreferences(): AppPreferences
-    fun castReceiver(): com.aeriotv.android.core.cast.AerioCastReceiverController
     fun profileManager(): com.aeriotv.android.core.profiles.ProfileManager
 }
 
@@ -101,7 +99,6 @@ object Routes {
     const val MOVIE_DETAIL = "movie_detail/{movieUuid}"
     const val SERIES_DETAIL = "series_detail/{seriesId}"
     const val VOD_EPISODE_PLAYER = "vod_episode_player/{episodeUuid}?fromStart={fromStart}"
-    const val MULTIVIEW = "multiview"
     // fromPlayer marks a search opened from the fullscreen player (Remote
     // Control hold-Down): its Back then resumes the player instead of
     // landing on the tabs. Plain navigate(SEARCH) keeps the default false.
@@ -187,7 +184,7 @@ internal fun recordingProgressId(playbackUrl: String, recId: Int): String {
 /**
  * Silence any LIVE session (persistent exo window + mini player + media service)
  * before a VOD/recording player mounts. Extracted from the RECORDING_PLAYER route
- * so the two VOD routes get the same teardown -- required once companion VodPlay
+ * so the two VOD routes get the same teardown -- an aeriotv://vodplay deep link
  * can navigate player/... -> vod_player/... directly with live still running
  * (adversarial review 2026-07-15).
  */
@@ -220,81 +217,14 @@ fun AerioTVNavHost(
 ) {
     val navController = rememberNavController()
 
-    // GH #33 companion VOD/DVR: while this phone is connected to an AerioTV TV,
-    // the VOD/recording PLAY actions below send the item to the TV instead of
-    // playing locally (live channels already do this inside PlayerScreen's
-    // companion mode). Hoisted here so every route's play lambda can share it.
     val navHostContext = androidx.compose.ui.platform.LocalContext.current
-    val companionRemoteNav = remember {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            navHostContext.applicationContext,
-            com.aeriotv.android.feature.player.PlayerScreenEntryPoint::class.java,
-        ).companionRemote()
-    }
-    val companionConnNav by companionRemoteNav.connection.collectAsStateWithLifecycle()
-    /** Non-null TV name while companion-connected; null otherwise. */
-    val companionTvName: String? =
-        (companionConnNav as? com.aeriotv.android.core.cast.companion.CompanionRemoteController.Conn.Connected)
-            ?.name
-    // Cast play-where prompt (PlayWhereRouter) for on-demand content:
-    // catch-up, movies, episodes and recordings. The Google Cast sender has
-    // no load path for these (AerioCastSender only casts LIVE channels:
-    // tuneLiveChannel feeds the HLS proxy or the Android TV app's channel
-    // tune, and the receiver's on-demand kind is only ever produced by the
-    // Android TV app itself), so the receiver button is hidden and the
-    // prompt offers Play Here or Cancel. No prompt without a session.
-    val playWhereEntry = remember {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            navHostContext.applicationContext,
-            com.aeriotv.android.feature.main.MainScaffoldEntryPoint::class.java,
-        )
-    }
-    val playWhereSender = remember { playWhereEntry.castSender() }
-    val playWhereScope = androidx.compose.runtime.rememberCoroutineScope()
-    com.aeriotv.android.feature.main.PlayWhereDialogHost(playWhereSender)
-    fun playOnDemandWhere(title: String, playHere: () -> Unit) {
-        com.aeriotv.android.feature.main.PlayWhereRouter.route(
-            sender = playWhereSender,
-            title = title.ifBlank { "Play" },
-            playHere = playHere,
-            playOnReceiver = null,
-        )
-    }
-    /** Same, for a movie or episode known only by its video id: the title
-     *  comes from the catalog, else from its watch-progress row. */
-    fun playVodWhere(
-        videoId: String,
-        onDemand: com.aeriotv.android.feature.ondemand.OnDemandViewModel?,
-        playHere: () -> Unit,
-    ) {
-        if (playWhereSender.state.value !is com.aeriotv.android.core.cast.AerioCastSender.State.Connected) {
-            playHere()
-            return
-        }
-        playWhereScope.launch {
-            val movie = onDemand?.movieByUuid(videoId)
-            val title = movie?.title?.takeIf { it.isNotBlank() }
-                ?: movie?.name?.takeIf { it.isNotBlank() }
-                ?: runCatching { playWhereEntry.watchProgressDao().getOnce(videoId)?.title }
-                    .getOrNull().orEmpty()
-            playOnDemandWhere(title, playHere)
-        }
-    }
-    fun toastPlayingOnTv() {
-        android.widget.Toast.makeText(
-            navHostContext,
-            "Playing on ${companionTvName ?: "TV"}",
-            android.widget.Toast.LENGTH_SHORT,
-        ).show()
-    }
 
-    // Audit task #47 + GH #33: resolve any pending aeriotv:// / cast / companion
-    // deep link once channels are ready. HOISTED to NavHost scope (2026-07-15
-    // Streamer device test): this consumer used to live inside composable(MAIN),
-    // which is NOT composed while the player / VOD routes are on top -- so a
-    // companion or cast channel flip arriving while the TV sat on the live
-    // player QUEUED in deepLinkTarget until the user pressed Back (phone flipped
-    // ESPN2/ESPNU, TV stayed put). Here it runs no matter which screen is up.
+    // Audit task #47: resolve any pending aeriotv:// deep link once channels
+    // are ready. HOISTED to NavHost scope (2026-07-15 Streamer device test):
+    // this consumer used to live inside composable(MAIN), which is NOT
+    // composed while the player / VOD routes are on top -- so a channel link
+    // arriving while the TV sat on the live player QUEUED in deepLinkTarget
+    // until the user pressed Back. Here it runs no matter which screen is up.
     // We still wait for the playlist graph + loaded channels before acting.
     val dlCurrentEntry by navController.currentBackStackEntryAsState()
     // Leaving the tabs for a fullscreen player cancels any search a tab left
@@ -329,11 +259,6 @@ fun AerioTVNavHost(
             }
         }
     }
-    val dlCastReceiver = remember {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
-            navHostContext.applicationContext, NavEntryPoint::class.java,
-        ).castReceiver()
-    }
     if (dlGraphEntry != null) {
         val dlVm: PlaylistViewModel = hiltViewModel(dlGraphEntry)
         val dlState by dlVm.state.collectAsStateWithLifecycle()
@@ -346,7 +271,7 @@ fun AerioTVNavHost(
                     }
                     if (exists) {
                         // If this TV is already on the LIVE player, re-tune in
-                        // place (PlayerScreen observes castChannelRequest); a
+                        // place (PlayerScreen observes LiveChannelRequest); a
                         // catch-up replay shares the player/ route but its prime
                         // effect early-returns, so those navigate a fresh live
                         // player instead. First open (on the guide) navigates.
@@ -354,13 +279,8 @@ fun AerioTVNavHost(
                             ?.route?.startsWith("player/") == true
                         val onCatchup = navController.currentBackStackEntry
                             ?.arguments?.getString("csUrl").orEmpty().isNotBlank()
-                        val controllingTv = companionRemoteNav.connection.value is
-                            com.aeriotv.android.core.cast.companion.CompanionRemoteController.Conn.Connected
                         if (onPlayer && !onCatchup) {
-                            // While controlling a TV the player IS the remote
-                            // screen; a notification tap just brings it forward.
-                            // requestCastChannel would start LOCAL playback.
-                            if (!controllingTv) dlCastReceiver.requestCastChannel(target.channelId)
+                            com.aeriotv.android.feature.player.LiveChannelRequest.request(target.channelId)
                         } else {
                             navController.navigate(Routes.player(target.channelId))
                         }
@@ -373,24 +293,12 @@ fun AerioTVNavHost(
                     navController.navigate(Routes.movieDetail(target.movieUuid))
                     onDeepLinkConsumed()
                 }
-                // GH #33 companion remote: AUTOPLAY targets -- straight into
-                // the player (the VOD players resolve by uuid themselves).
+                // Watch Next (audit #47): AUTOPLAY -- straight into the
+                // player (the VOD players resolve by uuid themselves).
                 is DeepLinkTarget.VodPlay -> {
                     navController.navigate(
                         if (target.isEpisode) Routes.vodEpisodePlayer(target.videoId)
                         else Routes.vodPlayer(target.videoId),
-                    ) { launchSingleTop = true }
-                    onDeepLinkConsumed()
-                }
-                is DeepLinkTarget.RecordingPlay -> {
-                    // Non-blank title: an empty {title} path segment makes
-                    // Routes.recordingPlayer build "recording_player/<url>//"
-                    // which throws in navigate() (review 2026-07-15).
-                    navController.navigate(
-                        Routes.recordingPlayer(
-                            target.playbackUrl,
-                            target.title.ifBlank { "Recording" },
-                        ),
                     ) { launchSingleTop = true }
                     onDeepLinkConsumed()
                 }
@@ -403,43 +311,6 @@ fun AerioTVNavHost(
                         runCatching { navController.popBackStack(Routes.MAIN, false) }
                     }
                     dlVm.requestSettingsPage(target.page)
-                    onDeepLinkConsumed()
-                }
-                is DeepLinkTarget.OpenMultiview -> {
-                    // Same end state as TV Play on the staging banner, with any
-                    // live player popped first (the receiver stopped it).
-                    if (navController.currentDestination?.route != Routes.MAIN) {
-                        runCatching { navController.popBackStack(Routes.MAIN, false) }
-                    }
-                    navController.navigate(Routes.MULTIVIEW) { launchSingleTop = true }
-                    onDeepLinkConsumed()
-                }
-                is DeepLinkTarget.ExitPlayer -> {
-                    // Companion X: pop the live / VOD / recording player (and
-                    // any detail pushed under it) so the tab shell is on top
-                    // again, AND put that shell on Live TV.
-                    //
-                    // Popping alone was not enough (Logan 2026-09-12, Streamer:
-                    // "X did not return the TV to Live TV guide on the first
-                    // attempt. It worked correctly on the 2nd attempt"). MAIN
-                    // keeps its own selected tab, so an X pressed while the
-                    // shell sat on Movies / TV Shows came back to that page:
-                    // gtvlogs/session7.txt has "companion stop: playback
-                    // stopped, exiting to Live TV" at 14:25:23.138 followed at
-                    // 14:25:24.016 by "[PROGRESS] target series=277738", the
-                    // media page hero recomputing. The second attempt "worked"
-                    // only because Live TV was the selected tab by then.
-                    //
-                    // Request the tab BEFORE popping so the shell is already on
-                    // Live TV when it becomes visible, rather than flashing the
-                    // page the user left.
-                    dlVm.requestLiveTvTab()
-                    // navController's OWN current destination, not the
-                    // composition snapshot dlCurrentEntry, which can still hold
-                    // the pre-pop entry on the frame this effect runs.
-                    if (navController.currentDestination?.route != Routes.MAIN) {
-                        runCatching { navController.popBackStack(Routes.MAIN, false) }
-                    }
                     onDeepLinkConsumed()
                 }
                 is DeepLinkTarget.GuideProgram -> {
@@ -488,7 +359,7 @@ fun AerioTVNavHost(
 
                 // Clean-end session check (StreamEndVerifier), installed once
                 // for the whole app and never cleared: the player, the mini
-                // player, multiview tiles and the cast ingest all consult it
+                // player and the mini player both consult it
                 // after a live stream ends cleanly, and none of them has a
                 // Dispatcharr client of its own. The graph-scoped view model
                 // outlives every one of those surfaces; if it ever does not,
@@ -1020,16 +891,11 @@ fun AerioTVNavHost(
                         com.aeriotv.android.feature.player.PlayerScreenEntryPoint::class.java,
                     )
                 }
-                val castSenderNav = remember { playerEntryNav.castSender() }
-                val castStateNav by castSenderNav.state.collectAsStateWithLifecycle()
                 // Task #226: direct-to-mini tune needs the app-scoped player
                 // singletons + the mini session right here at the tap site.
                 val exoHolderNav = remember { playerEntryNav.exoPlayerHolder() }
                 val exoWindowNav = remember { playerEntryNav.exoWindowState() }
                 val miniVmNav: MiniPlayerViewModel = hiltViewModel()
-                // Catalog lookup for the play-where prompt's movie title.
-                val onDemandWhereVm: com.aeriotv.android.feature.ondemand.OnDemandViewModel =
-                    hiltViewModel(parent)
 
                 LaunchedEffect(state.phase) {
                     // Skipped onboarding stays in the (empty) app; see
@@ -1044,8 +910,8 @@ fun AerioTVNavHost(
                 // Deep-link consumption moved to AerioTVNavHost scope (see the
                 // hoisted block above MainScaffold's NavHost): inside this MAIN
                 // composable it was NOT running while the player / VOD routes
-                // were on top, so companion/cast channel flips queued until the
-                // user pressed Back (Streamer device test 2026-07-15).
+                // were on top, so channel links queued until the user pressed
+                // Back (Streamer device test 2026-07-15).
 
                 // Task #148 milestone B: routing decision for catch-up
                 // (TV = unified live player, phone = recording player).
@@ -1067,9 +933,7 @@ fun AerioTVNavHost(
                     // "bootstrap" lines per launch, minutes of EpgWork CPU).
                     androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner provides parent,
                 ) {
-                // One channel play path. forceLocal=false is the original
-                // behavior (companion, then cast, then local); true is
-                // PlayWhereRouter's Play Here.
+                // One channel play path.
                 com.aeriotv.android.feature.player.RadioMode.headersProvider =
                     { PlaybackHeaders.forPlaylist(state.playlist) }
                 com.aeriotv.android.feature.player.RadioMode.neighborProvider = { cur, delta ->
@@ -1077,12 +941,10 @@ fun AerioTVNavHost(
                     val i = list.indexOfFirst { it.id == cur.id }
                     if (i < 0 || list.isEmpty()) null else list[(i + delta).mod(list.size)]
                 }
-                val channelPlay: (M3UChannel, Boolean) -> Unit = channelPlay@{ channel, forceLocal ->
+                val channelPlay: (M3UChannel) -> Unit = channelPlay@{ channel ->
                     // Radio Mode (Android#127): a channel pick switches the
                     // audio and never opens the video player.
-                    if (com.aeriotv.android.feature.player.RadioMode.isActive && channel.url.isNotBlank() &&
-                        castSenderNav.state.value !is com.aeriotv.android.core.cast.AerioCastSender.State.Connected
-                    ) {
+                    if (com.aeriotv.android.feature.player.RadioMode.isActive && channel.url.isNotBlank()) {
                         com.aeriotv.android.feature.player.RadioMode.switchTo(
                             navHostContext,
                             channel,
@@ -1091,43 +953,6 @@ fun AerioTVNavHost(
                         )
                         tuneSettingsVm.setLastWatchedChannelId(channel.id)
                         tuneSettingsVm.recordRecentChannel(channel.id)
-                        return@channelPlay
-                    }
-                    // Cast card UX rule 5 (Logan 2026-09-12): while a session
-                    // is active a channel tap CASTS it and stays on the page.
-                    // No player, no controls screen; the cast card above the
-                    // tab bar is the one control surface (tap it for the
-                    // remote sheet).
-                    // forceLocal = Play Here from PlayWhereRouter: play on
-                    // this device exactly as if no session existed.
-                    val castDevice = if (forceLocal) null else (castSenderNav.state.value as? com.aeriotv.android.core.cast.AerioCastSender.State.Connected)
-                        ?.let { it.deviceName?.takeIf { n -> n.isNotBlank() } ?: "TV" }
-                    // Casting rework P1: the URL now feeds the phone-local
-                    // HLS proxy's ingest, which must present the same
-                    // Dispatcharr identity headers the player would (same
-                    // header recipe as the mini-tune block below).
-                    val castTuneHeaders = PlaybackHeaders.forPlaylist(state.playlist)
-                    // Same rule for the companion transport (this phone
-                    // driving an AerioTV TV over the LAN).
-                    if (!forceLocal && companionTvName != null) {
-                        companionRemoteNav.setRemoteChannel(channel.id, channel.name)
-                        toastPlayingOnTv()
-                        return@channelPlay
-                    }
-                    if (castDevice != null &&
-                        castSenderNav.tuneLiveChannel(
-                            channelId = channel.id,
-                            title = channel.name,
-                            artUri = channel.tvgLogo.takeIf { it.isNotBlank() },
-                            localUrl = channel.url,
-                            headers = castTuneHeaders,
-                        )
-                    ) {
-                        android.widget.Toast.makeText(
-                            navHostContext,
-                            "Playing on $castDevice",
-                            android.widget.Toast.LENGTH_SHORT,
-                        ).show()
                         return@channelPlay
                     }
                     // Task #226 (sidebar flow, Logan 2026-08-06): with
@@ -1140,8 +965,7 @@ fun AerioTVNavHost(
                     // persistent window need no screen at all: prime the
                     // stream, flip the window to Mini, activate the session
                     // -- the guide never leaves composition and grid focus
-                    // stays put. Remote sessions (cast/companion) and
-                    // blank-URL event channels still take the route below
+                    // stays put. Blank-URL event channels still take the route below
                     // (PlayerScreen owns their messaging). Second OK on the
                     // same program promotes via the guide's requestResume.
                     // Phone floating mini (iPhone parity, Logan 2026-09-14):
@@ -1158,7 +982,6 @@ fun AerioTVNavHost(
                         (miniVmNav.state.value is MiniPlayerSession.State.Active ||
                             com.aeriotv.android.feature.player.PhoneVodMini.isActive)
                     if (((tuneStartsInMini && isTvDevice) || phoneMiniUp) &&
-                        castDevice == null && (forceLocal || companionTvName == null) &&
                         channel.url.isNotBlank()
                     ) {
                         if (!isTvDevice) {
@@ -1207,9 +1030,6 @@ fun AerioTVNavHost(
                         miniVmNav.showMiniPlayer()
                         return@channelPlay
                     }
-                    // No remote session: play it here. (A session connecting
-                    // while this player is open mirrors the channel to the
-                    // other screen and then closes the player.)
                     // launchSingleTop: a rapid double-tap (e.g. of a mini
                     // controller card) can't stack two identical player
                     // destinations on the back stack.
@@ -1221,25 +1041,10 @@ fun AerioTVNavHost(
                 }
                 MainScaffold(
                     onChannelClick = { channel ->
-                        // Cast play-where prompt: with a Google Cast session
-                        // active, ask Play Here / Play on <receiver>. The
-                        // companion link keeps its direct behavior.
-                        // Read the session LIVE at tap time, not the
-                        // composition-time castNameNav: a row's memoized tap
-                        // lambda could hold a pre-session (or null-name)
-                        // value, so a plain tap went straight to the local
-                        // path, which closes itself while casting, while the
-                        // freshly built menu Watch prompted (device pass
-                        // cc2c37c7). A Connected session with no device name
-                        // still prompts (the router names it "TV").
-                        val liveCast = castSenderNav.state.value as?
-                            com.aeriotv.android.core.cast.AerioCastSender.State.Connected
                         // A server-declared radio channel opens Radio Mode
-                        // (same entry as the long-press item). Casting, the
-                        // companion link, a Multiview, and the menu's Watch
-                        // keep today's path.
-                        if (liveCast == null && companionTvName == null &&
-                            com.aeriotv.android.feature.player.RadioSelect.maybeOpen(
+                        // (same entry as the long-press item). The menu's
+                        // Watch keeps today's path.
+                        if (com.aeriotv.android.feature.player.RadioSelect.maybeOpen(
                                 navHostContext,
                                 channel,
                                 state.epgByChannel[channel.guideMatchKey]?.nowPlaying()?.title.orEmpty(),
@@ -1249,26 +1054,9 @@ fun AerioTVNavHost(
                             tuneSettingsVm.recordRecentChannel(channel.id)
                             return@MainScaffold
                         }
-                        android.util.Log.i(
-                            "AerioCast",
-                            "CastPlayWhere: channel tap ${channel.name} session=${liveCast != null} companion=${companionTvName != null}",
-                        )
-                        if (companionTvName != null || liveCast == null) {
-                            channelPlay(channel, false)
-                        } else {
-                            com.aeriotv.android.feature.main.PlayWhereRouter.route(
-                                sender = castSenderNav,
-                                title = channel.name,
-                                playHere = { channelPlay(channel, true) },
-                                playOnReceiver = { channelPlay(channel, false) },
-                            )
-                        }
+                        channelPlay(channel)
                     },
-                    // Cast card flips / Switch and the Change Cast Device
-                    // handoff already target the receiver: no prompt.
-                    onCastChannel = { channel -> channelPlay(channel, false) },
-                    // Expanding the local mini stays local.
-                    onChannelResumeLocal = { channel -> channelPlay(channel, true) },
+                    onChannelResume = { channel -> channelPlay(channel) },
                     onMovieClick = { movieUuid ->
                         navController.navigate(Routes.movieDetail(movieUuid))
                     },
@@ -1276,27 +1064,12 @@ fun AerioTVNavHost(
                         navController.navigate(Routes.seriesDetail(seriesId))
                     },
                     onEpisodeResume = { videoId ->
-                        if (companionTvName != null) {
-                            companionRemoteNav.playVod(videoId, isEpisode = true)
-                            toastPlayingOnTv()
-                        } else {
-                            playVodWhere(videoId, null) {
-                                navController.navigate(Routes.vodEpisodePlayer(videoId))
-                            }
-                        }
+                        navController.navigate(Routes.vodEpisodePlayer(videoId))
                     },
                     // Hero "Play from Beginning": start at 0 without deleting
-                    // the Continue Watching row. The companion-TV branch has no
-                    // start-at flag on the wire and plays as usual.
+                    // the Continue Watching row.
                     onEpisodeResumeFromStart = { videoId ->
-                        if (companionTvName != null) {
-                            companionRemoteNav.playVod(videoId, isEpisode = true)
-                            toastPlayingOnTv()
-                        } else {
-                            playVodWhere(videoId, null) {
-                                navController.navigate(Routes.vodEpisodePlayer(videoId, fromStart = true))
-                            }
-                        }
+                        navController.navigate(Routes.vodEpisodePlayer(videoId, fromStart = true))
                     },
                     // #9: resume an in-progress movie from Continue Watching by
                     // opening its detail (which offers the Resume button).
@@ -1306,41 +1079,16 @@ fun AerioTVNavHost(
                     // Media center hero: Resume / Play go straight to the player
                     // (Apple parity); the player seeks to the saved position.
                     onPlayMovie = { videoId ->
-                        if (companionTvName != null) {
-                            companionRemoteNav.playVod(videoId, isEpisode = false)
-                            toastPlayingOnTv()
-                        } else {
-                            playVodWhere(videoId, onDemandWhereVm) {
-                                navController.navigate(Routes.vodPlayer(videoId))
-                            }
-                        }
+                        navController.navigate(Routes.vodPlayer(videoId))
                     },
                     // See onEpisodeResumeFromStart above.
                     onPlayMovieFromStart = { videoId ->
-                        if (companionTvName != null) {
-                            companionRemoteNav.playVod(videoId, isEpisode = false)
-                            toastPlayingOnTv()
-                        } else {
-                            playVodWhere(videoId, onDemandWhereVm) {
-                                navController.navigate(Routes.vodPlayer(videoId, fromStart = true))
-                            }
-                        }
+                        navController.navigate(Routes.vodPlayer(videoId, fromStart = true))
                     },
                     onPlayRecording = { playbackUrl, title, recId ->
-                        // Only http(s) recordings can play on the TV; a LOCAL
-                        // recording (file://, content://) lives on THIS phone and
-                        // the TV can't resolve it -- play those locally even when
-                        // companion-connected (review 2026-07-15).
-                        if (companionTvName != null && playbackUrl.startsWith("http")) {
-                            companionRemoteNav.playRecording(playbackUrl, title)
-                            toastPlayingOnTv()
-                        } else {
-                            playOnDemandWhere(title) {
-                                navController.navigate(
-                                    Routes.recordingPlayer(playbackUrl, title, recId = recId),
-                                )
-                            }
-                        }
+                        navController.navigate(
+                            Routes.recordingPlayer(playbackUrl, title, recId = recId),
+                        )
                     },
                     onPlayCatchup = { catchupChannelId, playbackUrl, title, progStart, progEnd, panelTz, channelUuid ->
                         // Task #148 milestone B: TV plays catch-up INSIDE the
@@ -1356,31 +1104,20 @@ fun AerioTVNavHost(
                                 ),
                             )
                         } else {
-                            playOnDemandWhere(title) {
-                                navController.navigate(
-                                    Routes.recordingPlayer(
-                                        playbackUrl, title,
-                                        csStart = progStart, csEnd = progEnd, csTz = panelTz,
-                                        csUuid = channelUuid, csChannel = catchupChannelId,
-                                    ),
-                                )
-                            }
-                        }
-                    },
-                    onLaunchMultiview = {
-                        // Tile spin-up takes seconds on real hardware, inviting
-                        // a second OK press; singleTop keeps a double-activation
-                        // from stacking two MULTIVIEW entries (first BACK would
-                        // then pop the duplicate and "do nothing").
-                        navController.navigate(Routes.MULTIVIEW) {
-                            launchSingleTop = true
+                            navController.navigate(
+                                Routes.recordingPlayer(
+                                    playbackUrl, title,
+                                    csStart = progStart, csEnd = progEnd, csTz = panelTz,
+                                    csUuid = channelUuid, csChannel = catchupChannelId,
+                                ),
+                            )
                         }
                     },
                     onWatchLive = { recordingUrl, recTitle, recIsDvr, recEnd, recChannelId ->
                         // Audit #50 / iOS v1.6.22: watch the in-progress server
                         // recording at the LIVE EDGE via the recording player
                         // (X-API-Key headers).
-                        if (recordingUrl.isNotBlank()) playOnDemandWhere(recTitle) {
+                        if (recordingUrl.isNotBlank()) {
                             navController.navigate(
                                 Routes.recordingPlayer(
                                     recordingUrl, recTitle, isDvr = recIsDvr, fromStart = false,
@@ -1393,7 +1130,7 @@ fun AerioTVNavHost(
                         // iOS Issue #29 'Watch from Beginning' - and, with
                         // autoResume (row tap), iOS 2026-08-28 tap semantics:
                         // resume saved progress, else beginning.
-                        if (recordingUrl.isNotBlank()) playOnDemandWhere(recTitle) {
+                        if (recordingUrl.isNotBlank()) {
                             navController.navigate(
                                 Routes.recordingPlayer(
                                     recordingUrl, recTitle, isDvr = recIsDvr,
@@ -1432,8 +1169,6 @@ fun AerioTVNavHost(
                     navArgument("mini") { type = NavType.BoolType; defaultValue = false },
                 ),
             ) { entry ->
-                // Another player takes over: a Multiview in the background ends.
-                remember { com.aeriotv.android.feature.multiview.MultiviewBackground.stop() }
                 val parent = remember(entry) {
                     navController.getBackStackEntry(Routes.PLAYLIST_GRAPH)
                 }
@@ -1493,16 +1228,6 @@ fun AerioTVNavHost(
                         vm.reportCatchupPosition(url, secs, paused)
                     },
                     onClose = { navController.popBackStack() },
-                    onLaunchMultiview = {
-                        // The now-playing stream is being absorbed into the
-                        // multiview grid (PlayerScreen already stopped it), so
-                        // pop PLAYER off the stack -- no dead single-stream
-                        // route to return to. Back from multiview lands on MAIN.
-                        navController.navigate(Routes.MULTIVIEW) {
-                            popUpTo(Routes.PLAYER) { inclusive = true }
-                            launchSingleTop = true
-                        }
-                    },
                     // Remote Control hold-Down: the player has already minimized
                     // itself to the corner mini (and popped via onClose), so the
                     // search route lands over MAIN with live video still playing.
@@ -1581,14 +1306,7 @@ fun AerioTVNavHost(
                     // Beginning" and rides the existing route arg; the
                     // Continue Watching row is left intact.
                     onEpisodeClick = { episode, fromStart ->
-                        if (companionTvName != null) {
-                            companionRemoteNav.playVod(episode.uuid, isEpisode = true, title = episode.title)
-                            toastPlayingOnTv()
-                        } else {
-                            playOnDemandWhere(episode.title.orEmpty()) {
-                                navController.navigate(Routes.vodEpisodePlayer(episode.uuid, fromStart = fromStart))
-                            }
-                        }
+                        navController.navigate(Routes.vodEpisodePlayer(episode.uuid, fromStart = fromStart))
                     },
                     // Known For tile in the cast bio dialog: a PLAIN push (no
                     // popUpTo / singleTop) so remote BACK pops the new detail
@@ -1613,14 +1331,7 @@ fun AerioTVNavHost(
                     movieUuid = movieUuid,
                     onBack = { navController.popBackStack() },
                     onPlay = { fromStart ->
-                        if (companionTvName != null) {
-                            companionRemoteNav.playVod(movieUuid, isEpisode = false)
-                            toastPlayingOnTv()
-                        } else {
-                            playVodWhere(movieUuid, onDemandVm) {
-                                navController.navigate(Routes.vodPlayer(movieUuid, fromStart = fromStart))
-                            }
-                        }
+                        navController.navigate(Routes.vodPlayer(movieUuid, fromStart = fromStart))
                     },
                     // Same plain Known For push as SERIES_DETAIL above.
                     onOpenMovie = { uuid -> navController.navigate(Routes.movieDetail(uuid)) },
@@ -1636,8 +1347,6 @@ fun AerioTVNavHost(
                     navArgument("fromStart") { type = NavType.BoolType; defaultValue = false },
                 ),
             ) { entry ->
-                // Another player takes over: a Multiview in the background ends.
-                remember { com.aeriotv.android.feature.multiview.MultiviewBackground.stop() }
                 val parent = remember(entry) {
                     navController.getBackStackEntry(Routes.PLAYLIST_GRAPH)
                 }
@@ -1655,7 +1364,7 @@ fun AerioTVNavHost(
                     hiltViewModel()
                 }
 
-                // Silence any LIVE session before VOD starts. A companion VodPlay
+                // Silence any LIVE session before VOD starts. A Watch Next VodPlay
                 // deep link navigates player/... -> vod_episode_player/... directly
                 // while the shared holder + persistent exo window are still live;
                 // without this the live channel keeps streaming (and sounding)
@@ -1810,70 +1519,6 @@ fun AerioTVNavHost(
                 )
             }
 
-            composable(Routes.MULTIVIEW) { entry ->
-                val parent = remember(entry) {
-                    navController.getBackStackEntry(Routes.PLAYLIST_GRAPH)
-                }
-                val playlistVm: PlaylistViewModel = hiltViewModel(parent)
-                val playlistState by playlistVm.state.collectAsStateWithLifecycle()
-                val headers = remember(
-                    playlistState.playlist?.apiKey,
-                    playlistState.playlist?.sourceType,
-                    playlistState.playlist?.customUserAgent,
-                ) { PlaybackHeaders.forPlaylist(playlistState.playlist) }
-                // Guide-banner entry skips PlayerScreen's launch teardown
-                // (PlayerScreen.kt onLaunch), leaving the persistent mini
-                // window + its decoder running on top of the tile grid.
-                // Dismiss the mini here with the same teardown order.
-                val mvMiniPlayerVm: MiniPlayerViewModel = hiltViewModel()
-                val mvStoreVm: com.aeriotv.android.feature.multiview.MultiviewStoreHandleVm = hiltViewModel()
-                val mvContext = androidx.compose.ui.platform.LocalContext.current
-                // Apple parity (Logan 2026-10-11): a pile staged on the mini
-                // player opens with that channel's player kept as tile 1, no
-                // re-tune; the composition below must see the held id on its
-                // first frame, so this runs in remember, not an effect.
-                val mvHeld = remember(entry) {
-                    val held = com.aeriotv.android.feature.multiview.MultiviewHeld
-                        .begin(mvContext, mvStoreVm.takePlayingSeedForLaunch())
-                    if (held) mvMiniPlayerVm.dismiss()
-                    held
-                }
-                LaunchedEffect(Unit) {
-                    if (mvHeld) return@LaunchedEffect
-                    val mvEntry = dagger.hilt.android.EntryPointAccessors.fromApplication(
-                        mvContext.applicationContext,
-                        MainScaffoldEntryPoint::class.java,
-                    )
-                    mvMiniPlayerVm.dismiss()
-                    mvEntry.exoWindowState().hide()
-                    mvEntry.exoPlayerHolder().stop()
-                    com.aeriotv.android.core.playback.AerioMediaPlaybackService
-                        .stop(mvContext.applicationContext)
-                }
-                MultiviewScreen(
-                    // Desktop repro 2026-08-05: multiview entered from the
-                    // PLAYER used to pop back onto a player whose stream
-                    // multiview had deliberately taken over - a black, dead
-                    // screen. Both exit-dialog actions promise the guide, so
-                    // land on the main scaffold no matter what pushed
-                    // multiview (guide-staged entries pop the same way).
-                    onClose = {
-                        if (!navController.popBackStack(Routes.MAIN, false)) {
-                            navController.popBackStack()
-                        }
-                    },
-                    onPlaySingleChannel = { channelId ->
-                        navController.navigate(Routes.player(channelId)) {
-                            popUpTo(Routes.MULTIVIEW) { inclusive = true }
-                        }
-                    },
-                    httpHeaders = headers,
-                    // Pass the PLAYLIST_GRAPH-scoped VM so the re-entrant
-                    // "Add streams" picker reuses this single instance.
-                    playlistVm = playlistVm,
-                )
-            }
-
             // Global Search (parity task #41). Resolve the PLAYLIST_GRAPH-scoped
             // PlaylistViewModel so an EPG result reuses the same requestGuideJump
             // SharedFlow that MainScaffold + GuideScreen already collect (switch
@@ -1924,8 +1569,6 @@ fun AerioTVNavHost(
                     navArgument("fromStart") { type = NavType.BoolType; defaultValue = false },
                 ),
             ) { entry ->
-                // Another player takes over: a Multiview in the background ends.
-                remember { com.aeriotv.android.feature.multiview.MultiviewBackground.stop() }
                 val parent = remember(entry) {
                     navController.getBackStackEntry(Routes.PLAYLIST_GRAPH)
                 }
@@ -2072,8 +1715,6 @@ fun AerioTVNavHost(
                     navArgument("csChannel") { type = NavType.StringType; defaultValue = "" },
                 ),
             ) { entry ->
-                // Another player takes over: a Multiview in the background ends.
-                remember { com.aeriotv.android.feature.multiview.MultiviewBackground.stop() }
                 val playbackUrl = Uri.decode(entry.arguments?.getString("playbackUrl").orEmpty())
                 val title = Uri.decode(entry.arguments?.getString("title").orEmpty())
                 val isDvr = entry.arguments?.getBoolean("isDvr") ?: false
@@ -2086,8 +1727,7 @@ fun AerioTVNavHost(
                 // first: entering from the guide's Watch action (or DVR tab)
                 // skips PlayerScreen's launch teardown, so the persistent live
                 // window + mini-player decoder would keep streaming (and
-                // sounding) underneath. Same teardown order as the MULTIVIEW
-                // route above.
+                // sounding) underneath.
                 val rpMiniPlayerVm: MiniPlayerViewModel = hiltViewModel()
                 val rpContext = androidx.compose.ui.platform.LocalContext.current
                 LaunchedEffect(Unit) {
@@ -2148,7 +1788,6 @@ fun AerioTVNavHost(
                 // reopen route drops fromStart / autoResume: an expand adopts the
                 // playing instance, so no start or resume handling may run.
                 val recMiniToken = remember { com.aeriotv.android.feature.player.PhoneVodMiniRouteToken() }
-                var recMvOpen by remember { mutableStateOf(false) }
                 com.aeriotv.android.feature.player.PhoneVodMiniRoute(
                     info = remember(playbackUrl, title, csChannel, csStart) {
                         com.aeriotv.android.feature.player.PhoneVodMini.Info(
@@ -2212,30 +1851,7 @@ fun AerioTVNavHost(
                     recEndMillis = recEnd,
                     completedUrl = completedUrl,
                     onContinueOnLive = continueOnLive,
-                    // GH #76: catch-up sessions are not recordings; no tile.
-                    onMultiview = if (csUuid.isBlank()) ({ recMvOpen = true }) else null,
                 )
-                if (recMvOpen) {
-                    com.aeriotv.android.feature.player.RecordingMultiviewPicker(
-                        seedTile = remember(playbackUrl, recId) {
-                            com.aeriotv.android.feature.player.recordingMultiviewTile(
-                                recordingKey = if (recId > 0) "server-$recId" else playbackUrl,
-                                title = title.ifBlank { "Recording" },
-                                playbackUrl = playbackUrl,
-                                headers = headers,
-                                inProgress = isDvr,
-                            )
-                        },
-                        onLaunch = {
-                            recMvOpen = false
-                            // Pop the recording player (its player releases on
-                            // dispose) so only the tiles make sound.
-                            navController.popBackStack()
-                            navController.navigate(Routes.MULTIVIEW) { launchSingleTop = true }
-                        },
-                        onClose = { recMvOpen = false },
-                    )
-                }
             }
         }
     }
