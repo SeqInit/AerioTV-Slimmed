@@ -660,18 +660,22 @@ class AppPreferences @Inject constructor(
 
     /**
      * ANDROID: TV interface layout. "standard" (default) = the tvOS-parity
-     * shell (top tab bar, Channel Preview banner, corner mini). "tivimate" =
-     * a TiviMate-style shell: left side menu instead of the tab bar, a guide
+     * shell (top tab bar, Channel Preview banner, corner mini). "sidebar" =
+     * a Sidebar-style shell: left side menu instead of the tab bar, a guide
      * header with the preview player docked on the left and program details
      * on the right. TV only; phones and tablets ignore it. Drive-synced but
      * deliberately NOT in Dispatcharr sync: that schema is shared byte-for-
      * byte with Apple, which has no such layout.
      */
     val tvInterfaceLayout: Flow<String> =
-        store.data.map { it[KEY_TV_INTERFACE_LAYOUT] ?: TvInterfaceLayout.STANDARD }
+        store.data.map { it[KEY_TV_INTERFACE_LAYOUT]?.let(TvInterfaceLayout::normalize) ?: TvInterfaceLayout.STANDARD }
     suspend fun setTvInterfaceLayout(mode: String) {
         store.edit { it[KEY_TV_INTERFACE_LAYOUT] = mode }
     }
+    /** True once a layout was ever stored (setup's Choose Your Interface step,
+     *  Settings, or a Drive restore); setup skips the step when it is. */
+    suspend fun tvInterfaceLayoutChosenOnce(): Boolean =
+        store.data.first()[KEY_TV_INTERFACE_LAYOUT] != null
 
     /**
      * Phone / tablet Live TV group selector (Logan 2026-09-05, Apple parity
@@ -802,6 +806,19 @@ class AppPreferences @Inject constructor(
      * regardless, iOS keeps that lifeline. Default true. Device-local, NOT
      * synced. Read per-tune by AerioExoPlayerHolder.
      */
+    /**
+     * ANDROID: HDR to SDR tone mapping for playback, "auto" (default) |
+     * "always" | "off". Auto asks the video decoder for SDR output only when
+     * the stream's HDR format is one the display cannot show (HDR10 on an
+     * SDR / HLG-only TV); Always does it for any HDR stream. Device-local:
+     * the answer depends on this box's display, so it never syncs.
+     */
+    val hdrToSdr: Flow<String> =
+        store.data.map { it[KEY_HDR_TO_SDR] ?: com.aeriotv.android.core.playback.HdrToneMap.AUTO }
+    suspend fun setHdrToSdr(value: String) {
+        store.edit { it[KEY_HDR_TO_SDR] = value }
+    }
+
     val autoRecoverFrozenStreams: Flow<Boolean> =
         store.data.map { it[KEY_AUTO_RECOVER_FROZEN_STREAMS] ?: true }
     suspend fun setAutoRecoverFrozenStreams(value: Boolean) {
@@ -1790,7 +1807,7 @@ class AppPreferences @Inject constructor(
         }
         data[KEY_GUIDE_GROUP_SELECTOR]?.let { out["guideGroupSelector"] = it }
         data[KEY_GUIDE_SIDEBAR_LAYOUT]?.let { out["guideSidebarLayout"] = it }
-        data[KEY_TV_INTERFACE_LAYOUT]?.let { out["tvInterfaceLayout"] = it }
+        data[KEY_TV_INTERFACE_LAYOUT]?.let { out["tvInterfaceLayout"] = TvInterfaceLayout.normalize(it) }
         data[KEY_PHONE_GROUP_SELECTOR]?.let { out["phoneGroupSelector"] = it }
         data[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR]?.let { out["liveTvEdgeSwipeOpensSidebar"] = it.toString() }
         data[KEY_GUIDE_TUNE_IN_MINI]?.let { out["guideTuneInMini"] = it.toString() }
@@ -1912,7 +1929,7 @@ class AppPreferences @Inject constructor(
             }
             keys["guideGroupSelector"]?.let { prefs[KEY_GUIDE_GROUP_SELECTOR] = it }
             keys["guideSidebarLayout"]?.let { prefs[KEY_GUIDE_SIDEBAR_LAYOUT] = it }
-            keys["tvInterfaceLayout"]?.takeIf { it in TvInterfaceLayout.VALUES }?.let { prefs[KEY_TV_INTERFACE_LAYOUT] = it }
+            keys["tvInterfaceLayout"]?.let(TvInterfaceLayout::normalize)?.takeIf { it in TvInterfaceLayout.VALUES }?.let { prefs[KEY_TV_INTERFACE_LAYOUT] = it }
             keys["phoneGroupSelector"]?.let { prefs[KEY_PHONE_GROUP_SELECTOR] = it }
             keys["liveTvEdgeSwipeOpensSidebar"]?.toBooleanStrictOrNull()
                 ?.let { prefs[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR] = it }
@@ -2568,6 +2585,7 @@ class AppPreferences @Inject constructor(
         val KEY_GUIDE_GROUP_SELECTOR = stringPreferencesKey("guide_group_selector")
         val KEY_GUIDE_SIDEBAR_LAYOUT = stringPreferencesKey("guide_sidebar_layout")
         val KEY_TV_INTERFACE_LAYOUT = stringPreferencesKey("tv_interface_layout")
+        val KEY_HDR_TO_SDR = stringPreferencesKey("hdr_to_sdr")
         val KEY_PHONE_GROUP_SELECTOR = stringPreferencesKey("phone_group_selector")
         val KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR = booleanPreferencesKey("live_tv_edge_swipe_opens_sidebar")
         val KEY_GUIDE_TUNE_IN_MINI = booleanPreferencesKey("guide_tune_in_mini")
@@ -2726,8 +2744,14 @@ const val PLAYER_EDGE_RIGHT = "right"
 /** ANDROID: wire values for the TV interface layout preference. */
 object TvInterfaceLayout {
     const val STANDARD = "standard"
-    const val TIVIMATE = "tivimate"
-    val VALUES = setOf(STANDARD, TIVIMATE)
+    const val SIDEBAR = "sidebar"
+    val VALUES = setOf(STANDARD, SIDEBAR)
+
+    /** The sidebar layout's wire value before its 2026-10-25 rename. Read as
+     *  [SIDEBAR] so an install (or a Drive backup) saved under the old value
+     *  keeps its layout instead of falling back to Standard. */
+    private const val LEGACY_SIDEBAR = "tivimate"
+    fun normalize(value: String): String = if (value == LEGACY_SIDEBAR) SIDEBAR else value
 }
 
 object GuideProgramInfoButton {

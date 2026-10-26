@@ -157,7 +157,7 @@ fun BoxScope.PersistentExoWindow(
     } else {
         barBottomInset
     }
-    // TiviMate-style header dock (ANDROID): the guide header's preview slot
+    // Sidebar-style header dock (ANDROID): the guide header's preview slot
     // replaces the corner geometry wholesale. Expressed as the same
     // TopEnd-anchored width / height / top / end the corner uses, so the
     // existing springs carry the frame between full screen and the dock.
@@ -223,6 +223,7 @@ fun BoxScope.PersistentExoWindow(
     // the move snaps and a short black cover fades out over the new spot.
     val settingsStashed by MiniPlayerChrome.settingsStashed.collectAsStateWithLifecycle()
     val stashTarget = miniTarget && settingsStashed
+    val stashFully by MiniPlayerChrome.stashFully.collectAsStateWithLifecycle()
     val reduceMotion = remember(cfg) {
         android.provider.Settings.Global.getFloat(
             context.contentResolver,
@@ -232,7 +233,9 @@ fun BoxScope.PersistentExoWindow(
     }
     val stashOffset by animateDpAsState(
         targetValue = if (stashTarget) {
-            miniFitWidth + miniFitEnd - MiniPlayerChrome.stashSliver
+            // Fully: past the edge by the shadow's blur too, so no glow shows.
+            if (stashFully) miniFitWidth + miniFitEnd + 12.dp
+            else miniFitWidth + miniFitEnd - MiniPlayerChrome.stashSliver
         } else 0.dp,
         animationSpec = if (reduceMotion) snap() else miniSpec,
         label = "miniStashOffset",

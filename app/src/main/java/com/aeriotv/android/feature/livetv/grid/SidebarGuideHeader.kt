@@ -63,9 +63,9 @@ import com.aeriotv.android.ui.theme.textAccent
 import java.util.Date
 
 /**
- * ANDROID (no Apple counterpart): the guide header of the TiviMate-style TV
- * interface (Settings > Live TV > Interface Style). TiviMate splits the top of
- * its guide in two: the preview player on the LEFT, the focused program's
+ * ANDROID (no Apple counterpart): the guide header of the Sidebar-style TV
+ * interface (Settings > Live TV > Interface Style). The header splits the top
+ * of the guide in two: the preview player on the LEFT, the focused program's
  * details on the RIGHT, the grid below. This replaces the Channel Preview
  * banner (GuidePreviewBanner) in that layout; the focus contract is the same
  * (the description is the header's one focus target and OK opens Program
@@ -77,14 +77,14 @@ import java.util.Date
  * nothing plays the slot shows the program art (same lookup and cache as the
  * banner), else the channel logo.
  */
-object TiviMateGuideHeader {
+object SidebarGuideHeader {
     /** Header height. A 16:9 slot this tall minus padding is ~313 dp wide,
-     *  about a third of a 960 dp TV canvas, which is TiviMate's proportion. */
+     *  about a third of a 960 dp TV canvas, the proportion the layout is built around. */
     val height = 196.dp
 }
 
 @Composable
-fun TiviMateGuideHeader(
+fun SidebarGuideHeader(
     program: EPGProgramme?,
     channel: M3UChannel?,
     nowMs: Long,
@@ -109,12 +109,12 @@ fun TiviMateGuideHeader(
     val clockMode = rememberClockMode()
     val fmt = remember(clockMode) { ClockFormat.guideShort(clockMode) }
     val showBadges = LocalShowEpgBadges.current
-    val slotHeight = TiviMateGuideHeader.height - 20.dp
+    val slotHeight = SidebarGuideHeader.height - 20.dp
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(TiviMateGuideHeader.height)
+            .height(SidebarGuideHeader.height)
             .background(colors.background)
             .padding(start = 20.dp, end = 28.dp, top = 12.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -216,7 +216,7 @@ fun TiviMateGuideHeader(
                                 e.key == Key.DirectionDown && onDown()
                         }
                         .onFocusChanged {
-                            if (it.isFocused && !focused) com.aeriotv.android.ui.tv.TvFocusTrace.focus("tivimate-header:description")
+                            if (it.isFocused && !focused) com.aeriotv.android.ui.tv.TvFocusTrace.focus("sidebar-header:description")
                             focused = it.isFocused
                         }
                         .clip(RoundedCornerShape(5.dp))

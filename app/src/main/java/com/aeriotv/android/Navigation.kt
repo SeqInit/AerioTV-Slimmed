@@ -90,6 +90,8 @@ object Routes {
     const val CHOOSE_TYPE = "choose_type"
     const val CONFIGURE = "configure/{type}"
     const val MAIN = "main"
+    /** ANDROID (TV): setup's last step, Choose Your Interface. */
+    const val CHOOSE_INTERFACE = "choose_interface"
     // Task #148 milestone B: optional cs* args put the LIVE player into
     // catch-up mode on TV (phone keeps the recording player, mirroring
     // iPhone vs the tvOS unified player). csEnd <= csStart = not catch-up.
@@ -678,9 +680,10 @@ fun AerioTVNavHost(
                     }
                 }
 
+                val setupDoneRoute = if (com.aeriotv.android.ui.settings.rememberIsTvDevice()) Routes.CHOOSE_INTERFACE else Routes.MAIN
                 LaunchedEffect(state.phase) {
                     if (state.phase == PlaylistViewModel.Phase.ChannelsReady) {
-                        navController.navigate(Routes.MAIN) {
+                        navController.navigate(setupDoneRoute) {
                             popUpTo(Routes.PLAYLIST_GRAPH) { inclusive = false }
                         }
                     }
@@ -896,6 +899,7 @@ fun AerioTVNavHost(
                 route = Routes.CONFIGURE,
                 arguments = listOf(navArgument("type") { type = NavType.StringType }),
             ) { entry ->
+                val setupDoneRoute = if (com.aeriotv.android.ui.settings.rememberIsTvDevice()) Routes.CHOOSE_INTERFACE else Routes.MAIN
                 val parent = remember(entry) {
                     navController.getBackStackEntry(Routes.PLAYLIST_GRAPH)
                 }
@@ -921,7 +925,7 @@ fun AerioTVNavHost(
                             profileStepFor = pid
                             return@collect
                         }
-                        navController.navigate(Routes.MAIN) {
+                        navController.navigate(setupDoneRoute) {
                             popUpTo(Routes.PLAYLIST_GRAPH) { inclusive = false }
                         }
                     }
@@ -944,7 +948,7 @@ fun AerioTVNavHost(
                             if (syncStepFor == null) return@DispatcharrSyncStepScreen
                             syncStepFor = null
                             vm.enableDispatcharrSyncAfterConnect = false
-                            navController.navigate(Routes.MAIN) {
+                            navController.navigate(setupDoneRoute) {
                                 popUpTo(Routes.PLAYLIST_GRAPH) { inclusive = false }
                             }
                         },
@@ -956,6 +960,36 @@ fun AerioTVNavHost(
                 )
             }
 
+            composable(Routes.CHOOSE_INTERFACE) {
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val prefs = remember {
+                    dagger.hilt.android.EntryPointAccessors
+                        .fromApplication(ctx.applicationContext, NavEntryPoint::class.java)
+                        .appPreferences()
+                }
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                val openMain = {
+                    navController.navigate(Routes.MAIN) {
+                        popUpTo(Routes.PLAYLIST_GRAPH) { inclusive = false }
+                    }
+                }
+                // A layout already chosen (restored from Drive with the other
+                // preferences) is respected: no question, straight in.
+                var asked by remember { androidx.compose.runtime.mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    if (prefs.tvInterfaceLayoutChosenOnce()) openMain() else asked = true
+                }
+                if (asked) {
+                    com.aeriotv.android.feature.onboarding.ChooseInterfaceScreen(
+                        onChoose = { layout ->
+                            scope.launch {
+                                prefs.setTvInterfaceLayout(layout)
+                                openMain()
+                            }
+                        },
+                    )
+                }
+            }
             composable(Routes.MAIN) { entry ->
                 val parent = remember(entry) {
                     navController.getBackStackEntry(Routes.PLAYLIST_GRAPH)
@@ -1096,7 +1130,7 @@ fun AerioTVNavHost(
                         ).show()
                         return@channelPlay
                     }
-                    // Task #226 (TiviMate flow, Logan 2026-08-06): with
+                    // Task #226 (sidebar flow, Logan 2026-08-06): with
                     // "Play Channels In: Mini player" on TV, the first OK
                     // tunes DIRECTLY into the corner mini. Routing through
                     // the PLAYER destination just to demote it composed the
@@ -1142,6 +1176,11 @@ fun AerioTVNavHost(
                             // Trace: the guide's select press is the
                             // start of this tune's press->firstFrame.
                             exoHolderNav.markTunePress(channel.name)
+                            // Live Rewind: a buffer kept rolling behind the
+                            // mini drops (or is kept live) on a channel
+                            // switch; before playUrl so the outgoing URL is
+                            // snapshotted while the holder is still on it.
+                            playerEntryNav.timeshiftController().onMiniRetune(channel.id)
                             exoHolderNav.playUrl(
                                 url = channel.url,
                                 title = channel.name,
@@ -2249,8 +2288,8 @@ fun AerioTVNavHost(
             androidx.hilt.navigation.compose.hiltViewModel()
         val miniTvLayout by miniLayoutVm.tvInterfaceLayout.collectAsStateWithLifecycle()
         TvMiniPlayerOverlay(
-            // TiviMate-style interface: Back belongs to the guide / menu.
-            enabled = miniTvLayout != com.aeriotv.android.core.preferences.TvInterfaceLayout.TIVIMATE,
+            // Sidebar-style interface: Back belongs to the guide / menu.
+            enabled = miniTvLayout != com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR,
             state = miniState,
             onResume = {
                 val resumed = miniPlayerVm.resumeChannel()

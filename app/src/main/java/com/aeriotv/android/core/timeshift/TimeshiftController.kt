@@ -247,8 +247,9 @@ class TimeshiftController @Inject constructor(
         liveHeaders = headers
         scope.launch {
             // Back to full screen (expand or a new tune): the mini's X no
-            // longer owns this channel.
-            miniKeepCandidate = null
+            // longer owns this session.
+            val wasMinimized = minimized
+            minimized = false
             // runCatching: session setup does disk IO (mkdirs, meta
             // write) that can throw on a full or flaky disk; an uncaught
             // exception here killed the whole process on every tune.
@@ -262,7 +263,22 @@ class TimeshiftController @Inject constructor(
                     retained.clear()
                     publishRetained()
                 }
-                if (!enabled) return@launch
+                if (!enabled) {
+                    // Turned off while the session rolled behind the mini.
+                    if (wasMinimized) {
+                        stopSessionInternal()
+                        _state.value = State()
+                    }
+                    return@launch
+                }
+                // Expand from the mini on the same channel: the session kept
+                // rolling, so keep it (the rewind spans the time minimized).
+                val kept = activeWriter
+                if (wasMinimized && kept != null && !kept.closed && currentChannelId == channelId) {
+                    _state.value = State(buffering = true, tailWallMs = kept.tailWallMs, headWallMs = kept.headWallMs)
+                    Log.i(APP_TAG, "[REWIND] buffer resumed from the mini: $channelName")
+                    return@launch
+                }
                 val depthMin = prefs.liveRewindDepthMinutes.first()
                 val keepCount = prefs.liveRewindKeepCount.first()
                 if (keepRecent && !keepPrevious && currentChannelName != null) {
@@ -575,9 +591,9 @@ class TimeshiftController @Inject constructor(
     }
 
     /**
-     * Stop buffering (leaving fullscreen live: channel close, minimize,
-     * multiview, PiP handoff). Buffered data stays on disk until the
-     * retention reaper ages it out.
+     * Leaving fullscreen live: a channel close or multiview handoff ends
+     * the session (or keeps it live under Keep Recent); a minimize to the
+     * mini player keeps it rolling until a channel switch or the mini's X.
      */
     fun onFullscreenLiveStopped(
         keepIfEnabled: Boolean = false,
@@ -593,111 +609,109 @@ class TimeshiftController @Inject constructor(
         // Through the same serial scope as start so a fast tune-then-back
         // can never stop BEFORE the pending start runs.
         scope.launch {
-            // Minimize: the buffer session ends as before, but remember the
-            // channel so the mini's X can keep it live (same outcome as the
-            // full-screen X). Only a channel that had a buffer qualifies,
-            // which already excludes HLS and non-TS sessions.
-            if (toMini && streamFailed && activeWriter != null) {
+            // Minimize (the mini player, incl. the TV guide's): the buffer
+            // only drops on a channel switch (user directive 2026-10-25), so
+            // the session keeps rolling off the mini's own connection through
+            // the tee, and expanding the same channel picks it back up in
+            // onFullscreenLiveStarted. A switch, the mini's X or leaving the
+            // TV app ends it (onMiniRetune / onMiniClosed). A dead stream
+            // has nothing worth keeping and ends as before.
+            if (toMini && activeWriter != null) {
+                if (!streamFailed) {
+                    minimized = true
+                    lastPlayUrlSnapshot = null
+                    Log.i(APP_TAG, "[REWIND] buffer kept through the mini: ${currentChannelName ?: "?"}")
+                    return@launch
+                }
                 Log.i(APP_TAG, "[RETAIN] not kept ${currentChannelName ?: "?"}: stream failed")
             }
-            miniKeepCandidate = if (toMini && !streamFailed && activeWriter != null) {
-                val id = currentChannelId
-                val url = lastPlayUrlSnapshot ?: liveUrl
-                if (id != null && url != null) {
-                    MiniKeepCandidate(id, currentChannelName ?: id, currentChannelLogo, url, liveHeaders)
-                } else null
-            } else null
-            // Keep Recent Channels Live on close (iOS parity, NowPlaying.stop
-            // hands the remuxer to the retained manager): closing the player
-            // demotes the session exactly like a flip, honoring the cap and
-            // eviction. The Kept Live card's Stop releases it.
-            val keep = keepIfEnabled && activeWriter != null && runCatching {
-                prefs.liveRewindEnabled.first() && prefs.liveRewindKeepRecent.first()
-            }.getOrDefault(false)
-            if (keep && streamFailed) {
-                Log.i(APP_TAG, "[RETAIN] not kept ${currentChannelName ?: "?"}: stream failed")
-                stopSessionInternal()
-            } else if (keep) {
-                val name = currentChannelName
-                val keepCount = runCatching { prefs.liveRewindKeepCount.first() }.getOrDefault(1)
-                demoteCurrentSession(keepCount)
-                if (name != null && retained.values.any { it.channelName == name }) {
-                    Log.i(APP_TAG, "[RETAIN] kept on close $name")
-                }
-            } else {
-                if (keepIfEnabled) {
-                    Log.i(
-                        APP_TAG,
-                        "[RETAIN] not kept on close ${currentChannelName ?: "?"}: " +
-                            if (activeWriter == null) "no buffer session" else "Keep Recent Channels Live off",
-                    )
-                }
-                stopSessionInternal()
-            }
-            lastPlayUrlSnapshot = null
-            _state.value = State()
+            closeCurrentSession(keepIfEnabled, streamFailed, via = "close")
         }
     }
 
-    private data class MiniKeepCandidate(
-        val channelId: String,
-        val channelName: String,
-        val logoUrl: String?,
-        val url: String,
-        val headers: Map<String, String>,
-    )
-
-    /** Channel that was minimized to the mini player (see [onMiniClosed]). */
-    @Volatile private var miniKeepCandidate: MiniKeepCandidate? = null
+    /** The foreground session is rolling behind the mini player (see
+     *  [onFullscreenLiveStopped]); serial scope only. */
+    @Volatile private var minimized = false
 
     /**
-     * The mini player's X: the same Keep Recent Channels Live outcome as the
-     * full-screen player's close. The buffer session ended at minimize, so a
-     * fresh kept session opens on its own connection; call this AFTER the
-     * player is stopped so only one connection is open at a time. No-op when
-     * the setting is off or the minimized channel had no buffer.
+     * End the foreground session with the close rules. Keep Recent Channels
+     * Live (iOS parity, NowPlaying.stop hands the remuxer to the retained
+     * manager): closing demotes the session exactly like a flip, honoring
+     * the cap and eviction. The Kept Live card's Stop releases it. Serial
+     * scope only.
+     */
+    private suspend fun closeCurrentSession(keepIfEnabled: Boolean, streamFailed: Boolean, via: String) {
+        minimized = false
+        val keep = keepIfEnabled && activeWriter != null && runCatching {
+            prefs.liveRewindEnabled.first() && prefs.liveRewindKeepRecent.first()
+        }.getOrDefault(false)
+        if (keep && streamFailed) {
+            Log.i(APP_TAG, "[RETAIN] not kept ${currentChannelName ?: "?"}: stream failed")
+            stopSessionInternal()
+        } else if (keep) {
+            val name = currentChannelName
+            val keepCount = runCatching { prefs.liveRewindKeepCount.first() }.getOrDefault(1)
+            demoteCurrentSession(keepCount)
+            if (name != null && retained.values.any { it.channelName == name }) {
+                Log.i(APP_TAG, "[RETAIN] kept on $via $name")
+            }
+        } else {
+            if (keepIfEnabled) {
+                Log.i(
+                    APP_TAG,
+                    "[RETAIN] not kept on $via ${currentChannelName ?: "?"}: " +
+                        if (activeWriter == null) "no buffer session" else "Keep Recent Channels Live off",
+                )
+            }
+            stopSessionInternal()
+        }
+        lastPlayUrlSnapshot = null
+        _state.value = State()
+    }
+
+    /**
+     * The mini player's X (or leaving the TV app with the mini up): the same
+     * Keep Recent Channels Live outcome as the full-screen player's close for
+     * the session that kept rolling behind the mini. Call this AFTER the
+     * player is stopped so the kept filler is the only connection open.
+     * No-op when no buffered channel was minimized.
      */
     fun onMiniClosed(via: String = "mini-x") {
         scope.launch {
-            val c = miniKeepCandidate ?: run {
+            if (!minimized) {
                 Log.i(APP_TAG, "[RETAIN] not kept on mini close ($via): no buffered channel was minimized")
                 return@launch
             }
-            miniKeepCandidate = null
-            runCatching {
-                val keep = prefs.liveRewindEnabled.first() && prefs.liveRewindKeepRecent.first()
-                if (!keep) {
-                    Log.i(APP_TAG, "[RETAIN] not kept on mini close ${c.channelName} ($via): Keep Recent Channels Live off")
-                    return@launch
-                }
-                val depthMin = prefs.liveRewindDepthMinutes.first()
-                val keepCount = prefs.liveRewindKeepCount.first()
-                val writer = store.startSession(
-                    channelId = c.channelId,
-                    channelName = c.channelName,
-                    depthMs = depthMin * 60_000L,
-                    retentionMs = FIXED_RETENTION_MS,
-                    budgetBytes = store.freeSpaceBudgetBytes(),
-                    protectedDirs = retained.values.map { it.writer.sessionDir }.toSet(),
-                )
-                retained.remove(c.channelId)?.let { releaseRetained(it, "replaced by mini close keep") }
-                val session = RetainedSession(
-                    channelId = c.channelId,
-                    channelName = c.channelName,
-                    logoUrl = c.logoUrl?.takeIf { it.isNotBlank() },
-                    sinceMs = System.currentTimeMillis(),
-                    url = c.url,
-                    headers = c.headers,
-                    writer = writer,
-                )
-                retained[c.channelId] = session
-                evictPastCap(keepCount)
-                startRetainedFill(session)
-                publishRetained()
-                Log.i(APP_TAG, "[RETAIN] kept on close: ${c.channelName} (mini, via $via)")
-            }.onFailure { Log.w(TAG, "mini close keep failed: $it") }
+            closeCurrentSession(keepIfEnabled = true, streamFailed = false, via = "mini close ($via)")
         }
     }
+
+    /**
+     * The mini player is about to tune [channelId] in place (guide / phone
+     * mini tune, Navigation): a channel switch, so the minimized session
+     * ends like a flip. Call it BEFORE the holder re-primes so the outgoing
+     * play URL is snapshotted while the holder is still on it. The tee
+     * already stops writing the new channel into it ([teeWriterFor]).
+     */
+    fun onMiniRetune(channelId: String) {
+        if (!minimized || channelId == currentChannelId) return
+        noteChannelLeaving()
+        scope.launch {
+            if (!minimized || channelId == currentChannelId) return@launch
+            closeCurrentSession(keepIfEnabled = true, streamFailed = false, via = "mini switch")
+        }
+    }
+
+    /**
+     * Writer for the live tee of a source built for [channelId]: the
+     * foreground session's, but only while it belongs to that channel. With
+     * the session rolling behind the mini, a retune that skips PlayerScreen
+     * (direct-to-mini guide tune) would otherwise append another channel's
+     * stream into this buffer; it also closes the gap at a flip between the
+     * new channel's first bytes and the session swap.
+     */
+    fun teeWriterFor(channelId: String?): TimeshiftWriter? =
+        activeWriter?.takeIf { channelId != null && channelId == currentChannelId }
 
     /**
      * While playback is ON the buffer, the shared player's live

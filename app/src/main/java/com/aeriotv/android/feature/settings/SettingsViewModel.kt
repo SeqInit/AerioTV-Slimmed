@@ -377,7 +377,7 @@ class SettingsViewModel @Inject constructor(
     fun setGuideSidebarLayout(mode: String) {
         viewModelScope.launch { prefs.setGuideSidebarLayout(mode) }
     }
-    /** ANDROID: TV interface layout, "standard" or "tivimate" (see AppPreferences). */
+    /** ANDROID: TV interface layout, "standard" or "sidebar" (see AppPreferences). */
     val tvInterfaceLayout: StateFlow<String> = prefs.tvInterfaceLayout
         .stateIn(viewModelScope, SharingStarted.Eagerly, com.aeriotv.android.core.preferences.TvInterfaceLayout.STANDARD)
     fun setTvInterfaceLayout(mode: String) {
@@ -463,6 +463,12 @@ class SettingsViewModel @Inject constructor(
     }
 
     // iOS appBehaviorsAutoRecoverFrozenStreams (#37). Default true; device-local.
+    /** ANDROID: HDR to SDR tone mapping, "auto" | "always" | "off" (see AppPreferences.hdrToSdr). */
+    val hdrToSdr: Flow<String> = prefs.hdrToSdr
+    fun setHdrToSdr(value: String) {
+        viewModelScope.launch { prefs.setHdrToSdr(value) }
+    }
+
     val autoRecoverFrozenStreams: Flow<Boolean> = prefs.autoRecoverFrozenStreams
     fun setAutoRecoverFrozenStreams(value: Boolean) {
         viewModelScope.launch { prefs.setAutoRecoverFrozenStreams(value) }

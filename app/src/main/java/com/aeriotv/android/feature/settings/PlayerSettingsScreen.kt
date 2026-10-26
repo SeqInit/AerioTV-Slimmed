@@ -113,6 +113,8 @@ fun PlayerSettingsScreen(
     val skipForwardSeconds by viewModel.skipForwardSeconds
         .collectAsStateWithLifecycle(initialValue = SkipIntervals.DEFAULT_FORWARD_SECONDS)
     val bufferSize by viewModel.streamBufferSize.collectAsStateWithLifecycle(initialValue = "default")
+    val hdrToSdr by viewModel.hdrToSdr
+        .collectAsStateWithLifecycle(initialValue = com.aeriotv.android.core.playback.HdrToneMap.AUTO)
     val autoRecoverFrozenStreams by viewModel.autoRecoverFrozenStreams
         .collectAsStateWithLifecycle(initialValue = true)
     val audioPassthrough by viewModel.audioPassthroughEnabled.collectAsStateWithLifecycle(initialValue = false)
@@ -395,6 +397,20 @@ fun PlayerSettingsScreen(
                             ?: BUFFER_OPTIONS.first().id,
                         onSelect = viewModel::setStreamBufferSize,
                         footer = "Buffer Size controls how much stream data is pre-loaded. Larger buffers reduce stuttering on poor connections but add startup delay.",
+                    )
+                    // ANDROID: decoder-side HDR to SDR (core/playback HdrToneMap).
+                    SettingsPickerRow(
+                        title = "HDR to SDR",
+                        tvChoiceSheet = true,
+                        inlineTitle = true,
+                        options = listOf(
+                            SettingsPickerOption(com.aeriotv.android.core.playback.HdrToneMap.AUTO, "Auto", "When the TV can't show the stream's HDR"),
+                            SettingsPickerOption(com.aeriotv.android.core.playback.HdrToneMap.ALWAYS, "Always", "Every HDR stream plays as SDR"),
+                            SettingsPickerOption(com.aeriotv.android.core.playback.HdrToneMap.OFF, "Off", "Pass HDR through untouched"),
+                        ),
+                        selected = hdrToSdr,
+                        onSelect = viewModel::setHdrToSdr,
+                        footer = "Converts HDR10 (and HLG) video to SDR on this device so it doesn't look washed out on a TV that can't display it. Uses the video decoder's own tone mapping on Android 13 and later; some decoders don't support it. Applies to the next channel you tune.",
                     )
                     if (!childRole) SettingsToggleRow(
                         title = "Auto-Recover Frozen Streams",

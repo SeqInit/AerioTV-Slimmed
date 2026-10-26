@@ -84,10 +84,16 @@ object MiniPlayerChrome {
     /** Width of the video left on screen while the mini is stashed. */
     val stashSliver = 32.dp
 
-    /** ANDROID: root px rect of the TiviMate-style guide header's preview
-     *  slot, published by TiviMateGuideHeader while it is mounted on the
+    /** ANDROID (Sidebar-style interface): stash the mini FULLY off screen
+     *  instead of leaving [stashSliver] of video at the edge, so nothing of
+     *  it sits over Settings or the side menu. Audio keeps playing. Published
+     *  by MainScaffold's TV branch. */
+    val stashFully = MutableStateFlow(false)
+
+    /** ANDROID: root px rect of the Sidebar-style guide header's preview
+     *  slot, published by SidebarGuideHeader while it is mounted on the
      *  ACTIVE tab, [Rect.Zero] otherwise. When set, the mini fills exactly
-     *  this rect (docked on the left of the guide, TiviMate's preview) instead
+     *  this rect (docked on the left of the guide) instead
      *  of the tvOS corner geometry; the springs are the same, so minimize and
      *  expand still animate between full screen and the dock. */
     val dockRectPx = MutableStateFlow(androidx.compose.ui.geometry.Rect.Zero)

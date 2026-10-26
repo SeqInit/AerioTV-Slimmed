@@ -177,6 +177,13 @@ class AerioTVApplication : Application(), Configuration.Provider, SingletonImage
                 com.aeriotv.android.core.ui.SkipIntervals.backSeconds.value = it
             }
         }
+        // HDR to SDR: the video renderer reads this when it configures a
+        // decoder, so a change applies from the next tune.
+        appScope.launch {
+            appPreferences.hdrToSdr.distinctUntilChanged().collect {
+                com.aeriotv.android.core.playback.HdrToneMap.mode = it
+            }
+        }
         appScope.launch {
             appPreferences.skipForwardSeconds.distinctUntilChanged().collect {
                 com.aeriotv.android.core.ui.SkipIntervals.forwardSeconds.value = it

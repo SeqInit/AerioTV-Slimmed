@@ -635,10 +635,10 @@ fun PlayerScreen(
             Log.i(TAG, "[TUNE] prime skipped: holder already playing $channelId")
         }
         // Live Rewind: (re)start the timeshift buffer for this channel.
-        // No-op when the pref is off. Fullscreen single-stream only per
-        // the locked v1 scope; leaving this screen stops the session
-        // (DisposableEffect below), so mini-player, multiview, and PiP
-        // handoffs all drop back to pure live.
+        // No-op when the pref is off. Started from fullscreen only; a
+        // minimize keeps it rolling behind the mini and expanding the same
+        // channel resumes it (the buffer drops only on a channel switch,
+        // user directive 2026-10-25), while multiview ends it.
         // Gate on the tee's own URL test: only raw MPEG-TS is mirrored
         // into the buffer, so an HLS/DASH live channel must not start a
         // session (it would show a transport over a permanently empty
@@ -656,8 +656,9 @@ fun PlayerScreen(
         }
     }
 
-    // Live Rewind: end the buffer session when fullscreen live ends.
-    // Buffered segments stay on disk until the retention reaper runs.
+    // Live Rewind: end the buffer session when fullscreen live ends, except
+    // a minimize, which keeps it rolling behind the mini until a channel
+    // switch or the mini's X (TimeshiftController.onFullscreenLiveStopped).
     DisposableEffect(Unit) {
         onDispose {
             // Radio Mode owns the player now: the Live Rewind buffer keeps
@@ -673,8 +674,9 @@ fun PlayerScreen(
             if (exoHolder.isTimeshifting && !exoHolder.isAdoptedLive) exoHolder.goLive()
             // Keep Recent Channels Live: a close (X, Back without a mini,
             // hold-Back stop, PiP X) keeps the channel live like a flip.
-            // Minimize to the mini keeps PLAYING it, and multiview launch
-            // hands off to tiles, so neither is retained.
+            // Minimize to the mini keeps PLAYING it (and its buffer rolling;
+            // the mini's X applies this rule later), and multiview launch
+            // hands off to tiles, so neither is retained here.
             // Radio Mode keeps the holder playing exactly like a minimize.
             val toMini = exoWindowState.mode.value == ExoWindowState.Mode.Mini ||
                 com.aeriotv.android.feature.player.RadioMode.isActive
@@ -701,8 +703,9 @@ fun PlayerScreen(
     // reversing the earlier stop-on-PiP-enter). PiP itself has no rewind
     // transport, but the buffer keeps growing so returning to fullscreen
     // can rewind across the PiP stretch like a cable box. The session
-    // still ends when this screen unmounts (DisposableEffect above);
-    // rewind PLAYBACK from PiP stays out of scope (v1: fullscreen only).
+    // still ends when this screen unmounts other than to the mini
+    // (DisposableEffect above); rewind PLAYBACK from PiP stays out of
+    // scope (v1: fullscreen only).
 
     // System back intercept. Two flavours:
     //   - Phone: promote to the bottom MiniPlayerRow above the nav, kill
@@ -718,6 +721,10 @@ fun PlayerScreen(
         context.resources.configuration.uiMode and
             android.content.res.Configuration.UI_MODE_TYPE_MASK
         ) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    // Sidebar-style TV interface: Back with the controls up only hides them
+    // (BackHandler below).
+    val sidebarInterface = isTvForm && settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle().value ==
+        com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR
 
     // GH #7 (True Android Fullscreen): on phone/tablet, hide the status + nav
     // bars in LANDSCAPE so playback is genuinely edge-to-edge instead of
@@ -876,6 +883,13 @@ fun PlayerScreen(
             // LIVE affordance. The native session revoke runs in onDispose.
             PlayerDoubleBack.clear()
             closeCatchupReplay(exoHolder, exoWindowState, miniPlayerVm, context, onClose)
+        } else if (sidebarInterface && chromeVisible) {
+            // Sidebar style (user directive 2026-10-25): with the controls up,
+            // Back only hides them and the player stays full screen. The
+            // minimize / double-Back close below applies once they are hidden.
+            PlayerDoubleBack.clear()
+            chromeReason = "back"
+            chromeVisible = false
         } else if (isTvForm) {
             // #10 back model (Archie 2026-07-02): a SINGLE Back minimizes the
             // fullscreen player straight to the corner mini. OK/Select is now
@@ -2001,6 +2015,9 @@ fun PlayerScreen(
                 val idx = channels.indexOfFirst { it.id == id }
                 if (idx >= 0 && idx != currentIndex) currentIndex = idx
             },
+            epgByChannel = epgByChannel,
+            recentChannelIds = recentChannelIds,
+            onDismissChrome = { chromeVisible = false },
         )
 
         // Remote Control: Left-press Channels overlay (GH #54), drawn above
@@ -2802,6 +2819,11 @@ private fun LiveRewindChromeSection(
     onClose: () -> Unit,
     /** Keep Recent Channels Live: tune a kept channel from the Options menu. */
     onTuneChannelId: (String) -> Unit = {},
+    /** Sidebar-style chrome: next program and the recent-channel tiles. */
+    epgByChannel: Map<String, List<EPGProgramme>> = emptyMap(),
+    recentChannelIds: List<String> = emptyList(),
+    /** Sidebar-style chrome: hide the controls (History hands off). */
+    onDismissChrome: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val keptLive by timeshiftController.retainedChannels.collectAsStateWithLifecycle()
@@ -2904,6 +2926,59 @@ private fun LiveRewindChromeSection(
         showProgramSubtitle = cardShowProgramSubtitle,
         showProgramDescription = cardShowProgramDescription,
     )
+    // Shared by the standard chrome and the Sidebar-style chrome.
+    val togglePause: () -> Unit = {
+        when {
+            exoHolder.isTimeshifting -> {
+                exoHolder.setPaused(!exoHolder.isPaused())
+            }
+            tsState.buffering && !exoHolder.isPaused() -> {
+                // Cable-seamless pause: nothing switches, the frame
+                // just freezes. The controller quietly brings up the
+                // independent filler so the buffer keeps growing
+                // underneath a long pause.
+                livePauseWallMs = System.currentTimeMillis()
+                exoHolder.setPaused(true)
+                timeshiftController.onLivePaused()
+            }
+            tsState.buffering && exoHolder.isPaused() && livePauseWallMs > 0 -> {
+                val pausedForMs = System.currentTimeMillis() - livePauseWallMs
+                if (pausedForMs <= 6_000) {
+                    // Short pause: resume the untouched live
+                    // pipeline. Zero switch, zero glitch.
+                    exoHolder.setPaused(false)
+                    timeshiftController.onLiveResumedAtEdge()
+                } else {
+                    // Long pause: one switch onto the buffer at the
+                    // pause point; the filler covered the gap.
+                    exoHolder.setPaused(false)
+                    exoHolder.playTimeshift(livePauseWallMs - 1_000)
+                }
+                livePauseWallMs = 0L
+            }
+            else -> exoHolder.setPaused(!exoHolder.isPaused())
+        }
+    }
+    val seekWall: (Long) -> Unit = { target ->
+        // Read the buffer window FRESH from the writer at action
+        // time: the composed state snapshot can lag (the Streamer
+        // test turned a -30s skip into -122s off a stale head).
+        val w = timeshiftController.activeWriter
+        val head = w?.headWallMs ?: tsState.headWallMs
+        val tail = w?.tailWallMs ?: tsState.tailWallMs
+        if (target >= head - 5_000) {
+            exoHolder.goLive()
+        } else {
+            exoHolder.playTimeshift(target.coerceAtLeast(tail))
+        }
+    }
+    // ANDROID: Sidebar-style interface. Its own controls replace this
+    // chrome's on a live channel; catch-up, a stream outage (Retry lives in
+    // the standard controls) and the full Options menu keep the standard
+    // chrome, which also keeps its hidden-chrome HUDs (info card, scrub).
+    val tvInterfaceLayout by settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle()
+    val sidebarChrome = isTvForm && !isCatchupMode && !streamUnavailable && !chromeMenuOpen &&
+        tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR
     PlayerChromeOverlay(
         channel = currentChannel,
         nowProgramme = nowProgramme,
@@ -2927,54 +3002,11 @@ private fun LiveRewindChromeSection(
         catchupDurationMs = catchupDurationMs,
         onCatchupSeekTo = { target -> commitScrubCatchup(target) },
         isPlayerPaused = tsPaused,
-        onRewindTogglePause = {
-            when {
-                exoHolder.isTimeshifting -> {
-                    exoHolder.setPaused(!exoHolder.isPaused())
-                }
-                tsState.buffering && !exoHolder.isPaused() -> {
-                    // Cable-seamless pause: nothing switches, the frame
-                    // just freezes. The controller quietly brings up the
-                    // independent filler so the buffer keeps growing
-                    // underneath a long pause.
-                    livePauseWallMs = System.currentTimeMillis()
-                    exoHolder.setPaused(true)
-                    timeshiftController.onLivePaused()
-                }
-                tsState.buffering && exoHolder.isPaused() && livePauseWallMs > 0 -> {
-                    val pausedForMs = System.currentTimeMillis() - livePauseWallMs
-                    if (pausedForMs <= 6_000) {
-                        // Short pause: resume the untouched live
-                        // pipeline. Zero switch, zero glitch.
-                        exoHolder.setPaused(false)
-                        timeshiftController.onLiveResumedAtEdge()
-                    } else {
-                        // Long pause: one switch onto the buffer at the
-                        // pause point; the filler covered the gap.
-                        exoHolder.setPaused(false)
-                        exoHolder.playTimeshift(livePauseWallMs - 1_000)
-                    }
-                    livePauseWallMs = 0L
-                }
-                else -> exoHolder.setPaused(!exoHolder.isPaused())
-            }
-        },
-        onRewindSeekWall = { target ->
-            // Read the buffer window FRESH from the writer at action
-            // time: the composed state snapshot can lag (the Streamer
-            // test turned a -30s skip into -122s off a stale head).
-            val w = timeshiftController.activeWriter
-            val head = w?.headWallMs ?: tsState.headWallMs
-            val tail = w?.tailWallMs ?: tsState.tailWallMs
-            if (target >= head - 5_000) {
-                exoHolder.goLive()
-            } else {
-                exoHolder.playTimeshift(target.coerceAtLeast(tail))
-            }
-        },
+        onRewindTogglePause = togglePause,
+        onRewindSeekWall = seekWall,
         onGoLive = { exoHolder.goLive() },
         scrubPreviewWallMs = scrubTargetWallMs,
-        scrubHudVisible = scrubHudVisible,
+        scrubHudVisible = scrubHudVisible && !(sidebarChrome && chromeVisible),
         onScrubStep = scrubStep,
         onScrubCommit = {
             // OK on the focused timeline: commit the pending scrub
@@ -2984,8 +3016,8 @@ private fun LiveRewindChromeSection(
                 scrubTargetWallMs = null
             }
         },
-        chromeVisible = chromeVisible,
-        pillVisible = pillVisible,
+        chromeVisible = chromeVisible && !sidebarChrome,
+        pillVisible = pillVisible && !(sidebarChrome && chromeVisible),
         isTv = isTvForm,
         // Cast Connect (GH #33): phone/tablet Cast button, only on a build
         // with a registered Cast App ID. Live channels cast their identity to
@@ -3134,6 +3166,82 @@ private fun LiveRewindChromeSection(
         // they arrive as focus events rather than keys on some remotes.
         onInteraction = reportInteraction,
     )
+    if (sidebarChrome) {
+        val nextProgramme = remember(nowProgramme, epgByChannel, currentChannel) {
+            val end = nowProgramme?.endMillis ?: return@remember null
+            currentChannel?.let { epgByChannel[it.guideMatchKey] }
+                ?.filter { it.startMillis >= end }
+                ?.minByOrNull { it.startMillis }
+        }
+        val recents = remember(recentChannelIds, channels, currentChannel, epgByChannel) {
+            val byId = channels.associateBy { it.id }
+            recentChannelIds.asSequence()
+                .filter { it != currentChannel?.id }
+                .mapNotNull { byId[it] }
+                // Seven tiles fit a 960 dp TV row: TV guide, History, three
+                // channels, Clear, Options.
+                .take(3)
+                .map { ch -> SidebarRecent(ch, epgByChannel[ch.guideMatchKey]?.nowPlaying()) }
+                .toList()
+        }
+        val timeshifting = exoHolder.isTimeshifting
+        val formatChips = remember(formatBadge, boundPlayerForBadge) {
+            sidebarFormatChips(formatBadge, boundPlayerForBadge?.audioFormat?.channelCount)
+        }
+        SidebarPlayerChrome(
+            visible = chromeVisible,
+            channel = currentChannel,
+            nowProgramme = nowProgramme,
+            nextProgramme = nextProgramme,
+            formatChips = formatChips,
+            positionWallMs = scrubTargetWallMs
+                ?: (if (timeshifting) tsPositionWallMs else livePauseWallMs.takeIf { it > 0L }),
+            atLive = !timeshifting && livePauseWallMs == 0L,
+            canSeek = tsState.buffering,
+            // Rewind on but nothing buffered (HLS/DASH can't be teed, or the
+            // session hasn't started): an empty range, so the bar is grey all
+            // the way since nothing is reachable. Rewind off keeps the
+            // program-progress fill.
+            bufferRange = when {
+                tsState.buffering -> tsState.tailWallMs to tsState.headWallMs
+                liveRewindEnabled -> 0L to 0L
+                else -> null
+            },
+            isPaused = tsPaused,
+            canRecord = currentChannel?.dispatcharrChannelId != null &&
+                com.aeriotv.android.ui.LocalDvrAccess.current == "manage",
+            recents = recents,
+            onTogglePause = togglePause,
+            onRewind = { scrubStep(-1, false) },
+            onForward = { scrubStep(+1, false) },
+            onScrubStep = scrubStep,
+            onScrubCommit = {
+                // OK on the seek bar: commit now instead of after the debounce.
+                scrubTargetWallMs?.let { target ->
+                    commitScrubWall(target)
+                    scrubTargetWallMs = null
+                }
+            },
+            onRestartProgram = {
+                nowProgramme?.let { seekWall(maxOf(it.startMillis, tsState.tailWallMs)) }
+            },
+            onGoLive = { exoHolder.goLive() },
+            onRecord = { liveRecordTarget(currentChannel, nowProgramme)?.let { recordTarget = it } },
+            onOpenGuide = {
+                exoWindowState.onPlayerRemoteAction
+                    ?.invoke(com.aeriotv.android.core.remote.PlayerRemoteAction.MINIMIZE_TO_GUIDE)
+            },
+            onOpenHistory = {
+                onDismissChrome()
+                exoWindowState.onPlayerRemoteAction
+                    ?.invoke(com.aeriotv.android.core.remote.PlayerRemoteAction.RECENT_CHANNELS)
+            },
+            onTuneRecent = onTuneChannelId,
+            onClearHistory = settingsVm::clearRecentChannels,
+            onOpenOptions = { chromeMenuOpen = true },
+            onInteraction = reportInteraction,
+        )
+    }
 }
 
 // Leaving a catch-up replay (Back, or Go Back on the unavailable card): the

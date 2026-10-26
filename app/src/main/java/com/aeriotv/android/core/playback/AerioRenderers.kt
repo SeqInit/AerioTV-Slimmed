@@ -268,6 +268,56 @@ fun aerioRenderersFactory(
  * the Apple side, where the offset lives on the warm mpv instance. Not
  * persisted to disk.
  */
+/**
+ * ANDROID: HDR to SDR tone mapping for playback (Settings > Player > HDR to
+ * SDR). The stream itself never changes: the request goes to this box's own
+ * video decoder (MediaFormat.KEY_COLOR_TRANSFER_REQUEST, Android 13+), which
+ * maps the picture with the vendor's curve as it decodes, at no extra cost.
+ * The Cast HLS proxy's transcoder already relies on the same request
+ * (CastVideoTranscoder). Decoders may ignore it; [AerioMediaCodecVideoRenderer]
+ * logs whether this one honored it ("[HDR]" in AerioPlayerDiag).
+ *
+ * Read when a decoder is configured, so a change applies from the next tune.
+ */
+object HdrToneMap {
+    const val AUTO = "auto"
+    const val ALWAYS = "always"
+    const val OFF = "off"
+
+    @Volatile
+    var mode: String = AUTO
+
+    /**
+     * Whether a stream with [colorTransfer] (C.COLOR_TRANSFER_*) should come
+     * out of the decoder as SDR. Auto: only when the display cannot show that
+     * HDR format (HDR10 / HDR10+ need HDR10, HLG needs HLG).
+     */
+    fun wanted(context: Context, colorTransfer: Int): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return false
+        val hdrType = when (colorTransfer) {
+            androidx.media3.common.C.COLOR_TRANSFER_ST2084 -> android.view.Display.HdrCapabilities.HDR_TYPE_HDR10
+            androidx.media3.common.C.COLOR_TRANSFER_HLG -> android.view.Display.HdrCapabilities.HDR_TYPE_HLG
+            else -> return false
+        }
+        return when (mode) {
+            ALWAYS -> true
+            OFF -> false
+            else -> hdrType !in displayHdrTypes(context)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun displayHdrTypes(context: Context): IntArray {
+        val display = context.getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.getDisplay(android.view.Display.DEFAULT_DISPLAY) ?: return IntArray(0)
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            display.mode.supportedHdrTypes
+        } else {
+            display.hdrCapabilities?.supportedHdrTypes ?: IntArray(0)
+        }
+    }
+}
+
 object AudioSyncOffset {
     const val MIN_MS = -1000L
     const val MAX_MS = 1000L
@@ -399,6 +449,7 @@ private class AerioMediaCodecVideoRenderer(
     eventListener: VideoRendererEventListener?,
     maxDroppedFramesToNotify: Int,
     private val vetoCodecReuse: Boolean,
+    private val appContext: Context = context.applicationContext,
 ) : MediaCodecVideoRenderer(
     context,
     codecAdapterFactory,
@@ -470,6 +521,48 @@ private class AerioMediaCodecVideoRenderer(
         val parts = format.codecs?.split('.') ?: return false
         if (parts.size < 2) return false
         return parts[1].trim().toIntOrNull() == 7
+    }
+
+    /** The SDR request was made for the codec being configured (see [HdrToneMap]). */
+    private var sdrRequested = false
+
+    override fun getMediaCodecConfiguration(
+        codecInfo: MediaCodecInfo,
+        format: Format,
+        crypto: android.media.MediaCrypto?,
+        codecOperatingRate: Float,
+    ): MediaCodecAdapter.Configuration {
+        val config = super.getMediaCodecConfiguration(codecInfo, format, crypto, codecOperatingRate)
+        val transfer = format.colorInfo?.colorTransfer ?: androidx.media3.common.Format.NO_VALUE
+        sdrRequested = HdrToneMap.wanted(appContext, transfer)
+        if (sdrRequested && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            config.mediaFormat.setInteger(
+                android.media.MediaFormat.KEY_COLOR_TRANSFER_REQUEST,
+                android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO,
+            )
+            // debugLog, not Log.i: lands in the shareable debug log too, so
+            // a user can tell whether their decoder tone maps without adb.
+            com.aeriotv.android.core.debug.debugLog(
+                appContext, "AerioPlayerDiag",
+                "[HDR] requesting SDR output from ${codecInfo.name} (transfer=$transfer mode=${HdrToneMap.mode})",
+            )
+        }
+        return config
+    }
+
+    override fun onOutputFormatChanged(format: Format, mediaFormat: android.media.MediaFormat?) {
+        super.onOutputFormatChanged(format, mediaFormat)
+        if (!sdrRequested || mediaFormat == null) return
+        // A decoder that honors the request reports SDR video (3) as its
+        // output transfer; one that ignores it keeps reporting ST 2084 / HLG.
+        val outTransfer = runCatching {
+            mediaFormat.getInteger(android.media.MediaFormat.KEY_COLOR_TRANSFER)
+        }.getOrNull()
+        val honored = outTransfer == android.media.MediaFormat.COLOR_TRANSFER_SDR_VIDEO
+        com.aeriotv.android.core.debug.debugLog(
+            appContext, "AerioPlayerDiag",
+            "[HDR] SDR request ${if (honored) "HONORED" else "IGNORED"} by decoder (output color-transfer=$outTransfer)",
+        )
     }
 
     override fun supportsFormat(

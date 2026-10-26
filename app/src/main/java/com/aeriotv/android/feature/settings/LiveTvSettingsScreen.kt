@@ -300,12 +300,12 @@ fun LiveTvSettingsScreen(
                             title = "Interface Style",
                             options = listOf(
                                 SettingsPickerOption(TvInterfaceLayout.STANDARD, "Standard"),
-                                SettingsPickerOption(TvInterfaceLayout.TIVIMATE, "TiviMate Style"),
+                                SettingsPickerOption(TvInterfaceLayout.SIDEBAR, "Sidebar Style"),
                             ),
                             selected = tvInterfaceLayout,
                             onSelect = viewModel::setTvInterfaceLayout,
                             leadingIcon = Icons.Outlined.ViewAgenda,
-                            footer = "Standard uses the top tab bar and the Channel Preview banner. TiviMate Style replaces the tab bar with a left side menu and docks the preview player on the left of the guide, with program details beside it.",
+                            footer = "Standard uses the top tab bar and the Channel Preview banner. Sidebar Style replaces the tab bar with a left side menu and docks the preview player on the left of the guide, with program details beside it.",
                             tvChoiceSheet = true,
                         )
                     }

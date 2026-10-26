@@ -146,6 +146,13 @@ fun GuideGrid(
     onOpenJumpToDay: () -> Unit = {},
     /** Channel Preview layout: cells keep the title and tags (the banner carries the rest). */
     compact: Boolean = false,
+    /**
+     * ANDROID (Sidebar-style interface): Up / Down never leave the grid. A
+     * fresh press past the first row wraps to the last and past the last row
+     * wraps to the first; a held key stops at the edge instead of cycling the
+     * list. Off, Up at the top selects the clock and Down at the bottom stops.
+     */
+    wrapRows: Boolean = false,
     /** Host gate snapshot for the trace (AerioFocus [KEY]/[GUIDE] lines); read only when a line is logged. */
     traceGates: () -> String = { "" },
     /** Bumped by the host to park the cursor on the clock (Down from the banner, tvOS). */
@@ -372,6 +379,15 @@ fun GuideGrid(
                 Key.DirectionUp -> {
                     if (!down) return@handler true
                     if (!state.moveRows(-1)) {
+                        if (wrapRows) {
+                            if (repeat == 0 && state.rows.size > 1) {
+                                state.focusRowAt(state.rows.size - 1)
+                                traceBy = "grid-wrap->bottom"
+                            } else {
+                                traceBy = "grid-top-row(held, no wrap)"
+                            }
+                            return@handler true
+                        }
                         if (isTv) { traceBy = "grid-top-row->clock"; clockSelected = true; return@handler true }
                         if (onLeaveTop()) { traceBy = "grid-top-row->onLeaveTop"; return@handler true }
                         traceBy = "grid-top-row->topNav"
@@ -381,7 +397,14 @@ fun GuideGrid(
                     true
                 }
                 Key.DirectionDown -> {
-                    if (down) traceBy = if (state.moveRows(+1)) "grid-moveRows" else "grid-moveRows-refused"
+                    if (down) traceBy = when {
+                        state.moveRows(+1) -> "grid-moveRows"
+                        wrapRows && repeat == 0 && state.rows.size > 1 -> {
+                            state.focusRowAt(0)
+                            "grid-wrap->top"
+                        }
+                        else -> "grid-moveRows-refused"
+                    }
                     true
                 }
                 // Left/Right pan on RELEASE, not on press (Logan 2026-09-02): a

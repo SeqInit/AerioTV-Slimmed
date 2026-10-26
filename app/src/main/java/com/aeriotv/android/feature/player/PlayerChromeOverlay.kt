@@ -302,20 +302,7 @@ fun PlayerChromeOverlay(
     val canSwitchStream =
         LocalIsDispatcharrAdmin.current && channel?.dispatcharrChannelId != null
     val recordCurrent: () -> Unit = {
-        val target = nowProgramme?.toInfoTarget(channel?.name.orEmpty(), channel?.dispatcharrChannelId)
-            ?: channel?.let {
-                val now = System.currentTimeMillis()
-                ProgramInfoTarget(
-                    channelName = it.name,
-                    title = "${it.name} live recording",
-                    startMillis = now,
-                    endMillis = now + 3_600_000L,
-                    description = "",
-                    category = "",
-                    channelDispatcharrId = it.dispatcharrChannelId,
-                )
-            }
-        target?.let(onShowRecord)
+        liveRecordTarget(channel, nowProgramme)?.let(onShowRecord)
     }
 
     // Phase 170: one outer Box at root so both AnimatedVisibilities live
@@ -2450,6 +2437,24 @@ private fun SubtitleRow(label: String, selected: Boolean, onClick: () -> Unit) {
         )
     }
 }
+
+/** Record target for the channel playing now: the airing program, else a
+ *  generic 60-minute window when EPG is not loaded. Shared by the standard
+ *  chrome and the Sidebar-style chrome. */
+internal fun liveRecordTarget(channel: M3UChannel?, nowProgramme: EPGProgramme?): ProgramInfoTarget? =
+    nowProgramme?.toInfoTarget(channel?.name.orEmpty(), channel?.dispatcharrChannelId)
+        ?: channel?.let {
+            val now = System.currentTimeMillis()
+            ProgramInfoTarget(
+                channelName = it.name,
+                title = "${it.name} live recording",
+                startMillis = now,
+                endMillis = now + 3_600_000L,
+                description = "",
+                category = "",
+                channelDispatcharrId = it.dispatcharrChannelId,
+            )
+        }
 
 private fun formatRemaining(programme: EPGProgramme): String {
     val remainingMs = (programme.endMillis - System.currentTimeMillis()).coerceAtLeast(0L)

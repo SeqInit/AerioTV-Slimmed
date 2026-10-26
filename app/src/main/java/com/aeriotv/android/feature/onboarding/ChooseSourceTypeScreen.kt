@@ -185,8 +185,9 @@ fun ChooseSourceTypeScreen(
     }
 }
 
+/** Shared with ChooseInterfaceScreen, the other card-picker setup step. */
 @Composable
-private fun Modifier.tappable(onClick: () -> Unit): Modifier {
+internal fun Modifier.tappable(onClick: () -> Unit): Modifier {
     // Clip to the SourceTypeCard rounded shape BEFORE the clickable so the D-pad
     // focus indication follows the rounded corners, not a squared rectangle.
     // Touch press shows the same accent wash + ring the TV focus ring uses.

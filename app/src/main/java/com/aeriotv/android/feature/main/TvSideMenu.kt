@@ -51,16 +51,20 @@ import androidx.compose.ui.unit.sp
 import com.aeriotv.android.ui.tv.tvFocusScale
 
 /**
- * ANDROID (no Apple counterpart): the TiviMate-style TV interface's main
- * menu, replacing TvTopTabBar in that layout. A full-height panel on the
- * left over a dimmed screen: Search, every tab, then Refresh (and the Keep
- * Recent Channels Live indicator while it has channels). It is hidden until
- * opened (Back from a tab root, or Back from the guide's groups panel) and
- * closes on selection or Right. Back while it is open is [onBack] (TiviMate:
- * Back from the main menu is the way out of the app, so the host raises the
- * Exit AerioTV? prompt). The BackHandler lives in here, composed only while
- * the menu is open, so it is always the newest registration and outranks
- * every tab's own handler.
+ * ANDROID (no Apple counterpart): the Sidebar-style TV interface's main
+ * menu, replacing TvTopTabBar in that layout. A full-height column on the
+ * left: the app name, Search and the tabs, then Refresh (and the Keep Recent
+ * Channels Live indicator while it has channels) and Settings at the foot,
+ * pinned at the foot. It does NOT dim or cover the screen: the
+ * host pushes the content right by [TvSideMenuWidth] (LocalTvSideMenuWidth),
+ * and on the guide the groups column stays open beside it.
+ *
+ * Opened by Back from a tab root, Back or Left from the guide's groups
+ * column. Right closes it (back to the groups column when that is open).
+ * Back while it is open is [onBack] (Back from the main menu is the
+ * way out of the app, so the host raises the Exit AerioTV? prompt). The
+ * BackHandler lives in here, composed only while the menu is open, so it is
+ * always the newest registration and outranks every tab's own handler.
  *
  * Selection does NOT follow focus here, unlike the top bar: walking the menu
  * must never cold-build each tab it passes (the E-5 perf hazard the bar
@@ -78,8 +82,9 @@ internal fun TvSideMenu(
     onBack: () -> Unit,
 ) {
     androidx.activity.compose.BackHandler(onBack = onBack)
-    val items = remember(tabs) { listOf(AppTab.Search) + tabs }
-    val requesters = remember(items) { items.associateWith { FocusRequester() } }
+    val items = remember(tabs) { listOf(AppTab.Search) + tabs.filter { it != AppTab.Settings } }
+    val hasSettings = AppTab.Settings in tabs
+    val requesters = remember(tabs) { (items + AppTab.Settings).associateWith { FocusRequester() } }
     var menuHasFocus by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         // Keep asking until the menu has HELD focus for a few frames: the
@@ -95,106 +100,70 @@ internal fun TvSideMenu(
         }
         com.aeriotv.android.ui.tv.TvFocusTrace.guide("tv-side-menu focus held=$menuHasFocus attempts=$attempts")
     }
-    Box(
+    val cs = MaterialTheme.colorScheme
+    Column(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.55f)),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(TV_SIDE_MENU_WIDTH)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 12.dp, vertical = 24.dp)
-                // Focus stays in the menu until it closes: the screen behind
-                // is dimmed, and a stray Up / Down past the ends must not
-                // land on content the user cannot see properly.
-                .onFocusChanged { menuHasFocus = it.hasFocus }
-                .focusGroup()
-                .focusProperties {
-                    @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
-                    run { exit = { FocusRequester.Cancel } }
+            .fillMaxHeight()
+            .width(TvSideMenuWidth)
+            .background(cs.surface)
+            .padding(horizontal = 12.dp, vertical = 20.dp)
+            // Focus stays in the menu until it closes: a stray Up / Down past
+            // the ends must not land on content behind it.
+            .onFocusChanged { menuHasFocus = it.hasFocus }
+            .focusGroup()
+            .focusProperties {
+                @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+                run { exit = { FocusRequester.Cancel } }
+            }
+            .onPreviewKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) {
+                    onDismiss(); true
+                } else {
+                    false
                 }
-                .onPreviewKeyEvent { e ->
-                    if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionRight) {
-                        onDismiss(); true
-                    } else {
-                        false
-                    }
-                },
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                "AerioTV",
-                fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
+            },
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            "AerioTV",
+            fontSize = 26.sp, fontWeight = FontWeight.Medium,
+            color = cs.primary,
+            modifier = Modifier.padding(start = 12.dp, bottom = 28.dp),
+        )
+        Spacer(Modifier.weight(0.6f))
+        items.forEach { tab ->
+            com.aeriotv.android.ui.tv.TvPanelRow(
+                label = tab.label,
+                icon = if (tab == selected) tab.iconSelected else tab.iconUnselected,
+                selected = tab == selected,
+                onClick = { onSelect(tab) },
+                modifier = Modifier.focusRequester(requesters.getValue(tab)),
             )
-            items.forEach { tab ->
-                TvSideMenuRow(
-                    label = tab.label,
-                    icon = if (tab == selected) tab.iconSelected else tab.iconUnselected,
-                    selected = tab == selected,
-                    onClick = { onSelect(tab) },
-                    modifier = Modifier.focusRequester(requesters.getValue(tab)),
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            if (retainedCount > 0) {
-                TvSideMenuRow(
-                    label = "Live Channels ($retainedCount)",
-                    icon = Icons.Filled.Refresh,
-                    selected = false,
-                    onClick = onRetainedClick,
-                )
-            }
-            TvSideMenuRow(
-                label = "Refresh",
+        }
+        Spacer(Modifier.weight(1f))
+        if (retainedCount > 0) {
+            com.aeriotv.android.ui.tv.TvPanelRow(
+                label = "Live Channels ($retainedCount)",
                 icon = Icons.Filled.Refresh,
-                selected = false,
-                onClick = { onRefresh(); onDismiss() },
+                onClick = onRetainedClick,
+            )
+        }
+        com.aeriotv.android.ui.tv.TvPanelRow(
+            label = "Refresh",
+            icon = Icons.Filled.Refresh,
+            onClick = { onRefresh(); onDismiss() },
+        )
+        if (hasSettings) {
+            com.aeriotv.android.ui.tv.TvPanelRow(
+                label = AppTab.Settings.label,
+                icon = AppTab.Settings.iconSelected,
+                selected = selected == AppTab.Settings,
+                onClick = { onSelect(AppTab.Settings) },
+                modifier = Modifier.focusRequester(requesters.getValue(AppTab.Settings)),
             )
         }
     }
 }
 
-@Composable
-private fun TvSideMenuRow(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(8.dp)
-    val ink = when {
-        focused -> colors.onPrimary
-        selected -> colors.primary
-        else -> colors.onSurfaceVariant
-    }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .tvFocusScale(focused, focusedScale = 1.03f)
-            .clip(shape)
-            .background(if (focused) colors.primary else Color.Transparent)
-            .border(1.dp, if (selected && !focused) colors.primary.copy(alpha = 0.5f) else Color.Transparent, shape)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Icon(imageVector = icon, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
-        Text(
-            label, fontSize = 14.sp,
-            fontWeight = if (selected || focused) FontWeight.SemiBold else FontWeight.Medium,
-            color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-private val TV_SIDE_MENU_WIDTH = 240.dp
+/** Width of the Sidebar-style side menu; the host pushes content right by this. */
+internal val TvSideMenuWidth = 210.dp

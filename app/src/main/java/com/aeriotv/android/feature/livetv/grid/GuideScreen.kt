@@ -76,6 +76,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import com.aeriotv.android.feature.player.MiniPlayerChrome
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -226,17 +227,17 @@ fun GuideScreen(
     val stagingOn by multiviewStore.isStaging.collectAsStateWithLifecycle()
     val mvPlayingSeed by multiviewStore.playingSeed.collectAsStateWithLifecycle()
     val groupSelector by settingsVm.guideGroupSelector.collectAsStateWithLifecycle()
-    // ANDROID: TiviMate-style TV interface. It implies its own guide layout
+    // ANDROID: Sidebar-style TV interface. It implies its own guide layout
     // (preview header, groups in a left panel over the guide) whatever the
     // Guide Layout / Group Selection / Sidebar Layout settings say, which
     // keep applying to the Standard interface only.
     val tvInterfaceLayout by settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle()
-    val tivimateLayout = isTv && tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.TIVIMATE
-    val sidebarGroupMode = isTv && (groupSelector == "sidebar" || tivimateLayout) && !favoritesOnly
+    val sidebarInterface = isTv && tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR
+    val sidebarGroupMode = isTv && (groupSelector == "sidebar" || sidebarInterface) && !favoritesOnly
     // Sidebar layout (Logan 2026-09-14): "shift" docks the pane beside the
     // grid, which narrows instead of being covered; "overlay" keeps the scrim.
     val guideSidebarLayout by settingsVm.guideSidebarLayout.collectAsStateWithLifecycle()
-    val sidebarShiftMode = isTv && guideSidebarLayout == "shift" && !tivimateLayout
+    val sidebarShiftMode = isTv && guideSidebarLayout == "shift" && !sidebarInterface
     // Phone group selector (Logan 2026-09-05, Apple parity): drawer by
     // default, pills on request. Separate preference from the TV's.
     val phoneGroupSelector by settingsVm.phoneGroupSelector.collectAsStateWithLifecycle()
@@ -281,7 +282,7 @@ fun GuideScreen(
     // above the guide carries the focused program; rows keep title + tags
     // and are shorter (tvOS 96 vs 110 pt).
     val liveTvLayout by settingsVm.liveTvLayout.collectAsStateWithLifecycle()
-    val previewMode = isTv && (liveTvLayout == "preview" || tivimateLayout)
+    val previewMode = isTv && (liveTvLayout == "preview" || sidebarInterface)
     // Subtext Size grows rows only (never shrinks them) by the share of the
     // row that holds secondary lines (subtitle, description, time).
     val subtextGrowth = com.aeriotv.android.ui.scale.LocalSubtextScale.current.let { s ->
@@ -1004,11 +1005,11 @@ fun GuideScreen(
             },
         )
     }
-    // TiviMate: the main menu, one step out from the groups panel.
+    // Sidebar style: the main menu, one step out from the groups panel.
     val openMainMenu = com.aeriotv.android.feature.main.LocalTvRequestCurrentTabPill.current
     val openGroupMenu: () -> Boolean = {
-        // Favorites has no groups; in TiviMate its Back goes to the menu.
-        if (favoritesOnly) tivimateLayout && openMainMenu?.invoke() == true
+        // Favorites has no groups; in the sidebar style its Back goes to the menu.
+        if (favoritesOnly) sidebarInterface && openMainMenu?.invoke() == true
         else if (sidebarGroupMode) {
             sidebarOriginalGroup = state.selectedGroup
             groupSidebarOpen = true
@@ -1133,12 +1134,20 @@ fun GuideScreen(
             runCatching { gridFocus.requestFocus() }
         }
     }
-    // TiviMate: Back from the groups panel steps out to the main menu.
+    // Sidebar style: Back from the groups column steps out to the main menu,
+    // which opens BESIDE it (the column stays). Standard:
+    // Back reverts the previewed group and closes the sidebar.
     BackHandler(enabled = tabActive && groupSidebarOpen) {
+        if (sidebarInterface && openMainMenu?.invoke() == true) return@BackHandler
         restoreSidebarGroup()
         sidebarOriginalGroup = null
         groupSidebarOpen = false
-        if (!(tivimateLayout && openMainMenu?.invoke() == true)) runCatching { gridFocus.requestFocus() }
+        runCatching { gridFocus.requestFocus() }
+    }
+    // Sidebar style: the menu closed (Right) with the groups column still open:
+    // focus returns to the column. topNavHasFocus is the menu's open flag.
+    LaunchedEffect(topNavHasFocus.value) {
+        if (sidebarInterface && !topNavHasFocus.value && groupSidebarOpen) sidebarRefocusRequest += 1
     }
 
     // With a mini player up on TV, Back belongs to the player host
@@ -1242,14 +1251,19 @@ fun GuideScreen(
             else -> { (gridRunner[0] ?: hostAction)(action) }
         }
     }
-    // TiviMate Back defaults (ANDROID): single Back opens the groups panel,
-    // hold Back goes full screen. They apply only while the slot still holds
-    // its Standard default, so a button the user remapped keeps their choice.
+    // Sidebar-style Back defaults (ANDROID): single Back first re-centres the
+    // guide on now when the timeline was paged forward or back (user directive
+    // 2026-10-25; the row stays, unlike the Standard ladder's jump to the top),
+    // and at now opens the groups panel; hold Back goes full screen. They apply
+    // only while the slot still holds its Standard default, so a button the
+    // user remapped keeps their choice.
     val guideBackAction: (com.aeriotv.android.core.remote.RemoteSlot) -> com.aeriotv.android.core.remote.GuideRemoteAction = { slot ->
         val mapped = remoteMap.guideAction(slot, sidebarGroupMode)
         val untouched = mapped == com.aeriotv.android.core.remote.RemoteControlMap.DEFAULT.guideAction(slot, sidebarGroupMode)
         when {
-            !tivimateLayout || !untouched -> mapped
+            !sidebarInterface || !untouched -> mapped
+            slot == com.aeriotv.android.core.remote.RemoteSlot.BACK_SHORT &&
+                grid.isAwayFromNow(System.currentTimeMillis()) -> com.aeriotv.android.core.remote.GuideRemoteAction.JUMP_TO_NOW
             slot == com.aeriotv.android.core.remote.RemoteSlot.BACK_SHORT -> com.aeriotv.android.core.remote.GuideRemoteAction.FOCUS_GROUP_PILLS
             slot == com.aeriotv.android.core.remote.RemoteSlot.BACK_LONG -> com.aeriotv.android.core.remote.GuideRemoteAction.RESUME_PLAYER
             else -> mapped
@@ -1262,9 +1276,9 @@ fun GuideScreen(
             runGuideBackLadder()
         }
     }
-    // TiviMate: the guide keeps Back while the preview plays (the mini
+    // Sidebar style: the guide keeps Back while the preview plays (the mini
     // overlay's expand-on-Back is off in that layout; hold Back expands).
-    val guideBackEnabled = tabActive && !(miniActive && uiModeTv && !tivimateLayout) && !groupSidebarOpen && menuFor == null && programInfoTarget == null && recordTarget == null
+    val guideBackEnabled = tabActive && !(miniActive && uiModeTv && !sidebarInterface) && !groupSidebarOpen && menuFor == null && programInfoTarget == null && recordTarget == null
     BackHandler(enabled = guideBackEnabled) {
         if (miniActive) android.util.Log.i("AerioTV", "[GUIDE] Back with mini up (touch): guide ladder, app stays open")
         if (miniPlayerVm.session.expandInFlight()) {
@@ -1318,7 +1332,18 @@ fun GuideScreen(
     }
 
     var guideTopPx by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    Box(modifier = modifier.fillMaxSize().onGloballyPositioned { guideTopPx = it.positionInRoot().y }
+    // Sidebar style: the open groups column pushes the guide right by its width
+    // (the side menu's push is the scaffold's, on top of this). The docked
+    // preview moves with it, and the mini follows its published rect.
+    val sideMenuWidth = com.aeriotv.android.feature.main.LocalTvSideMenuWidth.current
+    var groupsColumnWidthPx by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val groupsPush by androidx.compose.animation.core.animateIntAsState(
+        targetValue = if (sidebarInterface && groupSidebarOpen) groupsColumnWidthPx else 0,
+        label = "sidebarGroupsPush",
+    )
+    Box(modifier = modifier.fillMaxSize()
+        .offset { androidx.compose.ui.unit.IntOffset(groupsPush, 0) }
+        .onGloballyPositioned { guideTopPx = it.positionInRoot().y }
         .onFocusChanged { guideHasFocus = it.hasFocus }
         .onPreviewKeyEvent { e ->
             if (e.type == KeyEventType.KeyDown) lastGuideKeyAt[0] = System.currentTimeMillis()
@@ -1395,7 +1420,7 @@ fun GuideScreen(
         if (previewMode) {
             val topNav = com.aeriotv.android.feature.main.LocalTvTopNavFocusRequester.current
             val pillsShown = !sidebarGroupMode && !favoritesOnly
-            if (tivimateLayout) TiviMateGuideHeader(
+            if (sidebarInterface) SidebarGuideHeader(
                 program = previewProgram,
                 channel = previewChannel,
                 nowMs = nowMs,
@@ -1595,6 +1620,8 @@ fun GuideScreen(
                     }
                 },
                 compact = previewMode,
+                // Sidebar style: the cursor stays in the guide; Up / Down wrap.
+                wrapRows = sidebarInterface,
                 clockSelectTrigger = clockSelectTrigger,
                 // GH #127: phone / tablet cell info button (TV has the long-press menu).
                 programInfoButtonMode = programInfoButtonMode,
@@ -1649,22 +1676,37 @@ fun GuideScreen(
         val guideTop = with(density) { guideTopPx.toDp() }
         val drawerSlot = com.aeriotv.android.feature.main.LocalTvFullScreenOverlay.current
         val drawerOverlay: @Composable () -> Unit = {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
-            GuideGroupSidebarPane(
-                groups = groups,
-                selectedToken = state.selectedGroup,
-                defaultToken = defaultGroupToken,
-                onSetDefault = viewModel::setDefaultGroup,
-                // TiviMate: the panel opens under the header, beside the
-                // channel column, so the docked preview above stays clear.
-                topOffset = guideTop + if (tivimateLayout) TiviMateGuideHeader.height else drawerTop,
-                onPreview = previewSidebarGroup,
-                onCommit = commitSidebarGroup,
-                refocusToken = sidebarActiveToken,
-                refocusRequest = sidebarRefocusRequest,
-                onManageGroups = openSidebarManageGroups,
-                hiddenGroupCount = hiddenGroups.size,
-            )
+            // Sidebar style: no dimming; the column sits at full height beside the
+            // side menu (when open) and the guide is pushed right instead.
+            if (!sidebarInterface) Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
+            Box(
+                modifier = if (sidebarInterface) {
+                    Modifier
+                        .offset { androidx.compose.ui.unit.IntOffset(sideMenuWidth.value.roundToPx(), 0) }
+                        .onSizeChanged { groupsColumnWidthPx = it.width }
+                        .onPreviewKeyEvent { e ->
+                            // Left from the groups column opens the main menu.
+                            e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft &&
+                                openMainMenu?.invoke() == true
+                        }
+                } else {
+                    Modifier
+                },
+            ) {
+                GuideGroupSidebarPane(
+                    groups = groups,
+                    selectedToken = state.selectedGroup,
+                    defaultToken = defaultGroupToken,
+                    onSetDefault = viewModel::setDefaultGroup,
+                    topOffset = if (sidebarInterface) 0.dp else guideTop + drawerTop,
+                    onPreview = previewSidebarGroup,
+                    onCommit = commitSidebarGroup,
+                    refocusToken = sidebarActiveToken,
+                    refocusRequest = sidebarRefocusRequest,
+                    onManageGroups = openSidebarManageGroups,
+                    hiddenGroupCount = hiddenGroups.size,
+                )
+            }
         }
         if (drawerSlot != null || sidebarShiftMode) {
             // As with Jump To: the shell reseats focus (Refresh circle) once
@@ -1678,7 +1720,7 @@ fun GuideScreen(
                 if (!drawerWasOpen) return@LaunchedEffect
                 drawerWasOpen = false
                 repeat(3) { androidx.compose.runtime.withFrameNanos { } }
-                // TiviMate: Back from the panel opened the main menu, which
+                // Sidebar style: Back from the panel opened the main menu, which
                 // owns focus now.
                 if (topNavHasFocus.value) return@LaunchedEffect
                 val requested = runCatching { gridFocus.requestFocus() }.getOrDefault(false)

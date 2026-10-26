@@ -142,7 +142,17 @@ fun SettingsIconTile(
 
 /** The grouped card fill: the theme surface, a shade lighter than the page. */
 @Composable
-fun settingsCardFill(): Color = MaterialTheme.colorScheme.surface
+fun settingsCardFill(): Color =
+    if (LocalSettingsFlatStyle.current) Color.Transparent else MaterialTheme.colorScheme.surface
+
+/**
+ * ANDROID (Sidebar-style TV interface): Settings pages hosted in the
+ * right-hand Settings panel render FLAT: no row cards, a
+ * lighter band behind the focused row instead of the accent ring, and plain
+ * accent section headings. Provided by SettingsSidebarPanelHost; every page
+ * picks it up through the shared row chrome, so no page changes.
+ */
+val LocalSettingsFlatStyle = androidx.compose.runtime.staticCompositionLocalOf { false }
 
 /** Hairline divider color between rows inside a grouped card. */
 @Composable
@@ -180,6 +190,17 @@ fun SettingsSectionHeader(
     modifier: Modifier = Modifier,
     color: androidx.compose.ui.graphics.Color? = null,
 ) {
+    if (LocalSettingsFlatStyle.current) {
+        // Sidebar style: sentence-case accent heading, no tracking.
+        Text(
+            text = text,
+            fontSize = 14.sp,
+            color = color ?: MaterialTheme.colorScheme.textAccent,
+            fontWeight = FontWeight.Medium,
+            modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 4.dp),
+        )
+        return
+    }
     Text(
         text = text.uppercase(),
         style = settingsEyebrowStyle().copy(letterSpacing = 0.9.sp),
@@ -267,6 +288,14 @@ fun Modifier.settingsRowCard(
     // (Logan on the Streamer). Interior rows keep the tighter row radius.
     val isTv = rememberIsTvDevice() && !LocalTvGroupedCard.current
     if (LocalSuppressRowChrome.current) return this
+    if (LocalSettingsFlatStyle.current) {
+        // A light band, not the side menu's near-white pill: pages draw their own
+        // text colours, and white text has to stay readable on the band.
+        val band = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+        return this
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (focused) band else Color.Transparent)
+    }
     val realTv = rememberIsTvDevice()
     val outer = if (realTv) TvSettingsRowCardCorner else SettingsCardMetrics.cardCorner
     val shape = if (isTv) RoundedCornerShape(TvSettingsRowCardCorner) else RoundedCornerShape(

@@ -2750,13 +2750,18 @@ class AerioExoPlayerHolder @Inject constructor(
         // Wrapping here means the tee survives LAN/WAN failover and the
         // stall-watchdog re-prime, both of which come back through
         // buildMediaSource with a fresh connection.
+        // The source is bound to the channel it was built for (playUrl
+        // stamps the id before building; re-primes keep it): the session
+        // now keeps rolling behind the mini player, so a direct-to-mini
+        // retune must not tee the new channel into the old buffer.
         val rawTs = isRawTsUrl(url)
         var dataSourceFactory: androidx.media3.datasource.DataSource.Factory =
             httpDataSourceFactory(rawTs)
         if (rawTs) {
+            val teeChannelId = currentChannelIdForRebuild
             dataSourceFactory = com.aeriotv.android.core.timeshift.TeeDataSource.Factory(
                 ServerHlsGuard.Factory(dataSourceFactory),
-            ) { timeshift.get().activeWriter }
+            ) { timeshift.get().teeWriterFor(teeChannelId) }
         }
         // Byte-flow accounting for [TUNE] firstByte and the [FEED] lines. The
         // progressive TS load never "completes", so onLoadCompleted alone

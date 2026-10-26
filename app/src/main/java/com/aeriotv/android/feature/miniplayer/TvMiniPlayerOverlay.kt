@@ -37,7 +37,7 @@ fun BoxScope.TvMiniPlayerOverlay(
     state: MiniPlayerSession.State,
     onResume: () -> Unit,
     onJumpToTop: () -> Unit,
-    /** False in the TiviMate-style TV interface (ANDROID): Back there opens
+    /** False in the Sidebar-style TV interface (ANDROID): Back there opens
      *  the guide's groups panel / the main menu, and hold Back expands. */
     enabled: Boolean = true,
 ) {

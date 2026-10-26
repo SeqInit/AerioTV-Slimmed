@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -219,6 +220,16 @@ val LocalTvChromeScroll =
  * the whole shell (tab bar included) without a Dialog window. The guide's
  * Jump To sheet uses it so its scrim covers the bar (Logan 2026-09-10).
  */
+/**
+ * ANDROID (Sidebar-style interface): how far the open side menu pushes the
+ * content right (0 when closed), animated. The guide reads it to place its
+ * groups column beside the menu and push itself further by that column.
+ */
+val LocalTvSideMenuWidth =
+    staticCompositionLocalOf<androidx.compose.runtime.State<androidx.compose.ui.unit.Dp>> {
+        androidx.compose.runtime.mutableStateOf(0.dp)
+    }
+
 val LocalTvFullScreenOverlay =
     staticCompositionLocalOf<androidx.compose.runtime.MutableState<(@Composable () -> Unit)?>?> { null }
 
@@ -820,18 +831,21 @@ fun MainScaffold(
     // of a second on Live TV before settling on Favorites").
     val focusPill = remember { mutableStateOf<((AppTab) -> Boolean)?>(null) }
     val backFocusScope = androidx.compose.runtime.rememberCoroutineScope()
-    // ANDROID: TiviMate-style TV interface (Settings > Live TV > Interface
+    // ANDROID: Sidebar-style TV interface (Settings > Live TV > Interface
     // Style). The top tab bar gives way to TvSideMenu; Back from a tab root
-    // opens that menu instead of returning to the home tab (TiviMate).
+    // opens that menu instead of returning to the home tab (sidebar style).
     val tvInterfaceLayout by settingsVm.tvInterfaceLayout.collectAsStateWithLifecycle()
-    val tivimateShell = rememberLiveTvFormFactor().isTv &&
-        tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.TIVIMATE
+    val sidebarShell = rememberLiveTvFormFactor().isTv &&
+        tvInterfaceLayout == com.aeriotv.android.core.preferences.TvInterfaceLayout.SIDEBAR
     var sideMenuOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(tivimateShell) { if (!tivimateShell) sideMenuOpen = false }
-    androidx.activity.compose.BackHandler(enabled = tivimateShell && selectedTab != homeTab && !sideMenuOpen) {
+    // Sidebar style: Settings opens as a right-hand panel over the current tab
+    // rather than as a tab of its own.
+    var settingsPanelOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(sidebarShell) { if (!sidebarShell) { sideMenuOpen = false; settingsPanelOpen = false } }
+    androidx.activity.compose.BackHandler(enabled = sidebarShell && selectedTab != homeTab && !sideMenuOpen) {
         sideMenuOpen = true
     }
-    androidx.activity.compose.BackHandler(enabled = !tivimateShell && selectedTab != homeTab) {
+    androidx.activity.compose.BackHandler(enabled = !sidebarShell && selectedTab != homeTab) {
         val leaving = selectedTab
         val took = focusPill.value?.invoke(homeTab)
         selectedTab = homeTab
@@ -1028,11 +1042,11 @@ fun MainScaffold(
         // One stable lambda: a new one each recomposition would invalidate
         // every reader of this static CompositionLocal.
         val pillRequestersRef = androidx.compose.runtime.rememberUpdatedState(pillRequesters)
-        // TiviMate: there is no bar to land on; "go to the nav" opens the menu.
-        val tivimateRef = androidx.compose.runtime.rememberUpdatedState(tivimateShell)
+        // Sidebar style: there is no bar to land on; "go to the nav" opens the menu.
+        val sidebarShellRef = androidx.compose.runtime.rememberUpdatedState(sidebarShell)
         val requestCurrentTabPill: () -> Boolean = remember {
             {
-                if (tivimateRef.value) {
+                if (sidebarShellRef.value) {
                     sideMenuOpen = true
                     true
                 } else {
@@ -1047,20 +1061,25 @@ fun MainScaffold(
         val chromeCollapsed = remember { mutableStateOf(false) }
         val chromeScroll = remember { mutableStateOf(0) }
         val fullScreenOverlay = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
+        // Sidebar style: the menu pushes the content instead of covering it.
+        val sideMenuShift = androidx.compose.animation.core.animateDpAsState(
+            targetValue = if (sidebarShell && sideMenuOpen) TvSideMenuWidth else 0.dp,
+            label = "tvSideMenuShift",
+        )
         val topNavHasFocusState: androidx.compose.runtime.MutableState<Boolean> = remember { mutableStateOf(false) }
         val tabEntryFocus: androidx.compose.runtime.MutableState<FocusRequester?> = remember { mutableStateOf(null) }
-        // TiviMate side menu close: give focus back to the content. Same tab
+        // Sidebar-style side menu close: give focus back to the content. Same tab
         // = the restorer's last-focused node; a new tab = its entry target
         // (it may need a frame or two to compose).
-        val tivimateContentFocus = remember { FocusRequester() }
+        val sidebarContentFocus = remember { FocusRequester() }
         // The open menu stands in for the bar in LocalTvTopNavHasFocus: the
         // guide's refocus loops (launch, sidebar close, tab entry) back off
         // while the nav holds focus, and without this they pulled focus
         // straight back to the grid the moment the menu opened.
         // Keyed, not a SideEffect: nothing in this scope reads sideMenuOpen
         // during composition, so a SideEffect never re-ran on open.
-        androidx.compose.runtime.LaunchedEffect(sideMenuOpen, tivimateShell) {
-            if (tivimateShell) topNavHasFocusState.value = sideMenuOpen
+        androidx.compose.runtime.LaunchedEffect(sideMenuOpen, settingsPanelOpen, sidebarShell) {
+            if (sidebarShell) topNavHasFocusState.value = sideMenuOpen || settingsPanelOpen
         }
         val sideMenuScope = androidx.compose.runtime.rememberCoroutineScope()
         val closeSideMenu: (Boolean) -> Unit = { switched ->
@@ -1068,23 +1087,24 @@ fun MainScaffold(
             sideMenuScope.launch {
                 androidx.compose.runtime.withFrameNanos { }
                 androidx.compose.runtime.withFrameNanos { }
-                val restored = !switched && runCatching { tivimateContentFocus.requestFocus() }.getOrDefault(false)
+                val restored = !switched && runCatching { sidebarContentFocus.requestFocus() }.getOrDefault(false)
                 val landed = restored ||
                     runCatching { tabEntryFocus.value?.requestFocus() }.getOrNull() == true ||
-                    runCatching { tivimateContentFocus.requestFocus() }.getOrDefault(false)
+                    runCatching { sidebarContentFocus.requestFocus() }.getOrDefault(false)
                 com.aeriotv.android.ui.tv.TvFocusTrace.guide("tv-side-menu close switched=$switched landed=$landed")
             }
         }
         CompositionLocalProvider(
-            // TiviMate: no bar, so no requester; every consumer is null-safe
+            // Sidebar style: no bar, so no requester; every consumer is null-safe
             // and keeps geometric focus instead.
-            LocalTvTopNavFocusRequester provides (if (tivimateShell) null else topNavRequester),
+            LocalTvTopNavFocusRequester provides (if (sidebarShell) null else topNavRequester),
             LocalTvTopNavHasFocus provides topNavHasFocusState,
             LocalTvTabEntryFocus provides tabEntryFocus,
             LocalTvRequestCurrentTabPill provides requestCurrentTabPill,
             LocalTvChromeCollapsed provides chromeCollapsed,
             LocalTvChromeScroll provides chromeScroll,
             LocalTvFullScreenOverlay provides fullScreenOverlay,
+            LocalTvSideMenuWidth provides sideMenuShift,
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
             // TV chrome is an OVERLAY, not a sibling above the content
@@ -1104,7 +1124,7 @@ fun MainScaffold(
             // 62dp is the bar's designed height (16 top + 34 capsule + 12
             // bottom); it only ever seeds the very first frame, after which
             // the measured height governs.
-            val barInset = if (tivimateShell) {
+            val barInset = if (sidebarShell) {
                 0.dp
             } else if (barHeightPx > 0) {
                 with(chromeDensity) { barHeightPx.toDp() }
@@ -1122,20 +1142,35 @@ fun MainScaffold(
             } else {
                 barInset - 12.dp
             }
-            androidx.compose.runtime.LaunchedEffect(barDrawnBottom, tivimateShell) {
-                // TiviMate: no bar; an undocked corner mini (a tab without the
+            androidx.compose.runtime.LaunchedEffect(barDrawnBottom, sidebarShell) {
+                // Sidebar style: no bar; an undocked corner mini (a tab without the
                 // guide header) sits 16 dp from the top.
                 com.aeriotv.android.feature.player.MiniPlayerChrome
-                    .topInsetDp.value = if (tivimateShell) 16f else barDrawnBottom.value + 4f
+                    .topInsetDp.value = if (sidebarShell) 16f else barDrawnBottom.value + 4f
             }
             // Stash the corner mini at the trailing edge while Settings is
             // the selected tab; cleared when the scaffold leaves composition
             // so a player / search route never inherits a stashed mini.
-            // The TiviMate side menu covers the left of the screen, where the
-            // docked preview sits, so it stashes the mini the same way.
-            androidx.compose.runtime.LaunchedEffect(selectedTab, sideMenuOpen) {
+            // The Sidebar-style side menu covers the left of the screen, where the
+            // docked preview sits, so it stashes the mini the same way. ONLY
+            // while docked: an undocked mini is already in the top-right
+            // corner, clear of the menu, and stashing it there pushed all but
+            // the sliver off screen.
+            val dockRect by com.aeriotv.android.feature.player.MiniPlayerChrome
+                .dockRectPx.collectAsStateWithLifecycle()
+            // The Settings panel sits on the right, over the corner mini (an
+            // undocked one); the docked preview on the left stays clear of it.
+            // The side menu pushes the docked preview along with the guide,
+            // so only the Settings panel can cover the mini.
+            val menuCoversMini = settingsPanelOpen && dockRect.width <= 0f
+            androidx.compose.runtime.LaunchedEffect(selectedTab, menuCoversMini) {
                 com.aeriotv.android.feature.player.MiniPlayerChrome
-                    .settingsStashed.value = selectedTab == AppTab.Settings || sideMenuOpen
+                    .settingsStashed.value = selectedTab == AppTab.Settings || menuCoversMini
+            }
+            // Sidebar style: a stashed mini leaves the screen entirely (user
+            // choice 2026-10-21); Standard keeps the tvOS sliver.
+            androidx.compose.runtime.LaunchedEffect(sidebarShell) {
+                com.aeriotv.android.feature.player.MiniPlayerChrome.stashFully.value = sidebarShell
             }
             androidx.compose.runtime.DisposableEffect(Unit) {
                 onDispose {
@@ -1185,11 +1220,11 @@ fun MainScaffold(
             //  - Live TV: a 16dp band under the bar holds the one-line strip.
             //  - Other tabs / fullscreen (Pending): none (no strip shown).
             val miniActive = miniPlayerState is MiniPlayerSession.State.Active
-            val showHintStrip = hintsEnabled && !tivimateShell &&
+            val showHintStrip = hintsEnabled && !sidebarShell &&
                 selectedTab == AppTab.LiveTV &&
                 miniPlayerState !is MiniPlayerSession.State.Pending
             val topHintGap = when {
-                tivimateShell -> 0.dp
+                sidebarShell -> 0.dp
                 selectedTab == AppTab.LiveTV &&
                     miniPlayerState !is MiniPlayerSession.State.Pending ->
                     16.dp
@@ -1210,7 +1245,7 @@ fun MainScaffold(
                 // initial focus it decides) is exactly what it was when the
                 // bar was the Column's first child; zIndex keeps it painted
                 // above the content it now overlaps.
-                if (!tivimateShell) Box(
+                if (!sidebarShell) Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
@@ -1273,11 +1308,12 @@ fun MainScaffold(
                         // while the bar collapses, so no tab (guide, Settings,
                         // media pages) sees its viewport resize mid-scroll.
                         .padding(top = barInset + topHintGap)
-                        // TiviMate: the menu reseats focus here on close, and
+                        .offset { androidx.compose.ui.unit.IntOffset(sideMenuShift.value.roundToPx(), 0) }
+                        // Sidebar style: the menu reseats focus here on close, and
                         // the restorer puts it back on whatever had it.
                         .then(
-                            if (tivimateShell) {
-                                Modifier.focusRequester(tivimateContentFocus).focusRestorer()
+                            if (sidebarShell) {
+                                Modifier.focusRequester(sidebarContentFocus).focusRestorer()
                             } else {
                                 Modifier
                             },
@@ -1292,8 +1328,8 @@ fun MainScaffold(
                         .focusGroup()
                         .focusProperties {
                             onExit = {
-                                // TiviMate has no pills: Up at the top of a tab stays put.
-                                if (!tivimateShell && requestedFocusDirection == androidx.compose.ui.focus.FocusDirection.Up) {
+                                // The sidebar style has no pills: Up at the top of a tab stays put.
+                                if (!sidebarShell && requestedFocusDirection == androidx.compose.ui.focus.FocusDirection.Up) {
                                     pillRequesters[selectedTab]?.requestFocus()
                                 }
                             }
@@ -1382,27 +1418,53 @@ fun MainScaffold(
                 }
             }
                         fullScreenOverlay.value?.invoke()
-                if (tivimateShell && sideMenuOpen) {
+                if (sidebarShell && sideMenuOpen) {
                     val menuActivity = androidx.compose.ui.platform.LocalContext.current
                     TvSideMenu(
                         tabs = tabs,
                         selected = selectedTab,
                         onSelect = { tab ->
-                            val switched = tab != selectedTab
-                            selectedTab = tab
-                            initialTabApplied = true
-                            closeSideMenu(switched)
+                            if (tab == AppTab.Settings) {
+                                // Sidebar style: Settings is a panel over the
+                                // current tab, not a tab switch.
+                                sideMenuOpen = false
+                                settingsPanelOpen = true
+                            } else {
+                                val switched = tab != selectedTab
+                                selectedTab = tab
+                                initialTabApplied = true
+                                closeSideMenu(switched)
+                            }
                         },
                         onRefresh = { viewModel.refreshPlaylist() },
                         retainedCount = retainedList.size,
                         onRetainedClick = { closeSideMenu(false); showRetainedDialog = true },
                         onDismiss = { closeSideMenu(false) },
-                        // TiviMate: Back from the main menu is the way out.
+                        // Sidebar style: Back from the main menu is the way out.
                         onBack = {
                             (menuActivity.findActivity() as? com.aeriotv.android.MainActivity)
                                 ?.requestExitPrompt("tv-side-menu")
                         },
                     )
+                }
+                if (sidebarShell && settingsPanelOpen) {
+                    // Back on the category list closes the panel. Registered
+                    // before the panel's own content, so the page / push
+                    // handlers inside it (registered later) win while enabled.
+                    androidx.activity.compose.BackHandler {
+                        settingsPanelOpen = false
+                        closeSideMenu(false)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3f)
+                            .background(Color.Black.copy(alpha = 0.6f)),
+                    ) {
+                        CompositionLocalProvider(LocalTabIsActive provides true) {
+                            SettingsTabContent(playlistViewModel = viewModel, sidebarPanel = true)
+                        }
+                    }
                 }
             }
         }
@@ -2890,6 +2952,9 @@ private fun SettingsTabContent(
     // minted a second PlaylistViewModel (full bootstrap re-run) the moment
     // Settings opened - same leak as LiveTVTabContent's old default.
     playlistViewModel: PlaylistViewModel,
+    /** ANDROID: Sidebar-style interface, hosted in the right-hand panel
+     *  (SettingsSidebarPanelHost) instead of the full-screen TV rail. */
+    sidebarPanel: Boolean = false,
 ) {
     // Phase B2: one saveable back stack replaces the six independent booleans
     // plus `section`. "Innermost" is now literal (stack order) instead of being
@@ -3260,7 +3325,24 @@ private fun SettingsTabContent(
     }
 
     Box(modifier = Modifier.focusRequester(settingsContentFocus).focusGroup()) {
-        if (tvRail) {
+        if (tvRail && sidebarPanel) {
+            com.aeriotv.android.feature.settings.SettingsSidebarPanelHost(
+                selection = selection,
+                onSelect = { picked ->
+                    nav.popToRoot()
+                    selection = picked
+                },
+                pushed = route,
+                sections = visibleSettingsSections(
+                    isTv = true,
+                    updaterEnabled = updaterEnabled,
+                    role = activeRole,
+                ),
+                activePlaylistName = playlistState.playlist?.name,
+                takeover = ::isSettingsTakeover,
+                detail = { renderRoute(it) },
+            )
+        } else if (tvRail) {
             SettingsTvRailHost(
                 focusPaneSignal = deepLinkPaneFocus,
                 selection = selection,

@@ -312,7 +312,7 @@ fun GuidePreviewBanner(
 internal data class PreviewArt(val url: String?, val known: Boolean)
 
 /**
- * The art lookup behind the Channel Preview banner, shared with the TiviMate
+ * The art lookup behind the Channel Preview banner, shared with the Sidebar-style
  * header (ANDROID) so both surfaces resolve and cache art the same way.
  */
 @Composable
