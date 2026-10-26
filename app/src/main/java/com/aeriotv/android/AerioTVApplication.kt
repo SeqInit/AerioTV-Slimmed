@@ -38,9 +38,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
- * Hilt Application + WorkManager Configuration.Provider so DriveSyncWorker can
- * have its Hilt-provided dependencies (DriveSyncManager, AppPreferences) injected
- * via @HiltWorker. Without the Configuration.Provider hook WorkManager auto-init
+ * Hilt Application + WorkManager Configuration.Provider so PlaylistRefreshWorker
+ * can have its Hilt-provided dependencies injected via @HiltWorker. Without the Configuration.Provider hook WorkManager auto-init
  * runs first and constructs workers via the default reflective factory, which
  * doesn't know about Hilt.
  *

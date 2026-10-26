@@ -50,8 +50,7 @@ import kotlinx.serialization.json.contentOrNull
  * default profile named after its login), add / rename / remove, and the
  * switch flow. Xtream and M3U playlists never get a profile.
  *
- * PHASE 2 HOOKS: Drive sync of profiles (DriveSyncManager runs under
- * ProfileScope.defaultOnly() today), TV launch picker.
+ * PHASE 2 HOOKS: TV launch picker.
  */
 @Singleton
 class ProfileManager @Inject constructor(

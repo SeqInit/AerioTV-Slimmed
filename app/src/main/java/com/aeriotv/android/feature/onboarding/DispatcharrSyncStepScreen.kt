@@ -1,6 +1,5 @@
 package com.aeriotv.android.feature.onboarding
 
-import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,12 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import com.aeriotv.android.core.preferences.AppPreferences
-import com.aeriotv.android.core.sync.DriveSyncWorker
 import com.aeriotv.android.core.sync.dsync.DispatcharrSyncManager
 import com.aeriotv.android.ui.scale.subtext
 import com.aeriotv.android.ui.settings.dpadFocusRing
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -57,18 +54,15 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class DispatcharrSyncStepViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val prefs: AppPreferences,
     private val dsync: DispatcharrSyncManager,
 ) : ViewModel() {
 
     suspend fun alreadyOn(): Boolean = prefs.syncProviderOnce() == DispatcharrSyncManager.PROVIDER
 
-    /** Same rules as SyncSettingsViewModel.setSyncProvider("dispatcharr"): Drive goes off. */
+    /** Same as Settings > Sync's Dispatcharr Sync switch. */
     suspend fun turnOn(fromCard: Boolean = false) {
         prefs.setSyncProvider(DispatcharrSyncManager.PROVIDER)
-        prefs.setSyncMasterEnabled(false)
-        DriveSyncWorker.cancel(context)
         Log.i(TAG, if (fromCard) "[DSYNC] enabled from onboarding (sync card)" else "[DSYNC] enabled from onboarding")
         val ok = dsync.awaitFirstPull()
         Log.i(TAG, "[DSYNC] onboarding first pull ${if (ok) "done" else "not finished; continuing"}")

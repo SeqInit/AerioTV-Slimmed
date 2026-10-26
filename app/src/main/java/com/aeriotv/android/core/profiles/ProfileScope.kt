@@ -55,7 +55,7 @@ object ProfileScope {
 
     @Volatile private var overlay: Overlay? = null
 
-    /** Set when a coroutine runs under [defaultOnly] (Drive sync). */
+    /** Set when a coroutine runs under [defaultOnly]. */
     private val forcedDefault = ThreadLocal<Boolean?>()
 
     /** The token the CURRENT caller sees: "" under [defaultOnly]. */

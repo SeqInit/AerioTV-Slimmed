@@ -249,15 +249,13 @@ fun MoviesAndTvShowsSettingsScreen(
 private const val VOD_REFRESH_FOOTNOTE =
     "Live TV channels refresh on every launch. Movies and TV Shows open from the saved library and re-sweep the provider on this schedule. Pull down on either tab to refresh right away."
 
-// Apple's footers say iCloud Keychain; Android carries the key in the Sync
-// snapshot to the user's own Google Drive app data (AppPreferences sync
-// export), so the sentence names that instead. The rest is Apple's text.
-private const val TMDB_SYNC_SENTENCE =
-    "If Sync is enabled, your key is saved to your Google Drive app data and syncs to your other devices."
-private const val TMDB_FOOTER_PHONE = TMDB_SYNC_SENTENCE +
-    " Get a free key at themoviedb.org under Settings, then API; paste either the API Key or the Read Access Token. With a key, artwork and details for Movies and TV Shows come from TMDB first and your provider fills any gaps."
-private const val TMDB_FOOTER_TV = TMDB_SYNC_SENTENCE +
-    " Get a free key at themoviedb.org; paste either the API Key or the Read Access Token. With a key, artwork and details for Movies and TV Shows come from TMDB first and your provider fills any gaps."
+// Apple's footers open with an iCloud Keychain sentence; the key stays on
+// this device here (Dispatcharr Sync does not carry it), so that sentence is
+// dropped. The rest is Apple's text.
+private const val TMDB_FOOTER_PHONE =
+    "Get a free key at themoviedb.org under Settings, then API; paste either the API Key or the Read Access Token. With a key, artwork and details for Movies and TV Shows come from TMDB first and your provider fills any gaps."
+private const val TMDB_FOOTER_TV =
+    "Get a free key at themoviedb.org; paste either the API Key or the Read Access Token. With a key, artwork and details for Movies and TV Shows come from TMDB first and your provider fills any gaps."
 
 /**
  * Apple iOS scaleSliderRow_iOS: title with the percent small and dim at the

@@ -359,11 +359,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     /** TV guide group-selector style: "pills" (top row) or "sidebar". */
-    /** Read-only mirror of the Drive sync master switch, for the Settings root
-     *  row value. Writing still belongs to SyncSettingsViewModel. */
-    val syncMasterEnabled: kotlinx.coroutines.flow.Flow<Boolean> = prefs.syncMasterEnabled
-
-    /** Settings root / rail Sync subtitle: the provider, Off / Google Drive / Dispatcharr. */
+    /** Settings root / rail Sync subtitle: Off / Dispatcharr. */
     val syncProviderLabel: kotlinx.coroutines.flow.Flow<String> = prefs.syncProvider.map { syncProviderLabel(it) }
 
     val guideGroupSelector: StateFlow<String> = prefs.guideGroupSelector
@@ -733,9 +729,8 @@ class SettingsViewModel @Inject constructor(
 }
 
 
-/** "off" | "drive" | "dispatcharr" -> the Sync row subtitle. */
+/** "off" | "dispatcharr" -> the Sync row subtitle. */
 fun syncProviderLabel(provider: String): String = when (provider) {
-    "drive" -> "Google Drive"
     "dispatcharr" -> "Dispatcharr"
     else -> "Off"
 }

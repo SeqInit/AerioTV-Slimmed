@@ -52,7 +52,7 @@ class EncryptingPlaylistDao(
     // (fetches, auth broker, capability gating, VOD/DVR cache identities)
     // act as that user with no changes. Writes divert those columns into the
     // profile record so the playlist row keeps the default login. Under
-    // ProfileScope.defaultOnly() (Drive sync) reads and writes are raw.
+    // ProfileScope.defaultOnly() reads and writes are raw.
     private fun PlaylistEntity.overlaid(): PlaylistEntity {
         val o = ProfileScope.overlayFor(id) ?: return this
         return copy(

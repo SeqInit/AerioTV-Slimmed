@@ -405,7 +405,6 @@ private fun saveMiniProgress(
     if (pos > 0L && dur > 0L && s.player.playbackState != Player.STATE_ENDED) {
         saveVodProgress(watchVm, id, s.info.title, s.info.posterUrl, pos, dur, s.info.meta)
     }
-    com.aeriotv.android.core.sync.DriveSyncWorker.enqueueOneShotPush(context.applicationContext)
 }
 
 /**

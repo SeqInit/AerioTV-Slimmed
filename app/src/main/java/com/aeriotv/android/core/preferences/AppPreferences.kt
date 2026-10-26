@@ -101,6 +101,17 @@ private val Context.appDataStore: DataStore<Preferences> by preferencesDataStore
  * values are dropped on the next DataStore open (see the migration above).
  */
 private val RETIRED_PREF_KEYS = setOf(
+    // Google Drive sync
+    "sync_master_enabled",
+    "sync_account_email",
+    "sync_last_push_at",
+    "sync_last_pull_at",
+    "sync_access_token",
+    "sync_token_expiry",
+    "sync_initial_pull_done",
+    "credentials_sync_disclosed",
+    "syncCategory.playlists",
+    "syncCategory.credentials",
     // Cast (developer transcode switches)
     "cast_force_hevc_transcode",
     "cast_transcode_down_profile",
@@ -1518,17 +1529,6 @@ class AppPreferences @Inject constructor(
         }
     }
 
-    // ── Drive Sync ──────────────────────────────────────────────────────
-    //
-    // Mirrors iOS Settings > iCloud Sync. Per-category toggles control which
-    // snapshots get pushed/pulled on each manual sync. Last push/pull
-    // timestamps drive the UI's "Last synced 5 min ago" caption.
-
-    val syncMasterEnabled: Flow<Boolean> = store.data.map { it[KEY_SYNC_MASTER] ?: false }
-    suspend fun setSyncMasterEnabled(value: Boolean) {
-        store.edit { it[KEY_SYNC_MASTER] = value }
-    }
-
     /**
      * Audit task #48: master toggle for the periodic PlaylistRefreshWorker.
      * Default `true` so a fresh install gets the warm-cache benefit without
@@ -1592,56 +1592,6 @@ class AppPreferences @Inject constructor(
         store.edit { it[booleanPreferencesKey(category.enabledStorageKey())] = value }
     }
 
-    val syncAccountEmail: Flow<String> = store.data.map { it[KEY_SYNC_ACCOUNT_EMAIL] ?: "" }
-    /** One-shot read of the saved sync account email. Blank when the user has
-     * never signed in to Drive, used to gate silent re-authorization. */
-    suspend fun syncAccountEmailOnce(): String = syncAccountEmail.first()
-
-    /**
-     * Persist the Drive access token + its (estimated) expiry so a signed-in
-     * session survives process death. The access token is short-lived (~1h),
-     * so [expiryMs] is a conservative wall-clock deadline after which callers
-     * should refresh rather than trust the cached value.
-     */
-    suspend fun saveSyncToken(token: String, expiryMs: Long) {
-        // Encrypted at rest (audit task #53). Device-local OAuth token, never
-        // part of the Drive snapshot, so plain Keystore encryption is enough.
-        val stored = cipher.encrypt(token) ?: token
-        store.edit { prefs ->
-            prefs[KEY_SYNC_ACCESS_TOKEN] = stored
-            prefs[KEY_SYNC_TOKEN_EXPIRY] = expiryMs
-        }
-    }
-
-    /** Saved (token, expiryMs) pair, or null when none is stored. */
-    suspend fun syncTokenOnce(): Pair<String, Long>? {
-        val prefs = store.data.first()
-        val raw = prefs[KEY_SYNC_ACCESS_TOKEN]?.takeIf { it.isNotBlank() } ?: return null
-        // decrypt() returns the legacy plaintext unchanged, the real token for
-        // ciphertext, or null if the Keystore key was lost -> treat as signed out.
-        val token = cipher.decrypt(raw)?.takeIf { it.isNotBlank() } ?: return null
-        val expiry = prefs[KEY_SYNC_TOKEN_EXPIRY] ?: 0L
-        return token to expiry
-    }
-
-    suspend fun clearSyncToken() {
-        store.edit { prefs ->
-            prefs.remove(KEY_SYNC_ACCESS_TOKEN)
-            prefs.remove(KEY_SYNC_TOKEN_EXPIRY)
-        }
-    }
-    suspend fun setSyncAccountEmail(value: String) {
-        store.edit { prefs ->
-            if (value.isBlank()) prefs.remove(KEY_SYNC_ACCOUNT_EMAIL)
-            else prefs[KEY_SYNC_ACCOUNT_EMAIL] = value
-        }
-    }
-
-    val syncLastPushAt: Flow<Long> = store.data.map { it[KEY_SYNC_LAST_PUSH] ?: 0L }
-    suspend fun setSyncLastPushAt(value: Long) {
-        store.edit { it[KEY_SYNC_LAST_PUSH] = value }
-    }
-
     /**
      * One-time guard for the post-upgrade pass that re-encrypts existing
      * plaintext playlist credentials at rest (audit task #53). Idempotent: the
@@ -1654,251 +1604,22 @@ class AppPreferences @Inject constructor(
         store.edit { it[KEY_CREDS_ENCRYPTED_V1] = value }
     }
 
-    /**
-     * Whether the one-time "your server credentials sync to your Drive in
-     * cleartext" disclosure has been shown (audit task #53). Server credentials
-     * are encrypted at rest on-device, but the Drive AppData snapshot carries
-     * them in cleartext so any of the user's devices can restore them with no
-     * re-typing; this flag gates a single up-front notice of that trust model.
-     */
-    val credentialsSyncDisclosed: Flow<Boolean> =
-        store.data.map { it[KEY_CREDENTIALS_SYNC_DISCLOSED] ?: false }
-    suspend fun setCredentialsSyncDisclosed(value: Boolean) {
-        store.edit { it[KEY_CREDENTIALS_SYNC_DISCLOSED] = value }
-    }
-
-    val syncLastPullAt: Flow<Long> = store.data.map { it[KEY_SYNC_LAST_PULL] ?: 0L }
-
-    /**
-     * True once THIS INSTALL has completed at least one Drive pull. Gates
-     * every automatic push (periodic worker, Sync Now's push leg): a fresh
-     * blank install that signs in must never shove empty snapshots over a
-     * populated Drive backup (user report: "my saved config keeps getting
-     * overwritten with a blank app"). Device-local, never synced.
-     */
-    val syncInitialPullDone: Flow<Boolean> =
-        store.data.map { it[KEY_SYNC_INITIAL_PULL_DONE] ?: false }
-    suspend fun setSyncInitialPullDone(value: Boolean) {
-        store.edit { it[KEY_SYNC_INITIAL_PULL_DONE] = value }
-    }
-    suspend fun setSyncLastPullAt(value: Long) {
-        store.edit { it[KEY_SYNC_LAST_PULL] = value }
-    }
-
-    /**
-     * Snapshot the keys we sync via Drive, the user-facing UI bits, not
-     * device-local network/buffer settings. Returns a string-encoded map so
-     * the wire format stays type-agnostic for cross-platform compatibility.
-     */
-    suspend fun snapshotSyncablePreferences(): Map<String, String> {
-        val data = store.data.first()
-        val out = mutableMapOf<String, String>()
-        data[KEY_SELECTED_THEME]?.let { out["selectedTheme"] = it }
-        data[KEY_TEXT_SCALE]?.let { out["textScale"] = it.toString() }
-        data[KEY_SUBTEXT_SCALE]?.let { out["subtextScale"] = it.toString() }
-        data[KEY_TEXT_CONTRAST]?.let { out["textContrast"] = it.toString() }
-        // Appearance mode is the OPPOSITE of defaultLiveTVView: it MUST sync so
-        // the user's Dark/Light/System choice follows them to every device.
-        data[KEY_APPEARANCE_MODE]?.let { out["appearanceMode"] = it }
-        data[KEY_APPEARANCE_TRUE_BLACK]?.let { out["appearanceTrueBlack"] = it.toString() }
-        data[KEY_DEFAULT_TAB]?.let { out["defaultTab"] = it }
-        data[KEY_TIME_FORMAT]?.let { out["timeFormat"] = it }
-        // NOTE: defaultLiveTVView is intentionally NOT synced -- it is a per-device
-        // preference (the right default is form-factor specific: TV -> Guide,
-        // phone -> List). Syncing one global value made a phone's "list" clobber a
-        // TV's "guide" across devices. iOS keeps it per-device (@AppStorage) too.
-        data[KEY_SKIP_LOADING_SCREEN]?.let { out["skipLoadingScreen"] = it.toString() }
-        data[KEY_APPLE_TV_CHANNEL_FLIP]?.let { out["appleTVChannelFlip"] = it.toString() }
-        // Slice gate (see syncRemoteControlMap). Absent key reads as true, so
-        // existing installs are unchanged.
-        if (data[KEY_SYNC_REMOTE_CONTROL_MAP] != false) {
-            data[KEY_REMOTE_CONTROL_MAP]?.takeIf { it.isNotBlank() }?.let { out["remoteControlMap"] = it }
-        }
-        // Slice gate (see syncRadioModeByDefault). Absent reads as false: opt-in.
-        if (data[KEY_SYNC_RADIO_MODE_BY_DEFAULT] == true) {
-            data[KEY_RADIO_MODE_BY_DEFAULT]?.let { out["radioModeByDefault"] = it.toString() }
-        }
-        data[KEY_GUIDE_GROUP_SELECTOR]?.let { out["guideGroupSelector"] = it }
-        data[KEY_GUIDE_SIDEBAR_LAYOUT]?.let { out["guideSidebarLayout"] = it }
-        data[KEY_TV_INTERFACE_LAYOUT]?.let { out["tvInterfaceLayout"] = TvInterfaceLayout.normalize(it) }
-        data[KEY_PHONE_GROUP_SELECTOR]?.let { out["phoneGroupSelector"] = it }
-        data[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR]?.let { out["liveTvEdgeSwipeOpensSidebar"] = it.toString() }
-        data[KEY_GUIDE_TUNE_IN_MINI]?.let { out["guideTuneInMini"] = it.toString() }
-        data[KEY_GUIDE_PROGRAM_INFO_BUTTON]?.let { out["guideProgramInfoButton"] = it }
-        data[KEY_PLAYER_SHOW_CHANNEL_INFO_CARD]?.let { out["playerShowChannelInfoCard"] = it.toString() }
-        data[KEY_PROGRAM_INFO_BUTTON_GUIDE]?.let { out["programInfoButtonGuide"] = it.toString() }
-        data[KEY_PROGRAM_INFO_BUTTON_LIST]?.let { out["programInfoButtonList"] = it.toString() }
-        data[KEY_SHOW_REMOTE_HINTS]?.let { out["showRemoteHints"] = it.toString() }
-        // Per-device-type: both sync so a TV's choice mirrors to other TVs and a
-        // phone's to other phones, independently. Each device reads its own.
-        data[KEY_SHOW_EPG_BADGES_TV]?.let { out["showEpgBadgesTv"] = it.toString() }
-        data[KEY_SHOW_EPG_BADGES_MOBILE]?.let { out["showEpgBadgesMobile"] = it.toString() }
-        data[KEY_AUTO_RESUME_LAST_CHANNEL]?.let { out["autoResumeLastChannel"] = it.toString() }
-        // TMDB poster fallback: sync the toggle + the user's own key via Drive
-        // (their own Drive appData) so it carries across their devices, matching
-        // how playlist credentials sync.
-        data[KEY_PROGRAM_POSTERS_TMDB_ENABLED]?.let { out["programPostersTmdbEnabled"] = it.toString() }
-        // Stored encrypted; the Drive snapshot carries the cleartext key so the
-        // user's other devices can use it (decrypt here, the receiver re-encrypts
-        // in applySyncedPreferences). A corrupt/undecryptable value is omitted.
-        data[KEY_TMDB_API_KEY]?.let { cipher.decrypt(it)?.let { clear -> out["tmdbApiKey"] = clear } }
-        data[KEY_CATEGORY_MASTER_ENABLE]?.let { out["enableCategoryColors"] = it.toString() }
-        data[KEY_CATEGORY_CUSTOM_JSON]?.let { out["customCategoryColors.v1"] = it }
-        // Audit task #52: broaden Drive sync to match iOS coverage. iOS
-        // syncs hidden groups, accent color choice, and the custom accent
-        // hex string as part of the Preferences snapshot. Network /
-        // device-local prefs (homeSsids, buffer size, DVR folder, network
-        // timeout) intentionally stay un-synced because they're device
-        // specific.
-        data[KEY_HIDDEN_GROUPS]?.let { out["hiddenGroups.v1"] = it }
-        data[KEY_GROUP_ORDER]?.let { out["groupOrder.v1"] = it }
-        data[KEY_GROUP_SORT_MODE]?.let { out["groupSortMode.v1"] = it }
-        data[KEY_USE_CUSTOM_ACCENT]?.let { out["useCustomAccent"] = it.toString() }
-        data[KEY_CUSTOM_ACCENT_HEX]?.let { out["customAccentHex"] = it }
-        // Skip Intervals: one global pair that follows the user everywhere.
-        data[KEY_SKIP_BACK_SECONDS]?.let { out["skipBackSeconds"] = it.toString() }
-        data[KEY_SKIP_FORWARD_SECONDS]?.let { out["skipForwardSeconds"] = it.toString() }
-        ProgramCategory.entries.forEach { bucket ->
-            data[stringPreferencesKey(bucket.hexStorageKey)]?.let { out[bucket.hexStorageKey] = it }
-            data[booleanPreferencesKey(bucket.enabledStorageKey)]?.let { out[bucket.enabledStorageKey] = it.toString() }
-        }
-        return out
-    }
-
-    /** Reverse of [snapshotSyncablePreferences]. Best-effort decode. */
-    suspend fun applySyncedPreferences(keys: Map<String, String>, replace: Boolean = false) {
-        store.edit { prefs ->
-            // Explicit Pull from Drive REPLACES (owner decision, Settings
-            // phase 3, iPhone parity): a synced preference this device has
-            // set but the snapshot does not carry goes back to its default.
-            if (replace) {
-                val syncedKeys: Map<String, Preferences.Key<*>> = buildMap {
-                    put("selectedTheme", KEY_SELECTED_THEME)
-                    put("textScale", KEY_TEXT_SCALE)
-                    put("subtextScale", KEY_SUBTEXT_SCALE)
-                    put("textContrast", KEY_TEXT_CONTRAST)
-                    put("appearanceMode", KEY_APPEARANCE_MODE)
-                    put("appearanceTrueBlack", KEY_APPEARANCE_TRUE_BLACK)
-                    put("defaultTab", KEY_DEFAULT_TAB)
-                    put("timeFormat", KEY_TIME_FORMAT)
-                    put("skipLoadingScreen", KEY_SKIP_LOADING_SCREEN)
-                    put("appleTVChannelFlip", KEY_APPLE_TV_CHANNEL_FLIP)
-                    if (prefs[KEY_SYNC_REMOTE_CONTROL_MAP] != false) {
-                        put("remoteControlMap", KEY_REMOTE_CONTROL_MAP)
-                    }
-                    if (prefs[KEY_SYNC_RADIO_MODE_BY_DEFAULT] == true) {
-                        put("radioModeByDefault", KEY_RADIO_MODE_BY_DEFAULT)
-                    }
-                    put("guideGroupSelector", KEY_GUIDE_GROUP_SELECTOR)
-                    put("guideSidebarLayout", KEY_GUIDE_SIDEBAR_LAYOUT)
-                    put("tvInterfaceLayout", KEY_TV_INTERFACE_LAYOUT)
-                    put("phoneGroupSelector", KEY_PHONE_GROUP_SELECTOR)
-                    put("liveTvEdgeSwipeOpensSidebar", KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR)
-                    put("guideTuneInMini", KEY_GUIDE_TUNE_IN_MINI)
-                    put("guideProgramInfoButton", KEY_GUIDE_PROGRAM_INFO_BUTTON)
-                    put("playerShowChannelInfoCard", KEY_PLAYER_SHOW_CHANNEL_INFO_CARD)
-                    put("programInfoButtonGuide", KEY_PROGRAM_INFO_BUTTON_GUIDE)
-                    put("programInfoButtonList", KEY_PROGRAM_INFO_BUTTON_LIST)
-                    put("showRemoteHints", KEY_SHOW_REMOTE_HINTS)
-                    put("showEpgBadgesTv", KEY_SHOW_EPG_BADGES_TV)
-                    put("showEpgBadgesMobile", KEY_SHOW_EPG_BADGES_MOBILE)
-                    put("autoResumeLastChannel", KEY_AUTO_RESUME_LAST_CHANNEL)
-                    put("programPostersTmdbEnabled", KEY_PROGRAM_POSTERS_TMDB_ENABLED)
-                    put("tmdbApiKey", KEY_TMDB_API_KEY)
-                    put("enableCategoryColors", KEY_CATEGORY_MASTER_ENABLE)
-                    put("customCategoryColors.v1", KEY_CATEGORY_CUSTOM_JSON)
-                    put("hiddenGroups.v1", KEY_HIDDEN_GROUPS)
-                    put("groupOrder.v1", KEY_GROUP_ORDER)
-                    put("groupSortMode.v1", KEY_GROUP_SORT_MODE)
-                    put("useCustomAccent", KEY_USE_CUSTOM_ACCENT)
-                    put("customAccentHex", KEY_CUSTOM_ACCENT_HEX)
-                    put("skipBackSeconds", KEY_SKIP_BACK_SECONDS)
-                    put("skipForwardSeconds", KEY_SKIP_FORWARD_SECONDS)
-                    ProgramCategory.entries.forEach { bucket ->
-                        put(bucket.hexStorageKey, stringPreferencesKey(bucket.hexStorageKey))
-                        put(bucket.enabledStorageKey, booleanPreferencesKey(bucket.enabledStorageKey))
-                    }
-                }
-                syncedKeys.forEach { (name, key) -> if (name !in keys) prefs.remove(key) }
-            }
-            keys["selectedTheme"]?.let { prefs[KEY_SELECTED_THEME] = it }
-            keys["textScale"]?.toFloatOrNull()?.let { prefs[KEY_TEXT_SCALE] = snapTextScale(it).toDouble() }
-            keys["subtextScale"]?.toFloatOrNull()?.let { prefs[KEY_SUBTEXT_SCALE] = snapTextScale(it).toDouble() }
-            keys["textContrast"]?.toFloatOrNull()?.let { prefs[KEY_TEXT_CONTRAST] = snapTextContrast(it).toDouble() }
-            keys["appearanceMode"]?.let { prefs[KEY_APPEARANCE_MODE] = it }
-            keys["appearanceTrueBlack"]?.toBooleanStrictOrNull()?.let { prefs[KEY_APPEARANCE_TRUE_BLACK] = it }
-            keys["defaultTab"]?.let { prefs[KEY_DEFAULT_TAB] = it }
-            keys["timeFormat"]?.let { prefs[KEY_TIME_FORMAT] = it }
-            // defaultLiveTVView is per-device now (see snapshotSyncablePreferences);
-            // ignore any legacy value carried in an older Drive snapshot so it can
-            // never re-clobber this device's form-factor default.
-            keys["skipLoadingScreen"]?.toBooleanStrictOrNull()?.let { prefs[KEY_SKIP_LOADING_SCREEN] = it }
-            keys["appleTVChannelFlip"]?.toBooleanStrictOrNull()?.let { prefs[KEY_APPLE_TV_CHANNEL_FLIP] = it }
-            if (prefs[KEY_SYNC_REMOTE_CONTROL_MAP] != false) {
-                keys["remoteControlMap"]?.let { prefs[KEY_REMOTE_CONTROL_MAP] = it }
-            }
-            if (prefs[KEY_SYNC_RADIO_MODE_BY_DEFAULT] == true) {
-                keys["radioModeByDefault"]?.toBooleanStrictOrNull()?.let { prefs[KEY_RADIO_MODE_BY_DEFAULT] = it }
-            }
-            keys["guideGroupSelector"]?.let { prefs[KEY_GUIDE_GROUP_SELECTOR] = it }
-            keys["guideSidebarLayout"]?.let { prefs[KEY_GUIDE_SIDEBAR_LAYOUT] = it }
-            keys["tvInterfaceLayout"]?.let(TvInterfaceLayout::normalize)?.takeIf { it in TvInterfaceLayout.VALUES }?.let { prefs[KEY_TV_INTERFACE_LAYOUT] = it }
-            keys["phoneGroupSelector"]?.let { prefs[KEY_PHONE_GROUP_SELECTOR] = it }
-            keys["liveTvEdgeSwipeOpensSidebar"]?.toBooleanStrictOrNull()
-                ?.let { prefs[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR] = it }
-            keys["guideTuneInMini"]?.toBooleanStrictOrNull()?.let { prefs[KEY_GUIDE_TUNE_IN_MINI] = it }
-            keys["guideProgramInfoButton"]?.takeIf { it in GuideProgramInfoButton.VALUES }
-                ?.let { prefs[KEY_GUIDE_PROGRAM_INFO_BUTTON] = it }
-            keys["playerShowChannelInfoCard"]?.toBooleanStrictOrNull()
-                ?.let { prefs[KEY_PLAYER_SHOW_CHANNEL_INFO_CARD] = it }
-            keys["programInfoButtonGuide"]?.toBooleanStrictOrNull()?.let { prefs[KEY_PROGRAM_INFO_BUTTON_GUIDE] = it }
-            keys["programInfoButtonList"]?.toBooleanStrictOrNull()?.let { prefs[KEY_PROGRAM_INFO_BUTTON_LIST] = it }
-            keys["showRemoteHints"]?.toBooleanStrictOrNull()?.let { prefs[KEY_SHOW_REMOTE_HINTS] = it }
-            keys["showEpgBadgesTv"]?.toBooleanStrictOrNull()?.let { prefs[KEY_SHOW_EPG_BADGES_TV] = it }
-            keys["showEpgBadgesMobile"]?.toBooleanStrictOrNull()?.let { prefs[KEY_SHOW_EPG_BADGES_MOBILE] = it }
-            keys["autoResumeLastChannel"]?.toBooleanStrictOrNull()?.let { prefs[KEY_AUTO_RESUME_LAST_CHANNEL] = it }
-            keys["programPostersTmdbEnabled"]?.toBooleanStrictOrNull()?.let { prefs[KEY_PROGRAM_POSTERS_TMDB_ENABLED] = it }
-            // Re-encrypt the incoming cleartext key for storage at rest.
-            keys["tmdbApiKey"]?.let { prefs[KEY_TMDB_API_KEY] = cipher.encrypt(it) ?: it }
-            keys["enableCategoryColors"]?.toBooleanStrictOrNull()?.let { prefs[KEY_CATEGORY_MASTER_ENABLE] = it }
-            keys["customCategoryColors.v1"]?.let { prefs[KEY_CATEGORY_CUSTOM_JSON] = it }
-            // Audit task #52: receive the broadened keys.
-            keys["hiddenGroups.v1"]?.let { prefs[KEY_HIDDEN_GROUPS] = it }
-            keys["groupOrder.v1"]?.let { prefs[KEY_GROUP_ORDER] = it }
-            keys["groupSortMode.v1"]?.let { prefs[KEY_GROUP_SORT_MODE] = it }
-            keys["useCustomAccent"]?.toBooleanStrictOrNull()?.let { prefs[KEY_USE_CUSTOM_ACCENT] = it }
-            keys["customAccentHex"]?.let { prefs[KEY_CUSTOM_ACCENT_HEX] = it }
-            keys["skipBackSeconds"]?.toIntOrNull()
-                ?.takeIf { it in com.aeriotv.android.core.ui.SkipIntervals.CHOICES }
-                ?.let { prefs[KEY_SKIP_BACK_SECONDS] = it }
-            keys["skipForwardSeconds"]?.toIntOrNull()
-                ?.takeIf { it in com.aeriotv.android.core.ui.SkipIntervals.CHOICES }
-                ?.let { prefs[KEY_SKIP_FORWARD_SECONDS] = it }
-            ProgramCategory.entries.forEach { bucket ->
-                keys[bucket.hexStorageKey]?.let { prefs[stringPreferencesKey(bucket.hexStorageKey)] = it }
-                keys[bucket.enabledStorageKey]?.toBooleanStrictOrNull()?.let {
-                    prefs[booleanPreferencesKey(bucket.enabledStorageKey)] = it
-                }
-            }
-        }
-    }
-
     // ── Dispatcharr Sync (docs/DispatcharrSyncSchema.md) ───────────────────
 
     /**
-     * Settings > Sync > Sync with: "off", "drive", or "dispatcharr". Unset
-     * follows the Drive master toggle so existing Drive users stay on Drive.
+     * Settings > Sync: "dispatcharr" while Dispatcharr Sync is on, else "off"
+     * (a stored "drive" from before Drive sync was removed reads as off).
      * Device-local, never synced.
      */
     val syncProvider: Flow<String> = store.data.map { p ->
-        p[KEY_SYNC_PROVIDER] ?: if (p[KEY_SYNC_MASTER] == true) "drive" else "off"
+        p[KEY_SYNC_PROVIDER]?.takeIf { it == "dispatcharr" } ?: "off"
     }
     suspend fun syncProviderOnce(): String = syncProvider.first()
     suspend fun setSyncProvider(value: String) {
         store.edit { it[KEY_SYNC_PROVIDER] = value }
     }
 
-    /** Category toggle read for Dispatcharr Sync (same toggles and defaults as Drive). */
+    /** Category toggle read for Dispatcharr Sync. */
     suspend fun syncCategoryEnabledOnce(category: SyncCategory): Boolean = syncCategoryEnabled(category).first()
     suspend fun syncRemoteControlMapOnce(): Boolean = syncRemoteControlMap.first()
     suspend fun syncRadioModeByDefaultOnce(): Boolean = syncRadioModeByDefault.first()
@@ -2532,7 +2253,6 @@ class AppPreferences @Inject constructor(
         val KEY_TMDB_API_KEY = stringPreferencesKey("tmdb_api_key")
         // Device-specific (depends on the TV / receiver); never synced.
         val KEY_AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough_enabled")
-        val KEY_SYNC_INITIAL_PULL_DONE = booleanPreferencesKey("sync_initial_pull_done")
         // In-app updater (github flavor); device-local, never synced.
         val KEY_UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
         val KEY_UPDATE_SKIPPED_VERSION = stringPreferencesKey("update_skipped_version")
@@ -2601,15 +2321,8 @@ class AppPreferences @Inject constructor(
         const val LIVE_START_BUFFER_MAX_ENTRIES = 200
         val KEY_CATEGORY_MASTER_ENABLE = booleanPreferencesKey(CategoryPaletteState.MASTER_ENABLED_KEY)
         val KEY_CATEGORY_CUSTOM_JSON = stringPreferencesKey(CategoryPaletteState.CUSTOM_KEY)
-        val KEY_SYNC_MASTER = booleanPreferencesKey("sync_master_enabled")
         val KEY_SYNC_PROVIDER = stringPreferencesKey("sync_provider")
-        val KEY_SYNC_ACCOUNT_EMAIL = stringPreferencesKey("sync_account_email")
-        val KEY_SYNC_LAST_PUSH = longPreferencesKey("sync_last_push_at")
-        val KEY_SYNC_LAST_PULL = longPreferencesKey("sync_last_pull_at")
-        val KEY_SYNC_ACCESS_TOKEN = stringPreferencesKey("sync_access_token")
-        val KEY_SYNC_TOKEN_EXPIRY = longPreferencesKey("sync_token_expiry")
         val KEY_CREDS_ENCRYPTED_V1 = booleanPreferencesKey("creds_encrypted_v1")
-        val KEY_CREDENTIALS_SYNC_DISCLOSED = booleanPreferencesKey("credentials_sync_disclosed")
         val KEY_BG_REFRESH_ENABLED = booleanPreferencesKey("background_refresh_enabled")
         val KEY_BG_REFRESH_INTERVAL_MINS = intPreferencesKey("background_refresh_interval_mins")
         val KEY_BG_REFRESH_TYPE = stringPreferencesKey("background_refresh_type")

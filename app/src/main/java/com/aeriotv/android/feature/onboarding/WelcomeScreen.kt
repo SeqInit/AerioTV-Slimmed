@@ -26,9 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Tv
@@ -59,7 +57,7 @@ import com.aeriotv.android.feature.onboarding.components.SourceTypeCard
 
 /**
  * Cold-start welcome surface. Mirrors iOS App Store screenshot IMG_1076: AerioTV
- * brand block + supported source types + Sync / Detect-Home-WiFi info cards +
+ * brand block + supported source types + Dispatcharr Sync card +
  * "Connect a Server" CTA + "Skip for now" link.
  *
  * Layout adapts to viewport: a short-but-wide screen (Android TV at 960dp x
@@ -71,17 +69,6 @@ import com.aeriotv.android.feature.onboarding.components.SourceTypeCard
 fun WelcomeScreen(
     onConnectServer: () -> Unit,
     onSkip: () -> Unit,
-    /**
-     * Optional Sign-in-with-Google handler. When provided, a pill appears
-     * between Connect-a-Server and Skip on the welcome screen so the user
-     * can authenticate Drive Sync up front instead of being routed back to
-     * Settings later. Setting this null hides the row entirely (e.g. on
-     * builds that ship without a Google Cloud OAuth client ID baked in).
-     */
-    onSignInWithGoogle: (() -> Unit)? = null,
-    googleSignInInProgress: Boolean = false,
-    /** Signed-in Google account, shown on the sync card in place of the chevron. */
-    googleSignedInEmail: String? = null,
     /** "Sync via Dispatcharr": opens the Direct Connect form, sync turns on after the connect. */
     onSyncViaDispatcharr: (() -> Unit)? = null,
 ) {
@@ -92,17 +79,14 @@ fun WelcomeScreen(
     // single column to mirror the tvOS welcome layout.
     val twoColumn = !isTv && config.screenWidthDp >= 720 && config.screenHeightDp < 720
 
-    if (twoColumn) WelcomeTwoColumn(onConnectServer, onSkip, onSignInWithGoogle, googleSignInInProgress, googleSignedInEmail, onSyncViaDispatcharr)
-    else WelcomeSingleColumn(onConnectServer, onSkip, onSignInWithGoogle, googleSignInInProgress, googleSignedInEmail, onSyncViaDispatcharr)
+    if (twoColumn) WelcomeTwoColumn(onConnectServer, onSkip, onSyncViaDispatcharr)
+    else WelcomeSingleColumn(onConnectServer, onSkip, onSyncViaDispatcharr)
 }
 
 @Composable
 private fun WelcomeSingleColumn(
     onConnectServer: () -> Unit,
     onSkip: () -> Unit,
-    onSignInWithGoogle: (() -> Unit)?,
-    googleSignInInProgress: Boolean,
-    googleSignedInEmail: String?,
     onSyncViaDispatcharr: (() -> Unit)?,
 ) {
     Box(
@@ -132,8 +116,6 @@ private fun WelcomeSingleColumn(
             Spacer(Modifier.height(22.dp))
             SupportedTypesGroup(alignStart = false)
             Spacer(Modifier.height(22.dp))
-            SyncCard(inProgress = googleSignInInProgress, signedInEmail = googleSignedInEmail, onClick = onSignInWithGoogle)
-            if (onSignInWithGoogle != null) Spacer(Modifier.height(12.dp))
             if (onSyncViaDispatcharr != null) {
                 DispatcharrSyncCard(onClick = onSyncViaDispatcharr)
                 Spacer(Modifier.height(12.dp))
@@ -149,9 +131,6 @@ private fun WelcomeSingleColumn(
 private fun WelcomeTwoColumn(
     onConnectServer: () -> Unit,
     onSkip: () -> Unit,
-    onSignInWithGoogle: (() -> Unit)?,
-    googleSignInInProgress: Boolean,
-    googleSignedInEmail: String?,
     onSyncViaDispatcharr: (() -> Unit)?,
 ) {
     Box(
@@ -160,7 +139,7 @@ private fun WelcomeTwoColumn(
             .background(MaterialTheme.colorScheme.background),
     ) {
         WelcomeAmbientOrbs(modifier = Modifier.fillMaxSize())
-        WelcomeTwoColumnRow(onConnectServer, onSkip, onSignInWithGoogle, googleSignInInProgress, googleSignedInEmail, onSyncViaDispatcharr)
+        WelcomeTwoColumnRow(onConnectServer, onSkip, onSyncViaDispatcharr)
     }
 }
 
@@ -168,9 +147,6 @@ private fun WelcomeTwoColumn(
 private fun WelcomeTwoColumnRow(
     onConnectServer: () -> Unit,
     onSkip: () -> Unit,
-    onSignInWithGoogle: (() -> Unit)?,
-    googleSignInInProgress: Boolean,
-    googleSignedInEmail: String?,
     onSyncViaDispatcharr: (() -> Unit)?,
 ) {
     Row(
@@ -204,8 +180,6 @@ private fun WelcomeTwoColumnRow(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.Center,
         ) {
-            SyncCard(inProgress = googleSignInInProgress, signedInEmail = googleSignedInEmail, onClick = onSignInWithGoogle)
-            if (onSignInWithGoogle != null) Spacer(Modifier.height(12.dp))
             if (onSyncViaDispatcharr != null) {
                 DispatcharrSyncCard(onClick = onSyncViaDispatcharr)
                 Spacer(Modifier.height(12.dp))
@@ -253,47 +227,6 @@ private fun SupportedTypesGroup(alignStart: Boolean = false) {
         SupportedTypeRow(icon = Icons.Filled.Tv, label = "Xtream Codes", alignStart = alignStart)
         SupportedTypeRow(icon = Icons.Filled.Description, label = "M3U + EPG", alignStart = alignStart)
     }
-}
-
-/**
- * Sync opt-in card, the Drive analog of the tvOS WelcomeView iCloud card: one
- * card with an On/Off status pill. On the welcome screen sync is always Off
- * (signing in transitions onboarding to the restore-progress screen), so the
- * card is the tap target that launches Google sign-in. Hidden entirely when
- * the build ships without an OAuth client id (onClick null).
- */
-@Composable
-private fun SyncCard(inProgress: Boolean, signedInEmail: String?, onClick: (() -> Unit)?) {
-    if (onClick == null) return
-    SourceTypeCard(
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(enabled = !inProgress, onClick = onClick),
-        icon = Icons.Filled.CloudOff,
-        title = "Sync via Google Account",
-        subtitle = if (signedInEmail != null) "Signed in as $signedInEmail"
-        else "Sign in to mirror playlists, watch progress, reminders, and preferences across your devices.",
-        trailing = {
-            when {
-                inProgress -> Text(
-                    text = "...",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                signedInEmail != null -> Icon(
-                    imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = "Signed in",
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                else -> Icon(
-                    imageVector = Icons.Filled.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-    )
 }
 
 /** Dispatcharr Sync entry: the Direct Connect form, then sync turns on by itself. */
