@@ -85,7 +85,6 @@ import com.aeriotv.android.core.tv.TvQrLink
 import com.aeriotv.android.core.tv.TvQrLinkDialog
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.ui.settings.SettingsNavRow
-import com.aeriotv.android.feature.whatsnew.WhatsNewSheetOnDemand
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsShowsBackArrow
@@ -200,7 +199,6 @@ fun SettingsScreen(
     // phones keep the ACTION_VIEW intent in openUrl.
     val isTv = rememberIsTvDevice()
     var qrLink by remember { mutableStateOf<TvQrLink?>(null) }
-    var showWhatsNew by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Apple TV draws no page title above the first section.
@@ -327,7 +325,6 @@ fun SettingsScreen(
             if (content == SettingsRootContent.AboutOnly) item("about") {
                 AboutSection(
                     showHeader = fullRoot,
-                    onShowWhatsNew = { showWhatsNew = true },
                     versionName = versionName,
                     versionCode = packageInfo?.longVersionCode ?: 0L,
                     installedAt = installedAt,
@@ -376,10 +373,6 @@ fun SettingsScreen(
             }
         }
         }
-    }
-
-    if (showWhatsNew) {
-        WhatsNewSheetOnDemand(onDismiss = { showWhatsNew = false })
     }
 
     qrLink?.let { link ->
@@ -782,7 +775,6 @@ private fun SectionNavRow(
 @Composable
 private fun AboutSection(
     showHeader: Boolean = true,
-    onShowWhatsNew: () -> Unit,
     versionName: String,
     versionCode: Long,
     installedAt: Long,
@@ -803,10 +795,7 @@ private fun AboutSection(
             RowDivider()
             AboutInfoRow("System", "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
             RowDivider()
-            AboutVersionRow(
-                value = "$versionName ($versionCode)",
-                onClick = onShowWhatsNew,
-            )
+            AboutInfoRow("App Version", "$versionName ($versionCode)")
             RowDivider()
             AboutInfoRow("First Installed", formatInstallTime(installedAt))
             RowDivider()
@@ -897,45 +886,6 @@ private fun AboutInfoRow(label: String, value: String) {
  * the installed build. The trailing "What's New" hint is the only affordance;
  * nothing about the launch-time gate changes.
  */
-@Composable
-private fun AboutVersionRow(value: String, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { focused = it.isFocused }
-            .groupRowFocus(focused)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "App Version",
-            style = settingsRowValueStyle().subtext(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = settingsRowValueStyle(),
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.size(10.dp))
-        Text(
-            // Apple: caption in textTertiary, dim chevron.
-            text = "What's New",
-            style = settingsFootnoteStyle().subtext(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-        )
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.size(16.dp),
-        )
-    }
-}
-
 @Composable
 private fun AboutActionRow(
     label: String,

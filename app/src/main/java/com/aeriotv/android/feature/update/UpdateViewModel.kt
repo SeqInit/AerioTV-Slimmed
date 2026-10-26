@@ -25,10 +25,6 @@ class UpdateViewModel @Inject constructor(
     val isEnabled: Boolean get() = manager.isEnabled
     val state: StateFlow<UpdateState> = manager.state
 
-    /** What's New sequencing: the launch prompt waits until the current
-     *  version's notes were seen/seeded so two sheets never stack. */
-    val lastSeenWhatsNewVersion: Flow<String> = appPreferences.lastSeenWhatsNewVersion
-
     fun autoCheck() = viewModelScope.launch { manager.check(manual = false) }
     fun manualCheck() = viewModelScope.launch { manager.check(manual = true) }
     fun resumePending() = viewModelScope.launch { manager.resumePending() }

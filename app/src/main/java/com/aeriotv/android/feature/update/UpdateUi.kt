@@ -51,13 +51,11 @@ import com.aeriotv.android.ui.settings.rememberIsTvDevice
 
 /**
  * Launch-prompt gate for the in-app updater (github flavor; renders nothing
- * when the flavor-bound manager is disabled). Mounted at the Navigation root
- * beside WhatsNewGate.
+ * when the flavor-bound manager is disabled). Mounted at the Navigation root.
  *
- * Sequencing rules: prompts only on the main tabs (never over the player,
- * multiview, or onboarding), only after the current version's What's New was
- * dismissed/seeded (no stacked sheets), at most once per session for a
- * version the user hasn't engaged with, and never for a version they chose
+ * Sequencing rules: prompts only on the main tabs (never over the player or
+ * onboarding), at most once per session for a version the user hasn't
+ * engaged with, and never for a version they chose
  * "Later" on. Engaged states (downloading, ready, installing) stay visible.
  */
 @Composable
@@ -65,7 +63,6 @@ fun UpdateGate(currentRoute: String?) {
     val vm: UpdateViewModel = hiltViewModel()
     if (!vm.isEnabled) return
     val state by vm.state.collectAsStateWithLifecycle()
-    val lastSeenWhatsNew by vm.lastSeenWhatsNewVersion.collectAsStateWithLifecycle(initialValue = null)
     var sessionDismissed by remember { mutableStateOf(false) }
 
     // Resume a staged update that survived a process death (unknown-sources
@@ -92,9 +89,8 @@ fun UpdateGate(currentRoute: String?) {
     }
 
     val onMainTabs = currentRoute == Routes.MAIN
-    val whatsNewSettled = lastSeenWhatsNew == BuildConfig.VERSION_NAME
     val visible = !sessionDismissed && onMainTabs && when (state) {
-        is UpdateState.Available -> whatsNewSettled
+        is UpdateState.Available -> true
         is UpdateState.Downloading,
         is UpdateState.Verifying,
         is UpdateState.ReadyToInstall,

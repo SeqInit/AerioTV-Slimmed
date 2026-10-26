@@ -1,4 +1,4 @@
-package com.aeriotv.android.feature.whatsnew
+package com.aeriotv.android.feature.player
 
 import com.aeriotv.android.ui.scale.subtext
 import androidx.compose.foundation.layout.Column
@@ -36,11 +36,8 @@ import kotlinx.coroutines.launch
  * player showed no transport at all ("Still no playback controls").
  * This asks once, on the main tabs, whether to turn it on.
  *
- * Sequencing: renders only on [Routes.MAIN] (never over onboarding) and
- * waits until the What's New sheet has settled for this build
- * (lastSeenWhatsNewVersion == current), so the two never stack. New
- * installs therefore see it right after onboarding lands on the main
- * tabs; upgrades see it after dismissing What's New.
+ * Sequencing: renders only on [Routes.MAIN] (never over onboarding), so new
+ * installs see it right after onboarding lands on the main tabs.
  */
 @Composable
 fun LiveRewindPromptGate(currentRoute: String?) {
@@ -52,13 +49,11 @@ fun LiveRewindPromptGate(currentRoute: String?) {
     }
     val scope = rememberCoroutineScope()
     val onMainTabs = currentRoute == Routes.MAIN
-    val whatsNewSettled by prefs.lastSeenWhatsNewVersion.collectAsState(initial = null)
     var decided by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
 
-    LaunchedEffect(onMainTabs, whatsNewSettled) {
+    LaunchedEffect(onMainTabs) {
         if (decided || !onMainTabs) return@LaunchedEffect
-        if (whatsNewSettled != BuildConfig.VERSION_NAME) return@LaunchedEffect
         if (prefs.liveRewindPromptSeen.first()) {
             decided = true
             return@LaunchedEffect
@@ -118,7 +113,7 @@ fun LiveRewindPromptGate(currentRoute: String?) {
             ) { Text("Not Now") }
         },
     )
-    // TV: land D-pad focus on Enable (WhatsNewSheet retry pattern; the
+    // TV: land D-pad focus on Enable (retry pattern; the
     // dialog needs a frame or two before the requester is attached).
     LaunchedEffect(Unit) {
         repeat(10) {

@@ -59,7 +59,6 @@ import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.feature.playlist.nowPlaying
 import com.aeriotv.android.feature.reminders.ReminderBannerHost
 import com.aeriotv.android.feature.update.UpdateGate
-import com.aeriotv.android.feature.whatsnew.WhatsNewGate
 import com.aeriotv.android.ui.LocalCanRecordToServer
 import com.aeriotv.android.ui.LocalIsDispatcharrAdmin
 import com.aeriotv.android.ui.settings.rememberIsTvDevice
@@ -1586,21 +1585,15 @@ fun AerioTVNavHost(
             onOpenChannel = { channelId -> navController.navigate(Routes.player(channelId)) },
             modifier = Modifier.align(Alignment.TopCenter),
         )
-        // What's New sheet (Phase 137 / audit #46). Decides internally
-        // whether to show based on BuildConfig.VERSION_NAME vs the user's
-        // last-dismissed value; first-ever install is seeded silently so
-        // the onboarding flow isn't interrupted.
-        WhatsNewGate()
-
         // In-app updater prompt (github flavor; inert no-op on Play). Renders
-        // only on the main tabs, after What's New settles, and drives the
-        // throttled foreground update check.
+        // only on the main tabs and drives the throttled foreground update
+        // check.
         val updateBackStack by navController.currentBackStackEntryAsState()
         UpdateGate(currentRoute = updateBackStack?.destination?.route)
 
         // Live Rewind one-time feature prompt (task #145). Renders only on
-        // the main tabs after What's New settles, so prompts never stack.
-        com.aeriotv.android.feature.whatsnew.LiveRewindPromptGate(
+        // the main tabs.
+        com.aeriotv.android.feature.player.LiveRewindPromptGate(
             currentRoute = updateBackStack?.destination?.route,
         )
 
