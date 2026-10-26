@@ -3,9 +3,7 @@ package com.aeriotv.android.feature.settings
 import com.aeriotv.android.ui.scale.subtext
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,15 +13,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RadioButtonChecked
@@ -60,7 +55,6 @@ import com.aeriotv.android.ui.settings.settingsFormWidth
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
 import com.aeriotv.android.ui.settings.SettingsHeaderTextButton
 import com.aeriotv.android.ui.settings.dpadFocusRing
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 
 /**
@@ -142,7 +136,6 @@ fun PlaylistsScreen(
     val activeIdLive by viewModel.activeIdLive
         .collectAsStateWithLifecycle(initialValue = state.playlist?.id)
     val activeId = activeIdLive
-    val isTv = rememberIsTvDevice()
 
     var pendingDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
     // TV-only long-press menu target (Delete / Cancel).
@@ -160,30 +153,11 @@ fun PlaylistsScreen(
             },
             navigationIcon = {
                 // No back arrow on Android TV -- the remote BACK pops it.
-                if (!isTv) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
             },
             actions = {
-                if (isTv) {
-                    // Focusable pill inset to the overscan margin; a bare
-                    // IconButton has no visible D-pad focus state.
-                    SettingsHeaderTextButton(label = "Add", onClick = onAddPlaylist)
-                } else {
-                    IconButton(onClick = onAddPlaylist) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "Add playlist",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
+                // Focusable pill inset to the overscan margin; a bare
+                // IconButton has no visible D-pad focus state.
+                SettingsHeaderTextButton(label = "Add", onClick = onAddPlaylist)
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -197,8 +171,7 @@ fun PlaylistsScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = if (isTv) "No saved playlists. Select Add above to add one."
-                    else "No saved playlists. Tap + to add one.",
+                    text = "No saved playlists. Select Add above to add one.",
                     style = MaterialTheme.typography.bodyMedium.subtext(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -235,12 +208,8 @@ fun PlaylistsScreen(
                         // the detail's Actions section.
                         onTap = tvGuard.wrap { onOpenPlaylistDetail(pl.id) },
                         onLongPress = {
-                            if (isTv) {
-                                menuFor = pl
-                                tvGuard.arm()
-                            } else {
-                                pendingDelete = pl
-                            }
+                            menuFor = pl
+                            tvGuard.arm()
                         },
                         onSwipedToDelete = { pendingDelete = pl },
                         // Leading-radio tap activates, exactly as on the
@@ -308,7 +277,6 @@ private fun PlaylistRow(
 ) {
     // One playlist row on every surface (Logan 2026-09-18): leading radio,
     // name, "<Type> \u00B7 <N> channels", trailing chevron. Never the URL.
-    val isTv = rememberIsTvDevice()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -335,22 +303,7 @@ private fun PlaylistRow(
         // On TV the radio stays a pure glyph so the row keeps exactly one
         // focus stop; on touch it is its own 44dp control that activates the
         // playlist without opening the detail (Settings root parity).
-        if (!isTv && onActivate != null && !isActive) {
-            Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .requiredSize(44.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onActivate,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) { glyph() }
-            }
-        } else {
-            glyph()
-        }
+        glyph()
         Spacer(Modifier.size(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

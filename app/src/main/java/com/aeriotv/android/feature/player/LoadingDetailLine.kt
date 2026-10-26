@@ -119,11 +119,11 @@ private fun loadingDetail(
  * 32 dp on phone, 3 dp stroke. Nothing else in a player may draw a second one.
  */
 @Composable
-private fun LoadingSpinner(isTv: Boolean) {
+private fun LoadingSpinner() {
     CircularProgressIndicator(
         color = LocalAppTheme.current.accentPrimary,
         strokeWidth = 3.dp,
-        modifier = Modifier.size(if (isTv) 24.dp else 32.dp),
+        modifier = Modifier.size(24.dp),
     )
 }
 
@@ -141,10 +141,10 @@ private fun LoadingStatusText(status: String) {
 
 /** 9 sp on TV, 11 sp on phone, white 55 percent, monospaced digits, one line. */
 @Composable
-private fun DetailLineText(detail: String?, isTv: Boolean) {
+private fun DetailLineText(detail: String?) {
     Text(
         text = detail ?: " ",
-        fontSize = if (isTv) 9.sp else 11.sp,
+        fontSize = 9.sp,
         color = Color.White.copy(alpha = 0.55f),
         maxLines = 1,
         textAlign = TextAlign.Center,
@@ -164,7 +164,6 @@ fun VodLoadingDetail(
     streamUrl: String,
     player: ExoPlayer?,
     tracer: PlaybackTracer,
-    isTv: Boolean,
 ) {
     var buffering by remember { mutableStateOf(false) }
     LaunchedEffect(player) {
@@ -187,10 +186,10 @@ fun VodLoadingDetail(
     if (bodyOwnsStatus) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Box(modifier = Modifier.offset(y = (-30).dp)) {
-                LoadingSpinner(isTv = isTv)
+                LoadingSpinner()
             }
             Box(modifier = Modifier.offset(y = 22.dp)) {
-                DetailLineText(detail = detail, isTv = isTv)
+                DetailLineText(detail = detail)
             }
         }
         return
@@ -200,9 +199,9 @@ fun VodLoadingDetail(
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        LoadingSpinner(isTv = isTv)
+        LoadingSpinner()
         LoadingStatusText(status = "Buffering...")
-        DetailLineText(detail = detail, isTv = isTv)
+        DetailLineText(detail = detail)
     }
 }
 
@@ -217,7 +216,6 @@ fun VodLoadingDetail(
 @Composable
 fun LiveFailoverStatusOverlay(
     exoHolder: AerioExoPlayerHolder,
-    isTv: Boolean,
     channels: List<M3UChannel>,
     onLoadChannelStreams: suspend (Int) -> List<StreamOption>,
     onSwitchChannelStream: suspend (String, Int) -> String?,
@@ -252,7 +250,7 @@ fun LiveFailoverStatusOverlay(
     // Retry and nothing else (no spinner, no status line).
     val connectionLimit by exoHolder.connectionLimit.collectAsStateWithLifecycle()
     connectionLimit?.let { notice ->
-        ConnectionLimitCard(notice = notice, isTv = isTv, onRetry = { exoHolder.retryConnectionLimit() })
+        ConnectionLimitCard(notice = notice, onRetry = { exoHolder.retryConnectionLimit() })
         return
     }
     val statusText by exoHolder.liveStatusText.collectAsStateWithLifecycle()
@@ -280,8 +278,8 @@ fun LiveFailoverStatusOverlay(
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        LoadingSpinner(isTv = isTv)
+        LoadingSpinner()
         LoadingStatusText(status = statusText ?: "Buffering...")
-        DetailLineText(detail = detail, isTv = isTv)
+        DetailLineText(detail = detail)
     }
 }

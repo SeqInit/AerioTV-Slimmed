@@ -13,13 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aeriotv.android.core.debug.DebugLogger
 import com.aeriotv.android.ui.settings.SettingsHeaderTextButton
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -89,30 +85,11 @@ fun LogViewerScreen(onBack: () -> Unit) {
             },
             navigationIcon = {
                 // No back arrow on Android TV -- the remote BACK pops it.
-                if (!rememberIsTvDevice()) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
             },
             actions = {
-                if (rememberIsTvDevice()) {
-                    // Edge IconButton has no visible D-pad focus; pill insets
-                    // to the 48dp overscan margin and rings under focus.
-                    SettingsHeaderTextButton(label = "Refresh", onClick = { refreshTick++ })
-                } else {
-                    IconButton(onClick = { refreshTick++ }) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
+                // Edge IconButton has no visible D-pad focus; pill insets
+                // to the 48dp overscan margin and rings under focus.
+                SettingsHeaderTextButton(label = "Refresh", onClick = { refreshTick++ })
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,

@@ -68,9 +68,6 @@ import androidx.compose.ui.input.key.type
 import com.aeriotv.android.core.data.ChannelCollection
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.ui.settings.TvSettingsMetrics
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
-import com.aeriotv.android.ui.settings.settingsTitleStyle
-import com.aeriotv.android.ui.tv.tvFocusScale
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -177,7 +174,6 @@ internal fun GroupSidebarPanel(
         runCatching { listState.scrollToItem(selectedIndex, scrollOffset = -((viewport - rowPx) / 2).coerceAtLeast(0)) }
         initialFocus?.let { runCatching { it.requestFocus() } }
     }
-    val isTv = rememberIsTvDevice()
     // Size the panel to the LONGEST group label (Logan 2026-07-20: a fixed
     // 280dp wasted space with short group names). Measure every label at the
     // row's type scale, take the widest, add the row's horizontal chrome, and
@@ -221,10 +217,10 @@ internal fun GroupSidebarPanel(
                     // Left always, Up on the circle (or the top row when
                     // there is no circle), Down on the last row. Right
                     // commits in the pane, Back closes.
-                    isTv && trapFocus && down && key == androidx.compose.ui.input.key.Key.DirectionLeft -> true
-                    isTv && trapFocus && key == androidx.compose.ui.input.key.Key.DirectionUp &&
+                    trapFocus && down && key == androidx.compose.ui.input.key.Key.DirectionLeft -> true
+                    trapFocus && key == androidx.compose.ui.input.key.Key.DirectionUp &&
                         (manageFocused || (onManageGroups == null && focusedRowIndex == 0)) -> true
-                    isTv && trapFocus && key == androidx.compose.ui.input.key.Key.DirectionDown &&
+                    trapFocus && key == androidx.compose.ui.input.key.Key.DirectionDown &&
                         focusedRowIndex == groups.lastIndex -> true
                     onManageGroups == null ||
                         manageFocused ||
@@ -238,14 +234,14 @@ internal fun GroupSidebarPanel(
         Row(
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(start = 10.dp, bottom = if (isTv) 8.dp else 10.dp),
+            modifier = Modifier.padding(start = 10.dp, bottom = 8.dp),
         ) {
             // tvOS: 22 pt semibold in the secondary text colour (halved).
             Text(
                 text = "Groups",
-                style = if (isTv) MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp) else settingsTitleStyle(),
-                fontWeight = if (isTv) FontWeight.SemiBold else FontWeight.Bold,
-                color = if (isTv) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onBackground,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             // GH #57: the sidebar's own entry into hide/reorder. It sits in
             // the header rather than the list so a D-pad Right out of a row
@@ -268,7 +264,7 @@ internal fun GroupSidebarPanel(
         // turned hints off does not get a new one here. Plain text, never
         // focusable, so it cannot sit in the D-pad path between the header
         // button and the first group row.
-        if (isTv && onSetDefault != null) {
+        if (onSetDefault != null) {
             val hintSettingsVm: com.aeriotv.android.feature.settings.SettingsViewModel =
                 androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel()
             val hintsEnabled by hintSettingsVm.showRemoteHints
@@ -288,7 +284,7 @@ internal fun GroupSidebarPanel(
             // group, which blocked Up from the top row into the Manage
             // Groups circle (Logan 2026-09-10). Restore the default here so
             // only leaving the PANE is cancelled.
-            verticalArrangement = Arrangement.spacedBy(if (isTv) 2.dp else 3.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.fillMaxHeight().focusProperties { @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class) run { exit = { FocusRequester.Default } } },
         ) {
             itemsIndexed(groups, key = { _, token -> token }) { index, token ->
@@ -350,14 +346,10 @@ internal fun rememberGroupLabelPanelWidth(groups: List<String>): Dp {
 @Composable
 private fun groupSidebarRowStyle(): androidx.compose.ui.text.TextStyle {
     val base = MaterialTheme.typography.bodyLarge
-    return if (rememberIsTvDevice()) {
-        base.copy(
-            fontSize = TvSettingsMetrics.railTitleSize,
-            lineHeight = TvSettingsMetrics.railTitleLineHeight,
-        )
-    } else {
-        base
-    }
+    return base.copy(
+        fontSize = TvSettingsMetrics.railTitleSize,
+        lineHeight = TvSettingsMetrics.railTitleLineHeight,
+    )
 }
 
 @Composable
@@ -376,7 +368,6 @@ private fun GroupSidebarRow(
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     LaunchedEffect(focused) { if (focused) onFocused() }
-    val isTv = rememberIsTvDevice()
     // Same long-press mechanism the channel rows use: onLongClick fires while
     // OK is still held, and the guard swallows the release so it cannot also
     // register as a select (core/tv/TvMenuGuard).
@@ -391,78 +382,32 @@ private fun GroupSidebarRow(
             onLongClick = { onSetDefault(); menuGuard.arm() },
         )
     }
-    if (isTv) {
-        // tvOS GroupSidebarRowButtonStyle (halved): 30 pt text, 20/12 padding,
-        // corner 10, focused = white 16% wash + inset accent ring + white
-        // text, active = accent text, semibold, accent 12% tint.
-        val colors = MaterialTheme.colorScheme
-        val fg = when { focused -> Color.White; isActive -> colors.primary; else -> colors.onBackground }
-        val bg = when { focused -> Color.White.copy(alpha = 0.16f); isActive -> colors.primary.copy(alpha = 0.12f); else -> Color.Transparent }
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(5.dp))
-                .background(bg)
-                .border(2.dp, if (focused) colors.primary else Color.Transparent, RoundedCornerShape(5.dp))
-                .then(rowClick)
-                .focusable(interactionSource = interaction)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (leadingStar) Icon(Icons.Filled.Star, contentDescription = null, tint = fg, modifier = Modifier.size(11.dp))
-            Text(
-                text = label, fontSize = 15.sp, lineHeight = 18.sp,
-                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            if (trailingPin) Icon(Icons.Filled.PushPin, contentDescription = "Default group", tint = fg.copy(alpha = 0.7f), modifier = Modifier.size(7.dp))
-        }
-        return
-    }
-    // No icon column here, so the row needs its own vertical padding where
-    // SettingsNavRow's icon box sets the height; the resulting pitch matches
-    // the Settings rail's on the same panel.
-    Box(
+    // tvOS GroupSidebarRowButtonStyle (halved): 30 pt text, 20/12 padding,
+    // corner 10, focused = white 16% wash + inset accent ring + white
+    // text, active = accent text, semibold, accent 12% tint.
+    val colors = MaterialTheme.colorScheme
+    val fg = when { focused -> Color.White; isActive -> colors.primary; else -> colors.onBackground }
+    val bg = when { focused -> Color.White.copy(alpha = 0.16f); isActive -> colors.primary.copy(alpha = 0.12f); else -> Color.Transparent }
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .tvFocusScale(focused, focusedScale = 1.02f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                when {
-                    focused -> MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    isActive -> MaterialTheme.colorScheme.secondaryContainer
-                    else -> Color.Transparent
-                },
-            )
-            .then(
-                if (focused) {
-                    Modifier.border(
-                        2.dp,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
-                        RoundedCornerShape(12.dp),
-                    )
-                } else {
-                    Modifier
-                },
-            )
+            .clip(RoundedCornerShape(5.dp))
+            .background(bg)
+            .border(2.dp, if (focused) colors.primary else Color.Transparent, RoundedCornerShape(5.dp))
             .then(rowClick)
             .focusable(interactionSource = interaction)
-            .padding(
-                horizontal = if (isTv) 10.dp else 14.dp,
-                vertical = if (isTv) 5.dp else 10.dp,
-            ),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (leadingStar) Icon(Icons.Filled.Star, contentDescription = null, tint = fg, modifier = Modifier.size(11.dp))
         Text(
-            text = label,
-            style = groupSidebarRowStyle(),
-            fontWeight = FontWeight.Medium,
-            color = if (isActive && !focused) MaterialTheme.colorScheme.onSecondaryContainer
-            else MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            text = label, fontSize = 15.sp, lineHeight = 18.sp,
+            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
         )
+        if (trailingPin) Icon(Icons.Filled.PushPin, contentDescription = "Default group", tint = fg.copy(alpha = 0.7f), modifier = Modifier.size(7.dp))
     }
 }
 
@@ -558,7 +503,6 @@ internal fun GuideGroupSidebarPane(
     if (onPreview != null) {
         GroupFocusPreview(focusedToken = focusedToken, activeToken = selectedToken, onPreview = onPreview)
     }
-    val tv = rememberIsTvDevice()
     // Fit the drawer to the longest group name instead of the fixed tvOS 180dp
     // (Logan 2026-09-13: names like "Auto | Football | N..." were truncated).
     // Floor = the old 180dp so short lists look unchanged; ceiling = 40% of the
@@ -567,14 +511,13 @@ internal fun GuideGroupSidebarPane(
     val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
     val measuredPaneWidth = rememberGroupLabelPanelWidth(groups)
     val tvPaneWidth = (measuredPaneWidth + 20.dp).coerceIn(180.dp, screenWidth * 0.4f)
-    Row(modifier = Modifier.fillMaxHeight().padding(top = topOffset).then(if (tv) Modifier.background(MaterialTheme.colorScheme.background) else Modifier)) {
+    Row(modifier = Modifier.fillMaxHeight().padding(top = topOffset).then(Modifier.background(MaterialTheme.colorScheme.background))) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
                 // tvOS GuideGroupSidebarPane: 360 pt with 20 pt side padding
                 // and 4 pt on top, halved.
-                .then(if (tv) Modifier.width(tvPaneWidth).padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 12.dp)
-                      else Modifier.padding(start = 20.dp, end = 12.dp, bottom = 12.dp))
+                .then(Modifier.width(tvPaneWidth).padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 12.dp))
                 // tvOS lands on the ACTIVE group (defaultFocus). Route the
                 // pane's first focus entry straight to that row so focus
                 // never rests on Favorites for a frame before the

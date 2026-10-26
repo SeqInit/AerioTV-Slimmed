@@ -1,27 +1,15 @@
 package com.aeriotv.android.feature.player
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import com.aeriotv.android.core.pip.findActivity
-import com.aeriotv.android.core.pip.isTelevision
 import com.aeriotv.android.core.playback.PlaybackTracer
-import com.aeriotv.android.feature.watchprogress.WatchProgressViewModel
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -290,137 +278,5 @@ fun PhoneVodMiniRoute(
     onPop: () -> Unit,
 ) {
     val context = LocalContext.current
-    val isPhone = remember(context) { !context.isTelevision() }
-    if (!isPhone) return
-    val latestInfo by rememberUpdatedState(info)
-    val latestPop by rememberUpdatedState(onPop)
-
-    // Picking new on-demand content while a mini (live or on-demand) is up plays
-    // it in the mini (live parity, d4f5eace). Sampled once at mount, before the
-    // route's live teardown hides the window.
-    val startInMini = remember {
-        val ws = PhoneVodMini.windowState
-        ws != null && ws.mode.value == ExoWindowState.Mode.Mini && !PhoneVodMini.isExpanding
-    }
-
-    // Back (and the top-strip swipe, which dispatches Back) minimizes.
-    BackHandler(enabled = info != null) {
-        val i = latestInfo
-        // VODPlayerScreen registers its current ExoPlayer here while mounted.
-        val player = PhoneVodMini.currentPlayerProvider?.invoke()
-        if (i != null && PhoneVodMini.minimize(player, i)) token.minimized = true
-        latestPop()
-    }
-
-    LaunchedEffect(startInMini, info?.key) {
-        val i = latestInfo ?: return@LaunchedEffect
-        if (!startInMini || token.minimized) return@LaunchedEffect
-        // Wait for the first READY so the screen's resume seek has its duration,
-        // then give that seek a beat to land before handing off.
-        var waited = 0L
-        while (waited < START_IN_MINI_TIMEOUT_MS) {
-            val p = PhoneVodMini.currentPlayerProvider?.invoke()
-            if (p != null && p.playerError != null) return@LaunchedEffect
-            if (p != null && p.playbackState == Player.STATE_READY) {
-                delay(700L)
-                val ready = PhoneVodMini.currentPlayerProvider?.invoke()
-                if (PhoneVodMini.minimize(ready, latestInfo ?: i)) {
-                    token.minimized = true
-                    latestPop()
-                }
-                return@LaunchedEffect
-            }
-            delay(150L)
-            waited += 150L
-        }
-    }
-
-    val disposeKey = info?.key
-    DisposableEffect(disposeKey) {
-        onDispose { PhoneVodMini.onRouteDisposed(disposeKey) }
-    }
 }
 
-private const val START_IN_MINI_TIMEOUT_MS = 20_000L
-
-/**
- * Phone-only mini bookkeeping, mounted by [PersistentExoWindow]: installs the
- * activity-scoped progress saver, keeps saving every 5 s while an on-demand
- * mini plays, and stops it when the window goes away underneath it (PiP X,
- * cast teardown) or a live player takes the window fullscreen.
- */
-@Composable
-fun PhoneVodMiniHost(state: ExoWindowState, mode: ExoWindowState.Mode) {
-    val context = LocalContext.current
-    val watchVm: WatchProgressViewModel = hiltViewModel()
-    val vodSession by PhoneVodMini.session.collectAsState()
-    DisposableEffect(watchVm, state) {
-        PhoneVodMini.windowState = state
-        PhoneVodMini.saver = { s -> saveMiniProgress(watchVm, s, context) }
-        onDispose {
-            PhoneVodMini.saver = null
-            // Activity finishing (Exit): never leave a retained decoder behind.
-            if (context.findActivity()?.isFinishing == true) PhoneVodMini.close()
-        }
-    }
-    LaunchedEffect(vodSession) {
-        val s = vodSession ?: return@LaunchedEffect
-        while (true) {
-            delay(5_000L)
-            if (PhoneVodMini.session.value !== s) return@LaunchedEffect
-            val pos = s.player.contentPosition
-            val dur = s.player.contentDuration
-            val id = s.info.videoId
-            if (id.isNullOrBlank() || pos <= 0L || dur <= 0L) continue
-            if (s.player.playbackState == Player.STATE_ENDED) continue
-            saveVodProgress(watchVm, id, s.info.title, s.info.posterUrl, pos, dur, s.info.meta)
-        }
-    }
-    // A live player went fullscreen (channel tap, reminder, deep link) while the
-    // on-demand mini was up: that content is replaced.
-    LaunchedEffect(mode, vodSession) {
-        if (mode == ExoWindowState.Mode.Fullscreen && vodSession != null) PhoneVodMini.close()
-    }
-}
-
-private fun saveMiniProgress(
-    watchVm: WatchProgressViewModel,
-    s: PhoneVodMini.Session,
-    context: android.content.Context,
-) {
-    // Catch-up: the mini's own save (expand, X close) keeps the resume entry
-    // current while the full player is not mounted.
-    if (s.info.catchupChannelId.isNotBlank() && s.info.catchupDurationMs > 0L &&
-        s.player.playbackState != Player.STATE_ENDED
-    ) {
-        val pos = s.catchupOffsetMs + s.player.contentPosition.coerceAtLeast(0L)
-        com.aeriotv.android.core.playback.CatchupResumeStore.save(
-            context, s.info.catchupChannelId, s.info.catchupStartMillis, pos, s.info.catchupDurationMs,
-        )
-    }
-    val id = s.info.videoId
-    if (id.isNullOrBlank()) return
-    val pos = s.player.contentPosition
-    val dur = s.player.contentDuration
-    if (pos > 0L && dur > 0L && s.player.playbackState != Player.STATE_ENDED) {
-        saveVodProgress(watchVm, id, s.info.title, s.info.posterUrl, pos, dur, s.info.meta)
-    }
-}
-
-/**
- * VODPlayerScreen's tap layer gestures: the brightness / volume edge slides,
- * the Fit / Fill pinch, and the top-strip swipe-down that minimizes (phone
- * only; [enabled] is already false on TV and in PiP). One call so that
- * composable's modifier chain stays the same size.
- *
- * Order matches the live player: the edge slides claim only inside a narrow
- * band at one bezel, the pinch wants two fingers, and playerTopSwipeDown must
- * stay LAST so it sees the Main pass after the others.
- */
-fun Modifier.vodTapLayerGestures(
-    settingsVm: com.aeriotv.android.feature.settings.SettingsViewModel,
-    enabled: Boolean,
-): Modifier = this
-    .playerEdgeSlideGesturesFromSettings(settingsVm, enabled = enabled)
-    .videoScalePinch(settingsVm, enabled = enabled)
-    .playerTopSwipeDown(enabled = enabled)

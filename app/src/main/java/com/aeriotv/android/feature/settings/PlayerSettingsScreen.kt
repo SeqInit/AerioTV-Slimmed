@@ -3,7 +3,6 @@ package com.aeriotv.android.feature.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -11,33 +10,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Radio
-import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.FilterNone
-import androidx.compose.material.icons.filled.FirstPage
-import androidx.compose.material.icons.automirrored.filled.LastPage
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay30
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import com.aeriotv.android.core.preferences.PLAYER_EDGE_LEFT
-import com.aeriotv.android.core.preferences.PLAYER_EDGE_RIGHT
 import com.aeriotv.android.core.ui.SkipIntervals
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 import com.aeriotv.android.ui.settings.LocalSettingsSubPageHost
@@ -47,15 +34,11 @@ import com.aeriotv.android.ui.settings.SettingsPickerOption
 import com.aeriotv.android.ui.settings.SettingsPickerRow
 import com.aeriotv.android.ui.settings.SettingsSection
 import com.aeriotv.android.ui.settings.SettingsSectionFooter
-import com.aeriotv.android.ui.settings.SettingsSelectionRow
 import com.aeriotv.android.ui.settings.SettingsSubGroup
 import com.aeriotv.android.ui.settings.SettingsSubPageHost
 import com.aeriotv.android.ui.settings.SettingsToggleRow
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsFormWidth
 import com.aeriotv.android.ui.settings.settingsItemsSummary
-import com.aeriotv.android.ui.theme.textAccent
-import com.aeriotv.android.ui.tv.dpadFocusEscape
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -74,7 +57,6 @@ fun PlayerSettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    val isTv = rememberIsTvDevice()
     // GH #94: read straight from AppPreferences (no SettingsViewModel hop).
     val playerPrefsContext = androidx.compose.ui.platform.LocalContext.current
     val playerPrefs = androidx.compose.runtime.remember {
@@ -157,7 +139,7 @@ fun PlayerSettingsScreen(
                 SettingsSection(
                     header = "On-Screen Display",
                     // tvOS prints this footer inside the Info Card sheet only.
-                    footer = if (isTv) null else PLAYER_INFO_CARD_FOOTER,
+                    footer = null,
                 ) {
                     // Phase 3, item 4: six toggles behind one master row whose
                     // subtitle names what is on ("Logo, name, time" / "All 6").
@@ -201,7 +183,7 @@ fun PlayerSettingsScreen(
                             SettingsToggleRow(
                                 title = part.first,
                                 // tvOS rows carry info.circle; iOS toggles are bare.
-                                leadingIcon = if (isTv) Icons.Outlined.Info else null,
+                                leadingIcon = Icons.Outlined.Info,
                                 checked = part.third,
                                 onCheckedChange = setter,
                             )
@@ -212,7 +194,7 @@ fun PlayerSettingsScreen(
                     SettingsToggleRow(
                         title = "Pop Up Info Card on Channel Change",
                         subtitle = "Show the channel and program card for a few seconds after a channel change. The card still appears with the player controls.",
-                        leadingIcon = if (isTv) Icons.Filled.FilterNone else null,
+                        leadingIcon = Icons.Filled.FilterNone,
                         checked = showChannelInfoCard,
                         onCheckedChange = viewModel::setPlayerShowChannelInfoCard,
                     )
@@ -229,7 +211,7 @@ fun PlayerSettingsScreen(
                 ) {
                     SettingsToggleRow(
                         title = "Radio Mode by Default",
-                        leadingIcon = if (isTv) Icons.Filled.Radio else null,
+                        leadingIcon = Icons.Filled.Radio,
                         checked = radioModeByDefault,
                         onCheckedChange = viewModel::setRadioModeByDefault,
                     )
@@ -247,16 +229,16 @@ fun PlayerSettingsScreen(
                 if (!childRole) SettingsSection(
                     header = "Live Rewind",
                     // Apple TV prints this directly under the toggle instead.
-                    footer = if (isTv) null else LIVE_REWIND_FOOTER,
+                    footer = null,
                 ) {
                     SettingsToggleRow(
                         title = "Pause & Rewind Live TV",
                         subtitle = "Buffer fullscreen live playback on this device",
-                        leadingIcon = if (isTv) Icons.Filled.Replay30 else null,
+                        leadingIcon = Icons.Filled.Replay30,
                         checked = liveRewindEnabled,
                         onCheckedChange = viewModel::setLiveRewindEnabled,
                     )
-                    if (isTv) SettingsSectionFooter(LIVE_REWIND_FOOTER)
+                    SettingsSectionFooter(LIVE_REWIND_FOOTER)
                     if (liveRewindEnabled) {
                         val snappedDepth = REWIND_DEPTH_MINUTES.minByOrNull {
                             abs(it - liveRewindDepth)
@@ -289,9 +271,8 @@ fun PlayerSettingsScreen(
                             }
                             SettingsToggleRow(
                                 title = "Keep Recent Channels Live",
-                                subtitle = if (isTv) "Buffer flipped-away channels in the background"
-                                else "Flipped-away channels keep buffering so their rewind timeline survives",
-                                leadingIcon = if (isTv) Icons.AutoMirrored.Filled.PlaylistPlay else null,
+                                subtitle = "Buffer flipped-away channels in the background",
+                                leadingIcon = Icons.AutoMirrored.Filled.PlaylistPlay,
                                 checked = keepRecent,
                                 onCheckedChange = viewModel::setLiveRewindKeepRecent,
                             )
@@ -311,7 +292,6 @@ fun PlayerSettingsScreen(
                     }
                 }
 
-
                 // MARK: Playback
                 //
                 // Apple order: Skip Back, Skip Forward, (Stream Buffer),
@@ -322,60 +302,30 @@ fun PlayerSettingsScreen(
                 // both into the section footer.
                 SettingsSection(
                     header = "Playback",
-                    footer = if (isTv) {
-                        null
-                    } else {
-                        // A Child has no Auto-Recover row, so its footer leaves that sentence out.
-                        "How far the skip buttons move in live rewind, catch-up, recordings, movies, and TV shows, including the cast remote and the Lock Screen controls." +
-                            if (childRole) "" else "\n\nIf a live stream stops sending video, the player reloads it to recover. Turn Auto-Recover off if live channels restart or stutter during commercial breaks (a brief freeze may show instead). Applies to the next channel you tune."
-                    },
+                    footer = null,
                 ) {
-                    if (isTv) {
-                        // tvOS: pill row 5s 10s 15s 30s 60s, as Display Scale.
-                        ScaleSliderRow(
-                            label = "Skip Back",
-                            value = skipBackSeconds.toFloat(),
-                            onValueChange = { viewModel.setSkipBackSeconds(it.toInt()) },
-                            segments = SkipIntervals.CHOICES.map { it.toFloat() to "${it}s" },
-                        )
-                    } else {
-                        SteppedSliderRow(
-                            label = "Skip Back",
-                            values = SkipIntervals.CHOICES,
-                            selected = skipBackSeconds,
-                            format = ::formatSkipSeconds,
-                            onSelect = viewModel::setSkipBackSeconds,
-                        )
-                    }
-                    if (isTv) {
-                        // tvOS: pill row 5s 10s 15s 30s 60s, as Display Scale.
-                        ScaleSliderRow(
-                            label = "Skip Forward",
-                            value = skipForwardSeconds.toFloat(),
-                            onValueChange = { viewModel.setSkipForwardSeconds(it.toInt()) },
-                            segments = SkipIntervals.CHOICES.map { it.toFloat() to "${it}s" },
-                        )
-                    } else {
-                        SteppedSliderRow(
-                            label = "Skip Forward",
-                            values = SkipIntervals.CHOICES,
-                            selected = skipForwardSeconds,
-                            format = ::formatSkipSeconds,
-                            onSelect = viewModel::setSkipForwardSeconds,
-                        )
-                    }
-                    if (isTv) {
-                        // GH #94 (Apple parity): bare-video Left/Right skip.
-                        SettingsToggleRow(
-                            title = "Skip Without Controls",
-                            checked = skipWithoutControls,
-                            onCheckedChange = { v -> playerPrefsScope.launch { playerPrefs.setSkipWithoutControls(v) } },
-                        )
-                        SettingsSectionFooter("With the controls hidden, Left and Right skip right away instead of opening the timeline.")
-                    }
-                    if (isTv) {
-                        SettingsSectionFooter("How far the skip buttons and a single left or right press move in live rewind, catch-up, recordings, movies, and TV shows. Holding left or right still scrubs faster the longer you hold.")
-                    }
+                    // tvOS: pill row 5s 10s 15s 30s 60s, as Display Scale.
+                    ScaleSliderRow(
+                        label = "Skip Back",
+                        value = skipBackSeconds.toFloat(),
+                        onValueChange = { viewModel.setSkipBackSeconds(it.toInt()) },
+                        segments = SkipIntervals.CHOICES.map { it.toFloat() to "${it}s" },
+                    )
+                    // tvOS: pill row 5s 10s 15s 30s 60s, as Display Scale.
+                    ScaleSliderRow(
+                        label = "Skip Forward",
+                        value = skipForwardSeconds.toFloat(),
+                        onValueChange = { viewModel.setSkipForwardSeconds(it.toInt()) },
+                        segments = SkipIntervals.CHOICES.map { it.toFloat() to "${it}s" },
+                    )
+                    // GH #94 (Apple parity): bare-video Left/Right skip.
+                    SettingsToggleRow(
+                        title = "Skip Without Controls",
+                        checked = skipWithoutControls,
+                        onCheckedChange = { v -> playerPrefsScope.launch { playerPrefs.setSkipWithoutControls(v) } },
+                    )
+                    SettingsSectionFooter("With the controls hidden, Left and Right skip right away instead of opening the timeline.")
+                    SettingsSectionFooter("How far the skip buttons and a single left or right press move in live rewind, catch-up, recordings, movies, and TV shows. Holding left or right still scrubs faster the longer you hold.")
                     if (!childRole) SettingsPickerRow(
                         title = "Buffer Size",
                         tvChoiceSheet = true,
@@ -405,12 +355,8 @@ fun PlayerSettingsScreen(
                     )
                     if (!childRole) SettingsToggleRow(
                         title = "Auto-Recover Frozen Streams",
-                        subtitle = if (isTv) {
-                            "If a live stream stops sending video, the player reloads it to recover. Turn this off if live channels restart or stutter during commercial breaks; a brief freeze may show instead."
-                        } else {
-                            null
-                        },
-                        leadingIcon = if (isTv) Icons.Filled.Refresh else null,
+                        subtitle = "If a live stream stops sending video, the player reloads it to recover. Turn this off if live channels restart or stutter during commercial breaks; a brief freeze may show instead.",
+                        leadingIcon = Icons.Filled.Refresh,
                         checked = autoRecoverFrozenStreams,
                         onCheckedChange = viewModel::setAutoRecoverFrozenStreams,
                     )
@@ -437,61 +383,23 @@ fun PlayerSettingsScreen(
                     // tvOS / Android TV flip channels with D-pad up/down, not a
                     // swipe, so the "accidental swipes" caution is meaningless on
                     // a remote (user request: drop the note on TV). Phones keep it.
-                    footer = if (isTv) {
-                        "Turn off if accidental D-pad presses are flipping channels during playback. Phones and tablets use the matching swipe-up / swipe-down gesture on the same toggle."
-                    } else {
-                        "Turn off if accidental swipes during playback flip channels by mistake. " +
-                            "Brightness and volume slides are recognized only inside a narrow band at the very edge of the screen, " +
-                            "so they stay clear of the channel flip and of swiping down to minimize."
-                    },
+                    footer = "Turn off if accidental D-pad presses are flipping channels during playback. Phones and tablets use the matching swipe-up / swipe-down gesture on the same toggle.",
                 ) {
                     SettingsToggleRow(
                         title = "Up / Down Channel Change",
-                        subtitle = if (isTv) {
-                            "While the player chrome is visible, press up for the next channel and down for the previous. Live single-stream playback only."
-                        } else {
-                            "While the player chrome is visible, swipe up for the next channel and down for the previous. Live single-stream playback only."
-                        },
+                        subtitle = "While the player chrome is visible, press up for the next channel and down for the previous. Live single-stream playback only.",
                         // tvOS arrow.up.and.down; the iOS toggle is bare.
-                        leadingIcon = if (isTv) Icons.Filled.SwapVert else null,
+                        leadingIcon = Icons.Filled.SwapVert,
                         checked = appleTVChannelFlip,
                         onCheckedChange = viewModel::setAppleTVChannelFlip,
                     )
-                    if (!isTv) {
-                        SettingsToggleRow(
-                            title = "Edge Slide for Brightness",
-                            subtitle = "Slide a finger up or down the brightness edge to dim or brighten the screen. Applies to this app only and is restored when you leave the player.",
-                            checked = playerBrightnessGesture,
-                            onCheckedChange = viewModel::setPlayerBrightnessGesture,
-                        )
-                        SettingsToggleRow(
-                            title = "Edge Slide for Volume",
-                            subtitle = "Slide a finger up or down the other edge to change the media volume.",
-                            checked = playerVolumeGesture,
-                            onCheckedChange = viewModel::setPlayerVolumeGesture,
-                        )
-                        if (playerBrightnessGesture || playerVolumeGesture) {
-                            // Apple icons: arrow.left.to.line / arrow.right.to.line.
-                            listOf(
-                                Triple(PLAYER_EDGE_LEFT, "Brightness: Left, Volume: Right", Icons.Filled.FirstPage),
-                                Triple(PLAYER_EDGE_RIGHT, "Brightness: Right, Volume: Left", Icons.AutoMirrored.Filled.LastPage),
-                            ).forEach { (wire, label, icon) ->
-                                SettingsSelectionRow(
-                                    label = label,
-                                    leadingIcon = icon,
-                                    selected = playerBrightnessEdge == wire,
-                                    onClick = { viewModel.setPlayerBrightnessEdge(wire) },
-                                )
-                            }
-                        }
-                    }
                 }
 
                 // MARK: Display (TV only)
                 //
                 // GH #38 + #40: each switch is a real HDMI mode change (brief
                 // black screen), deliberate and user-opted.
-                if (isTv && !childRole) {
+                if (!childRole) {
                     SettingsSection(
                         header = "Display",
                         footer = "Startup Refresh Rate switches the display once at app launch so it is already on your main content rate before the first channel (changes apply on next launch). Match Frame Rate switches the refresh rate to the stream's frame rate and keeps the current resolution. Match Content Resolution outputs at the stream's resolution so your TV does the upscaling. The screen blinks briefly on each switch.",
@@ -580,9 +488,6 @@ private fun formatDepthMinutes(mins: Int): String = when {
     mins % 60 == 0 -> "${mins / 60} hours"
     else -> "${mins / 60}h ${mins % 60}m"
 }
-
-/** Skip Intervals value readout: "10 seconds". */
-private fun formatSkipSeconds(seconds: Int): String = "$seconds seconds"
 
 /**
  * Storage estimate under the Keep Available slider: scales with the

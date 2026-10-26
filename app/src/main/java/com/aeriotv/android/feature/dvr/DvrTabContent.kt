@@ -41,10 +41,8 @@ import com.aeriotv.android.ui.scale.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import com.aeriotv.android.ui.scale.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -74,13 +72,11 @@ import com.aeriotv.android.core.category.categoryTokens
 import com.aeriotv.android.core.tv.TvActionMenuDialog
 import com.aeriotv.android.core.tv.TvMenuAction
 import com.aeriotv.android.feature.settings.SettingsViewModel
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsRowCard
 import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 
 /**
  * DVR tab. Mirrors iOS MyRecordingsView (project_aeriotv_ios_canon.md "DVR tab"):
@@ -134,10 +130,9 @@ fun DvrTabContent(
     // Capability.CanManageDvr via LocalDvrAccess. A "view" account can still
     // clear this device's own files, so Clear All stays, scoped to local.
     val canManageDvr = LocalDvrAccess.current == "manage"
-    val isTv = rememberIsTvDevice()
     // 10-foot rule: keep content out of the ~5% overscan band. 48dp on the
     // 960dp TV canvas = 5%; phones keep the tighter phone insets.
-    val edgeInset = if (isTv) 48.dp else 16.dp
+    val edgeInset = 48.dp
 
     // Land the user on their content, not an empty filter: if Scheduled is
     // empty but another filter has recordings, auto-select the first
@@ -223,56 +218,43 @@ fun DvrTabContent(
             // filter is selected and there is at least one recording to
             // delete. Confirms via AlertDialog before firing the bulk delete.
             if (state.filter == DvrViewModel.Filter.Completed && state.completedCount > 0) {
-                if (isTv) {
-                    // Same pill grammar as the filter row so D-pad focus is
-                    // visible; a bare TextButton has no focus chrome on TV.
-                    var clearFocused by remember { mutableStateOf(false) }
-                    Box(
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .heightIn(min = 36.dp)
-                            .onFocusChanged { clearFocused = it.isFocused }
-                            .clip(CircleShape)
-                            .background(
-                                if (clearFocused) {
-                                    MaterialTheme.colorScheme.error.copy(alpha = 0.22f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                },
-                            )
-                            .then(
-                                if (clearFocused) {
-                                    Modifier.border(2.dp, Color.White, CircleShape)
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { pendingClearAll = true },
-                            )
-                            .padding(horizontal = 16.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Clear All",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Medium,
+                // Same pill grammar as the filter row so D-pad focus is
+                // visible; a bare TextButton has no focus chrome on TV.
+                var clearFocused by remember { mutableStateOf(false) }
+                Box(
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .heightIn(min = 36.dp)
+                        .onFocusChanged { clearFocused = it.isFocused }
+                        .clip(CircleShape)
+                        .background(
+                            if (clearFocused) {
+                                MaterialTheme.colorScheme.error.copy(alpha = 0.22f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            },
                         )
-                    }
-                } else {
-                    TextButton(
-                        onClick = { pendingClearAll = true },
-                        modifier = Modifier.padding(start = 8.dp),
-                    ) {
-                        Text(
-                            text = "Clear All",
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Medium,
+                        .then(
+                            if (clearFocused) {
+                                Modifier.border(2.dp, Color.White, CircleShape)
+                            } else {
+                                Modifier
+                            },
                         )
-                    }
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { pendingClearAll = true },
+                        )
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "Clear All",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Medium,
+                    )
                 }
             }
         }
@@ -320,7 +302,7 @@ fun DvrTabContent(
                 start = edgeInset,
                 end = edgeInset,
                 top = 8.dp,
-                bottom = if (isTv) 32.dp else LocalTabBarBottomInset.current,
+                bottom = 32.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -577,57 +559,45 @@ private fun FilterPill(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    if (rememberIsTvDevice()) {
-        // TV: the guide-pill treatment instead of a stock FilterChip. The
-        // stock chip's focus state is a faint Material overlay that is
-        // indistinguishable from the selected state at couch distance; this
-        // gives D-pad focus the same 2dp white ring program cells and guide
-        // pills use, so focused vs selected is unambiguous.
-        val interaction = remember { MutableInteractionSource() }
-        var focused by remember { mutableStateOf(false) }
-        Box(
-            modifier = Modifier
-                .heightIn(min = 36.dp)
-                .onFocusChanged { focused = it.isFocused }
-                .clip(CircleShape)
-                .background(
-                    if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                )
-                .then(
-                    if (focused) Modifier.background(Color.White.copy(alpha = 0.12f))
-                    else Modifier,
-                )
-                .then(
-                    if (focused) {
-                        Modifier.border(2.dp, Color.White, CircleShape)
-                    } else Modifier,
-                )
-                .clickable(
-                    interactionSource = interaction,
-                    indication = null,
-                    onClick = onClick,
-                )
-                .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (selected) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Medium,
+    // TV: the guide-pill treatment instead of a stock FilterChip. The
+    // stock chip's focus state is a faint Material overlay that is
+    // indistinguishable from the selected state at couch distance; this
+    // gives D-pad focus the same 2dp white ring program cells and guide
+    // pills use, so focused vs selected is unambiguous.
+    val interaction = remember { MutableInteractionSource() }
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            .heightIn(min = 36.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .clip(CircleShape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
             )
-        }
-    } else {
-        FilterChip(
-            selected = selected,
-            onClick = onClick,
-            label = { Text(label) },
-            colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-            ),
+            .then(
+                if (focused) Modifier.background(Color.White.copy(alpha = 0.12f))
+                else Modifier,
+            )
+            .then(
+                if (focused) {
+                    Modifier.border(2.dp, Color.White, CircleShape)
+                } else Modifier,
+            )
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
         )
     }
 }
@@ -703,7 +673,6 @@ private fun RecordingRow(
             "${timeFmt.format(Date(rec.startMillis))} – ${timeFmt.format(Date(rec.endMillis))}"
 
     var menuOpen by remember { mutableStateOf(false) }
-    val isTv = rememberIsTvDevice()
     val tvGuard = com.aeriotv.android.core.tv.rememberTvMenuGuard()
     var focused by remember { mutableStateOf(false) }
 
@@ -761,8 +730,7 @@ private fun RecordingRow(
                     text = dateLabel,
                     // bodySmall lands at ~10.8sp effective under the 0.9 TV
                     // type scale, below couch readability; bodyMedium on TV.
-                    style = (if (isTv) MaterialTheme.typography.bodyMedium
-                    else MaterialTheme.typography.bodySmall).subtext(),
+                    style = (MaterialTheme.typography.bodyMedium).subtext(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (rec.description.isNotBlank()) {
@@ -798,14 +766,13 @@ private fun RecordingRow(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = statusLabel.uppercase(),
-                    style = if (isTv) MaterialTheme.typography.labelMedium
-                    else MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = statusColor,
                     fontWeight = FontWeight.Bold,
                 )
                 // The long-press affordance is invisible on a remote; surface
                 // it on the focused row only, where the eye already is.
-                if (isTv && focused) {
+                if (focused) {
                     Text(
                         text = "Hold OK for options",
                         style = MaterialTheme.typography.labelMedium.subtext(),
@@ -851,7 +818,6 @@ private fun DestinationBadge(source: DvrViewModel.Source) {
     // rows pull the active theme accent so the badge stays brand-coherent
     // when a custom accent is set in Appearance.
     val tint = if (isLocal) Color(0xFF34C759) else MaterialTheme.colorScheme.primary
-    val isTv = rememberIsTvDevice()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -861,12 +827,11 @@ private fun DestinationBadge(source: DvrViewModel.Source) {
             imageVector = icon,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(if (isTv) 15.dp else 12.dp),
+            modifier = Modifier.size(15.dp),
         )
         Text(
             text = label,
-            style = if (isTv) MaterialTheme.typography.labelMedium
-            else MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = tint,
             fontWeight = FontWeight.Medium,
         )
@@ -951,38 +916,12 @@ private fun RecordingActionMenu(
         }
     }
 
-    if (rememberIsTvDevice()) {
-        if (expanded) {
-            TvActionMenuDialog(
-                title = rec.title,
-                actions = actions,
-                guard = tvGuard,
-                onDismiss = onDismiss,
-            )
-        }
-        return
-    }
-
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismiss,
-    ) {
-        actions.forEach { action ->
-            val tint = if (action.destructive) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.primary
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        action.label,
-                        color = if (action.destructive) MaterialTheme.colorScheme.error
-                        else androidx.compose.ui.graphics.Color.Unspecified,
-                    )
-                },
-                leadingIcon = action.icon?.let { icon ->
-                    { Icon(icon, contentDescription = null, tint = tint) }
-                },
-                onClick = { onDismiss(); action.onClick() },
-            )
-        }
+    if (expanded) {
+        TvActionMenuDialog(
+            title = rec.title,
+            actions = actions,
+            guard = tvGuard,
+            onDismiss = onDismiss,
+        )
     }
 }

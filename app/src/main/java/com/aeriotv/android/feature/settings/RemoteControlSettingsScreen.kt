@@ -321,7 +321,7 @@ fun RemoteControlSettingsScreen(
                     SettingsToggleRow(
                         title = "Show Remote Hints",
                         // Apple TV: questionmark.circle.
-                        leadingIcon = if (com.aeriotv.android.ui.settings.rememberIsTvDevice()) Icons.AutoMirrored.Filled.HelpOutline else null,
+                        leadingIcon = Icons.AutoMirrored.Filled.HelpOutline,
                         subtitle = "Key reminders on Live TV and in the player",
                         checked = showRemoteHints,
                         onCheckedChange = { viewModel.setShowRemoteHints(it) },

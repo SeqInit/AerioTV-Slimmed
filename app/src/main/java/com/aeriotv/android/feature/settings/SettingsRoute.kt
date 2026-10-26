@@ -129,15 +129,13 @@ data class SettingsSectionGroupSpec(
  * factor gates: Remote Control is TV-only and App Updates is sideload-only.
  */
 fun visibleSettingsSections(
-    isTv: Boolean,
     updaterEnabled: Boolean,
     role: com.aeriotv.android.core.profiles.ProfileRole? = null,
-): List<SettingsSectionGroupSpec> = allSettingsSections(isTv, updaterEnabled)
+): List<SettingsSectionGroupSpec> = allSettingsSections(updaterEnabled)
     .map { g -> g.copy(sections = g.sections.filter { com.aeriotv.android.core.profiles.RoleRules.sectionVisible(role, it.name) }) }
     .filter { it.sections.isNotEmpty() }
 
 private fun allSettingsSections(
-    isTv: Boolean,
     updaterEnabled: Boolean,
 ): List<SettingsSectionGroupSpec> = listOf(
     SettingsSectionGroupSpec(
@@ -157,7 +155,7 @@ private fun allSettingsSections(
             add(SettingsSection.Appearance)
             add(SettingsSection.General)
             // Remote Control initiative: TV form factors only.
-            if (isTv) add(SettingsSection.RemoteControl)
+            add(SettingsSection.RemoteControl)
             add(SettingsSection.Sync)
             if (updaterEnabled) add(SettingsSection.AppUpdates)
         },

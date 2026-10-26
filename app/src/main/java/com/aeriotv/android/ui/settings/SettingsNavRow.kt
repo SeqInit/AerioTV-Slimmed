@@ -89,7 +89,6 @@ fun SettingsNavRow(
     iconTint: Color? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val isTv = rememberIsTvDevice()
     // 10-foot metrics. Measured against tvOS on the SAME 1080p panel
     // (2026-08-05): its rail row is 5.3% of screen height and it shows 9 items;
     // ours was 19.4% and showed 5. Two causes, both fixed here.
@@ -102,11 +101,11 @@ fun SettingsNavRow(
     // TV values come from TvSettingsMetrics, which is Apple's tvOS ladder
     // halved for the 960x540dp canvas - see that file for why halving is the
     // correct conversion. Touch keeps the phone/tablet values.
-    val iconBox = if (isTv) TvSettingsMetrics.railIconWidth else SettingsCardMetrics.iconTile
-    val iconGlyph = if (isTv) TvSettingsMetrics.railIconGlyph else SettingsCardMetrics.iconGlyph
-    val gap = if (isTv) TvSettingsMetrics.railIconGap else 12.dp
-    val padH = if (isTv) 10.dp else 16.dp
-    val padV = if (isTv) 2.dp else 12.dp
+    val iconBox = TvSettingsMetrics.railIconWidth
+    val iconGlyph = TvSettingsMetrics.railIconGlyph
+    val gap = TvSettingsMetrics.railIconGap
+    val padH = 10.dp
+    val padV = 2.dp
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -138,13 +137,7 @@ fun SettingsNavRow(
                         )
                 } else {
                     Modifier
-                        .settingsRowCard(
-                            focused = focused,
-                            // Apple insets the hairline to where the TITLE
-                            // starts, i.e. past the leading icon tile.
-                            dividerInset = if (isTv) SettingsCardMetrics.dividerInset
-                            else SettingsCardMetrics.iconRowDividerInset,
-                        )
+                        .settingsRowCard(focused = focused)
                         .then(
                             if (selected && !focused) {
                                 Modifier.background(
@@ -166,16 +159,7 @@ fun SettingsNavRow(
                     // tvOS's rail icon is a bare tinted glyph; the filled tile
                     // is a touch-surface affordance and reads as extra chrome
                     // at 10 feet. Phone and tablet keep the tile.
-                    if (isTv) {
-                        Modifier
-                    } else {
-                        // Phase 3b: Apple's 40dp rounded tile is a DIM accent
-                        // fill with the glyph in the accent itself, not a
-                        // solid bright chip (Logan's restraint rule).
-                        Modifier
-                            .clip(RoundedCornerShape(SettingsCardMetrics.iconTileCorner))
-                            .background((iconTint ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.2f))
-                    },
+                    Modifier,
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -190,24 +174,22 @@ fun SettingsNavRow(
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(
-                if (isTv) TvSettingsMetrics.railTextSpacing else 0.dp,
+                TvSettingsMetrics.railTextSpacing,
             ),
         ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge.let {
-                    if (isTv) {
-                        it.copy(
-                            fontSize = TvSettingsMetrics.railTitleSize,
-                            lineHeight = TvSettingsMetrics.railTitleLineHeight,
-                        )
-                    } else it
+                    it.copy(
+                        fontSize = TvSettingsMetrics.railTitleSize,
+                        lineHeight = TvSettingsMetrics.railTitleLineHeight,
+                    )
                 },
                 color = MaterialTheme.colorScheme.onBackground,
                 // Apple's SettingsRow title is bodyMedium, a REGULAR weight;
                 // the tvOS rail keeps its medium title.
-                fontWeight = if (isTv) FontWeight.Medium else FontWeight.Normal,
-                maxLines = if (isTv) 1 else Int.MAX_VALUE,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {
@@ -216,21 +198,16 @@ fun SettingsNavRow(
                     // bodySmall is ~10.8sp effective under the 0.9 TV type
                     // scale; bodyMedium keeps the subtitle readable from the
                     // couch.
-                    style = if (isTv) {
-                        MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = TvSettingsMetrics.railSubtitleSize,
-                            lineHeight = TvSettingsMetrics.railSubtitleLineHeight,
-                        )
-                    } else {
-                        MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, lineHeight = 17.sp)
-                    },
-                    color = if (isTv) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = TvSettingsMetrics.railSubtitleSize,
+                        lineHeight = TvSettingsMetrics.railSubtitleLineHeight,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     // tvOS truncates here rather than wrapping; matching it is
                     // what keeps the rail row a single fixed height. TOUCH keeps
                     // wrapping - the tablet sidebar deliberately shows Sync's
                     // long subtitle over two lines and must not change.
-                    maxLines = if (isTv) 1 else Int.MAX_VALUE,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

@@ -1,8 +1,6 @@
 package com.aeriotv.android.feature.ondemand
 
 import com.aeriotv.android.ui.scale.subtext
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,10 +58,8 @@ import com.aeriotv.android.core.network.TmdbKnownForItem
 import com.aeriotv.android.core.network.TmdbPerson
 import com.aeriotv.android.core.network.TmdbPersonBio
 import com.aeriotv.android.core.tv.qrCodeBitmap
-import com.aeriotv.android.ui.theme.StatusWarning
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
 import com.aeriotv.android.ui.tv.tvFocusScale
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.text.SimpleDateFormat
@@ -97,7 +93,6 @@ fun PersonBioDialog(
     fetchBio: suspend (String) -> TmdbPersonBio?,
     profileUrl: (String?, String) -> String?,
     onDismiss: () -> Unit,
-    isTv: Boolean,
     onTileClick: (suspend (TmdbKnownForItem) -> Boolean)? = null,
 ) {
     var bio by remember(person.id) { mutableStateOf<TmdbPersonBio?>(null) }
@@ -120,17 +115,11 @@ fun PersonBioDialog(
                 scope.launch {
                     val found = resolve(item)
                     if (!found) {
-                        if (isTv) {
-                            android.widget.Toast.makeText(
-                                context,
-                                "Not in your library.",
-                                android.widget.Toast.LENGTH_SHORT,
-                            ).show()
-                        } else {
-                            missText = "Not in your library."
-                            delay(2_000L)
-                            missText = null
-                        }
+                        android.widget.Toast.makeText(
+                            context,
+                            "Not in your library.",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
                     }
                     resolving = false
                 }
@@ -224,9 +213,7 @@ fun PersonBioDialog(
                         // phone/tablet the QR makes no sense (you're already on
                         // the device) -- a tappable "View on TMDB" link in the
                         // footer opens the page directly instead.
-                        if (isTv) {
-                            TmdbPersonQr(personId = person.id)
-                        }
+                        TmdbPersonQr(personId = person.id)
                     }
 
                     val knownFor = bio?.knownFor.orEmpty()
@@ -259,33 +246,8 @@ fun PersonBioDialog(
                 ) {
                     // Phone/tablet: inline miss feedback for a Known For tile
                     // that is not in the library (iOS PersonBioSheet footer).
-                    if (!isTv) {
-                        missText?.let {
-                            Text(
-                                text = it,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = StatusWarning,
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                    }
                     // Phone/tablet: the QR is replaced by a direct link that
                     // opens the person's TMDB page in the browser.
-                    if (!isTv) {
-                        SettingsDialogTextButton(
-                            label = "View on TMDB",
-                            onClick = {
-                                val url = "https://www.themoviedb.org/person/${person.id}"
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                    )
-                                }
-                            },
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
                     SettingsDialogTextButton(label = "Close", onClick = onDismiss)
                 }
             }

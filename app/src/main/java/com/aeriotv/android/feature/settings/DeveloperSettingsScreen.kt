@@ -1,7 +1,6 @@
 package com.aeriotv.android.feature.settings
 
 import com.aeriotv.android.ui.scale.subtext
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,14 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
@@ -34,15 +31,10 @@ import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.WarningAmber
 import com.aeriotv.android.ui.scale.AlertDialog
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,12 +53,9 @@ import androidx.core.content.FileProvider
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aeriotv.android.BuildConfig
-import com.aeriotv.android.core.debug.DebugLogger
 import com.aeriotv.android.ui.settings.settingsFormWidth
 import com.aeriotv.android.ui.settings.SettingsDetailTopBar
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
-import com.aeriotv.android.ui.settings.SettingsPickerOption
-import com.aeriotv.android.ui.settings.SettingsPickerRow
 import com.aeriotv.android.ui.settings.SettingsSubPageHost
 import com.aeriotv.android.ui.settings.SettingsSection
 import com.aeriotv.android.ui.settings.settingsRowCard
@@ -77,7 +66,6 @@ import com.aeriotv.android.ui.settings.settingsFootnoteStyle
 import com.aeriotv.android.ui.settings.settingsRowTitleStyle
 import com.aeriotv.android.ui.theme.textAccent
 import com.aeriotv.android.ui.settings.SettingsToggleRow
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.delay
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
@@ -119,7 +107,6 @@ fun DeveloperSettingsScreen(
     val loggingEnabled by settingsVm.debugLoggingEnabled.collectAsStateWithLifecycle(initialValue = false)
     val forceHls by settingsVm.developerForceHls.collectAsStateWithLifecycle(initialValue = false)
 
-    val isTv = rememberIsTvDevice()
     var pendingEnable by remember { mutableStateOf(false) }
     var pendingDisable by remember { mutableStateOf(false) }
     var pendingClear by remember { mutableStateOf(false) }
@@ -177,9 +164,6 @@ fun DeveloperSettingsScreen(
             // Captured, Log File. TV: Logging, Log File, What's Captured.
             // Apple's Playback Engine section sits after What's Captured on
             // iOS and after Logging on tvOS; Android has no engine choice yet.
-            if (!isTv) {
-                item("captured") { WhatsCapturedSection() }
-            }
             // Apple shows the file rows as soon as logging is on, not only once
             // the first write lands, so the user sees the rows the moment they
             // enable it.
@@ -187,17 +171,16 @@ fun DeveloperSettingsScreen(
                 item("log-file") {
                     LogFileSection(
                         sizeBytes = sizeBytes,
-                        isTv = isTv,
                         onView = onOpenLogViewer,
                         // ACTION_SEND has no useful targets on Google TV, so
                         // TV serves the file over LAN behind a QR code (the
                         // tvOS LogShareServer port). Phones keep the chooser.
-                        onShare = { if (isTv) showQrShare = true else shareLogFile(context, debugLogger) },
+                        onShare = { showQrShare = true },
                         onClear = { pendingClear = true },
                     )
                 }
             }
-            if (isTv) item("captured") { WhatsCapturedSection() }
+            item("captured") { WhatsCapturedSection() }
 
             item("build") { BuildInfoSection() }
         }
@@ -299,12 +282,10 @@ private fun LoggingSection(
     SettingsSection(
         header = "Logging",
         // tvOS has no footer under Debug Logging.
-        footer = if (rememberIsTvDevice()) null else "When enabled, detailed logs are written to a file in the app's private " +
-            "storage. Logs include network requests, playback events, EPG activity, errors, " +
-            "and app lifecycle events. No personally identifiable information is collected.",
+        footer = null,
     ) {
         DevToggleRow(
-            icon = if (enabled || rememberIsTvDevice()) Icons.Filled.BugReport else Icons.Outlined.BugReport,
+            icon = Icons.Filled.BugReport,
             title = "Debug Logging",
             subtitle = if (enabled) "Active: writing to aerio_debug_logs.txt"
             else "Off: no data is collected",
@@ -331,15 +312,13 @@ private fun ForceHlsSection(checked: Boolean, onCheckedChange: (Boolean) -> Unit
 @Composable
 private fun LogFileSection(
     sizeBytes: Long,
-    isTv: Boolean,
     onView: () -> Unit,
     onShare: () -> Unit,
     onClear: () -> Unit,
 ) {
     SettingsSection(
         header = "Log File",
-        footer = if (isTv) null else "Logs rotate automatically when the file exceeds 10 MB. The previous log is " +
-            "preserved as aerio_debug_logs_archive.txt.",
+        footer = null,
     ) {
         DevLogSizeRow(sizeText = formatBytes(sizeBytes))
         DevActionRow(
@@ -351,7 +330,7 @@ private fun LogFileSection(
         DevActionRow(
             icon = Icons.Filled.Share,
             label = "Share Log File",
-            subtitle = if (isTv) "Scan a QR code with your phone" else "Email, Messages, Drive, etc.",
+            subtitle = "Scan a QR code with your phone",
             onClick = onShare,
         )
         DevActionRow(
@@ -368,15 +347,9 @@ private fun LogFileSection(
 private fun WhatsCapturedSection() {
     // Apple TV groups these rows in ONE card and closes the page with the
     // rotation note; the phone keeps its own footer.
-    val isTv = rememberIsTvDevice()
     DevSectionGroup(
         header = "What's Captured",
-        footer = if (isTv) {
-            "Logs rotate automatically when the file exceeds 10 MB. The previous log is preserved as aerio_debug_logs_archive.txt."
-        } else {
-            "Logs include only diagnostic context. AerioTV never logs your Dispatcharr " +
-                "credentials, watch progress identifiers, or any payload that would identify you."
-        },
+        footer = "Logs rotate automatically when the file exceeds 10 MB. The previous log is preserved as aerio_debug_logs_archive.txt.",
         grouped = true,
     ) {
         CategoryRow(
@@ -464,16 +437,8 @@ private fun DevSectionGroup(
 
 @Composable
 private fun DevRowDivider() {
-    if (com.aeriotv.android.ui.settings.rememberIsTvDevice()) {
-        // Draws only inside a grouped TV card (What's Captured).
-        com.aeriotv.android.ui.settings.SettingsRowDivider(startInset = 52.dp)
-        return
-    }
-    HorizontalDivider(
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f),
-        modifier = Modifier.padding(start = 14.dp),
-    )
+    // Draws only inside a grouped TV card (What's Captured).
+    com.aeriotv.android.ui.settings.SettingsRowDivider(startInset = 52.dp)
 }
 
 @Composable
@@ -552,10 +517,9 @@ private fun DevIconTile(
     tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
     isActive: Boolean = true,
 ) {
-    val isTv = rememberIsTvDevice()
-    val box = if (isTv) 24.dp else 36.dp
-    val glyph = if (isTv) 14.dp else 16.dp
-    val corner = if (isTv) 5.dp else 8.dp
+    val box = 24.dp
+    val glyph = 14.dp
+    val corner = 5.dp
     Box(
         modifier = Modifier
             .size(box)
@@ -587,7 +551,7 @@ private fun DevToggleRow(
     SettingsRowContainer(onClick = { onCheckedChange(!checked) }) {
         // Apple TV keeps the Debug Logging tile in the accent at full size
         // in both states; the phone dims it while off.
-        DevIconTile(icon = icon, isActive = checked || rememberIsTvDevice())
+        DevIconTile(icon = icon, isActive = true)
         Spacer(Modifier.size(14.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
@@ -667,43 +631,6 @@ private fun DevLogSizeRow(sizeText: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-private fun shareLogFile(
-    context: android.content.Context,
-    debugLogger: DebugLogger,
-) {
-    val file = debugLogger.logFile()
-    if (!file.exists() || file.length() == 0L) {
-        android.widget.Toast.makeText(context, "No log file to share yet.", android.widget.Toast.LENGTH_SHORT).show()
-        return
-    }
-    val uri = runCatching {
-        FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.fileprovider", file)
-    }.getOrElse {
-        android.widget.Toast.makeText(
-            context,
-            "Couldn't prepare log for share: ${it.message ?: it::class.simpleName}",
-            android.widget.Toast.LENGTH_SHORT,
-        ).show()
-        return
-    }
-    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_SUBJECT, "AerioTV debug logs")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    val chooser = Intent.createChooser(sendIntent, "Share Log File")
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(chooser) }
-        .onFailure {
-            android.widget.Toast.makeText(
-                context,
-                "No app available to receive the log file.",
-                android.widget.Toast.LENGTH_SHORT,
-            ).show()
-        }
 }
 
 private fun formatBytes(bytes: Long): String {

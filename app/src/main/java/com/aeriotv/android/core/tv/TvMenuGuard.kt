@@ -1,10 +1,8 @@
 package com.aeriotv.android.core.tv
 
-import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 
 /**
  * Guards a long-press-triggered DropdownMenu against the D-pad CENTER
@@ -25,34 +23,24 @@ import androidx.compose.ui.platform.LocalContext
  * A deliberate navigate-then-select takes longer than the grace window,
  * so real picks pass through untouched.
  *
- * Touch (phone) is unaffected: [arm] is only called on TV, so on a
- * phone every wrapped click passes immediately (armedAt stays 0, the
- * elapsed check is always far past graceMs).
- *
- * The guard is TV-aware internally: [arm] is a no-op when the app is
- * not running in television UI mode, so callers don't need their own
- * isTv flag and touch devices never have a click swallowed.
  *
  * Usage:
  *   val guard = rememberTvMenuGuard()
  *   ...combinedClickable(onLongClick = { menuOpen = true; guard.arm() })
  *   DropdownMenuItem(onClick = guard.wrap { menuOpen = false; doThing() })
  */
-class TvMenuGuard(private val graceMs: Long, private val isTv: Boolean) {
+class TvMenuGuard(private val graceMs: Long) {
     private var armedAt = 0L
 
-    /** Call when the menu opens from a long-press. No-op off TV. */
+    /** Call when the menu opens from a long-press. */
     fun arm() {
-        if (isTv) {
-            armedAt = SystemClock.uptimeMillis()
-            android.util.Log.d(TAG, "arm tv=true at=$armedAt grace=${graceMs}ms")
-        }
+        armedAt = SystemClock.uptimeMillis()
+        android.util.Log.d(TAG, "arm at=$armedAt grace=${graceMs}ms")
     }
 
     /** Wrap a click callback. Swallows the click if it arrives within
      *  graceMs of [arm] (the spurious long-press-release that fires on the
-     *  newly-focused menu item OR, on some screens, back on the row itself).
-     *  Off TV, armedAt is never set so every click passes immediately. */
+     *  newly-focused menu item OR, on some screens, back on the row itself). */
     fun wrap(action: () -> Unit): () -> Unit = {
         val elapsed = SystemClock.uptimeMillis() - armedAt
         if (elapsed >= graceMs) {
@@ -74,9 +62,5 @@ class TvMenuGuard(private val graceMs: Long, private val isTv: Boolean) {
  */
 @Composable
 fun rememberTvMenuGuard(graceMs: Long = 600L): TvMenuGuard {
-    val isTv = (
-        LocalContext.current.resources.configuration.uiMode and
-            Configuration.UI_MODE_TYPE_MASK
-        ) == Configuration.UI_MODE_TYPE_TELEVISION
-    return remember(isTv) { TvMenuGuard(graceMs, isTv) }
+    return remember { TvMenuGuard(graceMs) }
 }

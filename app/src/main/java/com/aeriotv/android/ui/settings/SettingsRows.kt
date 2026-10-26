@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import android.content.res.Configuration
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -30,12 +29,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,7 +52,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -167,7 +163,7 @@ fun settingsDividerColor(): Color =
 @Composable
 fun SettingsRowDivider(startInset: androidx.compose.ui.unit.Dp = SettingsCardMetrics.dividerInset) {
     // TV: every row is its own card, so there is no hairline between rows.
-    if (rememberIsTvDevice() && !LocalTvGroupedCard.current) return
+    if (!LocalTvGroupedCard.current) return
     androidx.compose.material3.HorizontalDivider(
         thickness = 1.dp,
         color = settingsDividerColor(),
@@ -236,8 +232,7 @@ fun SettingsCard(
     grouped: Boolean = false,
     content: ColumnScopeContent,
 ) {
-    val isTv = rememberIsTvDevice()
-    if (isTv && grouped) {
+    if (grouped) {
         // TV grouped form: ONE card with hairlines, as Apple TV draws About
         // and Developer's What's Captured. Rows read LocalTvGroupedCard and
         // switch back to the divider + card-aware corner chrome.
@@ -252,17 +247,7 @@ fun SettingsCard(
         }
         return
     }
-    if (isTv) {
-        TvSettingsRowCards(modifier = modifier) { TvRowCardsScope.content() }
-        return
-    }
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(SettingsCardMetrics.cardCorner))
-            .background(settingsCardFill()),
-        content = { content() },
-    )
+    TvSettingsRowCards(modifier = modifier) { TvRowCardsScope.content() }
 }
 
 /**
@@ -273,20 +258,14 @@ fun SettingsCard(
  * app-wide 2dp accent ring. Never white, never a scale bump.
  */
 @Composable
-fun Modifier.settingsRowCard(
-    focused: Boolean,
-    dividerInset: androidx.compose.ui.unit.Dp = SettingsCardMetrics.dividerInset,
-): Modifier {
+fun Modifier.settingsRowCard(focused: Boolean): Modifier {
     val primary = MaterialTheme.colorScheme.primary
-    val divider = settingsDividerColor()
     var isFirst by remember { mutableStateOf(true) }
     var isLast by remember { mutableStateOf(true) }
-    val insetPx = with(LocalDensity.current) { dividerInset.toPx() }
-    val hairline = with(LocalDensity.current) { 1.dp.toPx() }
     // The focus fill and ring of the FIRST and LAST rows have to follow the
     // card's own radius, or the card's clip shaves their square corners off
     // (Logan on the Streamer). Interior rows keep the tighter row radius.
-    val isTv = rememberIsTvDevice() && !LocalTvGroupedCard.current
+    val standalone = !LocalTvGroupedCard.current
     if (LocalSuppressRowChrome.current) return this
     if (LocalSettingsFlatStyle.current) {
         // A light band, not the side menu's near-white pill: pages draw their own
@@ -296,9 +275,8 @@ fun Modifier.settingsRowCard(
             .clip(RoundedCornerShape(6.dp))
             .background(if (focused) band else Color.Transparent)
     }
-    val realTv = rememberIsTvDevice()
-    val outer = if (realTv) TvSettingsRowCardCorner else SettingsCardMetrics.cardCorner
-    val shape = if (isTv) RoundedCornerShape(TvSettingsRowCardCorner) else RoundedCornerShape(
+    val outer = TvSettingsRowCardCorner
+    val shape = if (standalone) RoundedCornerShape(TvSettingsRowCardCorner) else RoundedCornerShape(
         topStart = if (isFirst) outer else SettingsCardMetrics.rowCorner,
         topEnd = if (isFirst) outer else SettingsCardMetrics.rowCorner,
         bottomStart = if (isLast) outer else SettingsCardMetrics.rowCorner,
@@ -313,16 +291,6 @@ fun Modifier.settingsRowCard(
                 top + coords.size.height >= parent.size.height - 0.5f
             if (first != isFirst) isFirst = first
             if (last != isLast) isLast = last
-        }
-        .drawBehind {
-            if (!realTv && !isFirst && !focused) {
-                drawLine(
-                    color = divider,
-                    start = Offset(insetPx, 0f),
-                    end = Offset(size.width, 0f),
-                    strokeWidth = hairline,
-                )
-            }
         }
         .clip(shape)
         .background(if (focused) primary.copy(alpha = 0.16f) else Color.Transparent)
@@ -348,7 +316,7 @@ fun SettingsRowContainer(
     content: RowScopeContent,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val tracePage = if (rememberIsTvDevice()) LocalSettingsTracePage.current else null
+    val tracePage = LocalSettingsTracePage.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -449,17 +417,13 @@ fun SettingsToggleRow(
      */
     tiledIcon: Boolean = false,
 ) {
-    val tiled = tiledIcon && !rememberIsTvDevice()
     SettingsRowContainer(
         onClick = { if (enabled) onCheckedChange(!checked) },
         modifier = modifier,
         enabled = enabled,
         traceTitle = title,
     ) {
-        if (leadingIcon != null && tiled) {
-            SettingsIconTile(icon = leadingIcon)
-            Spacer(Modifier.width(12.dp))
-        } else if (leadingIcon != null) {
+        if (leadingIcon != null) {
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
@@ -508,20 +472,7 @@ fun SettingsToggleAffordance(
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
 ) {
-    if (rememberIsTvDevice()) {
-        OnOffIndicator(on = checked)
-    } else {
-        Switch(
-            checked = checked,
-            onCheckedChange = { if (enabled) onCheckedChange(it) },
-            enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                checkedBorderColor = MaterialTheme.colorScheme.primary,
-            ),
-        )
-    }
+    OnOffIndicator(on = checked)
 }
 
 /** The tvOS "• On" / "• Off" toggle indicator: an accent dot + label. */
@@ -691,14 +642,6 @@ fun SettingsSection(
 /** Trailing-lambda content shape for [SettingsSection]. */
 typealias ColumnScopeContent = @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 
-/** True on Android TV / leanback boxes (drives the no-back-button behaviour). */
-@Composable
-@ReadOnlyComposable
-fun rememberIsTvDevice(): Boolean {
-    val uiMode = LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK
-    return uiMode == Configuration.UI_MODE_TYPE_TELEVISION
-}
-
 /**
  * Settings sub-screen top bar. On Android TV the back arrow is omitted -- the
  * remote's BACK button already pops the screen, so an on-screen affordance is
@@ -710,7 +653,7 @@ fun SettingsDetailTopBar(title: String, onBack: () -> Unit) {
     val showBack = settingsShowsBackArrow()
     // Apple TV draws no page title above the first section; the rail already
     // names the page. Keep a small top inset so the first header breathes.
-    if (rememberIsTvDevice() && LocalSettingsInPane.current) {
+    if (LocalSettingsInPane.current) {
         Spacer(Modifier.height(12.dp))
         return
     }
@@ -756,47 +699,41 @@ fun SettingsHeaderTextButton(
     onClick: () -> Unit,
     enabled: Boolean = true,
 ) {
-    if (rememberIsTvDevice()) {
-        var focused by remember { mutableStateOf(false) }
-        Box(
-            modifier = Modifier
-                // The appbar's own end inset is ~12dp; +36dp lands the pill
-                // at the 48dp overscan margin.
-                .padding(end = 36.dp)
-                .heightIn(min = 36.dp)
-                .onFocusChanged { focused = it.isFocused }
-                .clip(RoundedCornerShape(50))
-                .background(
-                    if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                )
-                .border(
-                    width = SettingsFocusRingWidth,
-                    color = if (focused) MaterialTheme.colorScheme.primary
-                    else androidx.compose.ui.graphics.Color.Transparent,
-                    shape = RoundedCornerShape(50),
-                )
-                .clickable(
-                    enabled = enabled,
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick,
-                )
-                .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (enabled) MaterialTheme.colorScheme.textAccent
-                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                fontWeight = FontWeight.Medium,
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            // The appbar's own end inset is ~12dp; +36dp lands the pill
+            // at the 48dp overscan margin.
+            .padding(end = 36.dp)
+            .heightIn(min = 36.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(50))
+            .background(
+                if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
             )
-        }
-    } else {
-        androidx.compose.material3.TextButton(onClick = onClick, enabled = enabled) {
-            Text(label, color = MaterialTheme.colorScheme.textAccent)
-        }
+            .border(
+                width = SettingsFocusRingWidth,
+                color = if (focused) MaterialTheme.colorScheme.primary
+                else androidx.compose.ui.graphics.Color.Transparent,
+                shape = RoundedCornerShape(50),
+            )
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (enabled) MaterialTheme.colorScheme.textAccent
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
@@ -938,7 +875,7 @@ val LocalSettingsTracePage = staticCompositionLocalOf<String?> { null }
 
 /** Whether a Settings top bar should draw a back arrow at this position. */
 @Composable
-fun settingsShowsBackArrow(): Boolean = !rememberIsTvDevice() && !LocalSettingsInPane.current
+fun settingsShowsBackArrow(): Boolean = false
 
 
 /** True inside a TV `SettingsCard(grouped = true)`: rows draw hairlines, not per-row cards. */
@@ -1030,7 +967,6 @@ private object TvRowCardsScope : androidx.compose.foundation.layout.ColumnScope 
  */
 @Composable
 fun Modifier.settingsTvFocusableRow(traceTitle: String = "info"): Modifier {
-    if (!rememberIsTvDevice()) return this
     var focused by remember { mutableStateOf(false) }
     val tracePage = LocalSettingsTracePage.current
     return this

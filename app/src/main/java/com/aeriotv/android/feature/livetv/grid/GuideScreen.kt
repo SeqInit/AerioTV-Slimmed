@@ -5,62 +5,23 @@ import com.aeriotv.android.core.data.guideMatchKey
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.TravelExplore
-import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.StarOutline
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.FiberManualRecord
-import androidx.compose.material.icons.outlined.CreateNewFolder
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.ui.text.input.ImeAction
 import com.aeriotv.android.feature.collections.AddToCollectionFlow
 import com.aeriotv.android.feature.collections.CollectionPill
 import androidx.compose.ui.platform.LocalDensity
-import com.aeriotv.android.feature.livetv.LiveTvPhoneCircle
-import com.aeriotv.android.feature.livetv.edgeSwipeOpensSidebar
-import com.aeriotv.android.feature.livetv.LiveTvPhoneHeaderRow
-import com.aeriotv.android.feature.livetv.PhoneGroupDrawerHost
-import com.aeriotv.android.feature.livetv.ManageGroupsSheet
 import com.aeriotv.android.feature.livetv.TvGroupPicker
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,23 +32,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import com.aeriotv.android.feature.player.MiniPlayerChrome
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -121,7 +77,6 @@ import com.aeriotv.android.feature.livetv.ProgramInfoSheet
 import com.aeriotv.android.feature.livetv.RecordProgramSheet
 import com.aeriotv.android.feature.livetv.computeDisplayChannels
 import com.aeriotv.android.feature.livetv.orderGroups
-import com.aeriotv.android.feature.livetv.rememberLiveTvFormFactor
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.feature.reminders.RemindersViewModel
 import com.aeriotv.android.feature.settings.SettingsViewModel
@@ -186,7 +141,6 @@ fun GuideScreen(
         }
         out as Map<Int, List<LongRange>>
     }
-    val isTv = rememberLiveTvFormFactor().isTv
     val context = LocalContext.current
     val canRecordToServer = LocalCanRecordToServer.current
     // Profiles: no Record anywhere unless dvr_access == manage.
@@ -222,17 +176,7 @@ fun GuideScreen(
     val collections by collectionsVm.collections.collectAsStateWithLifecycle()
     // ANDROID: the TV guide is the sidebar layout: preview header, groups in
     // a left panel beside the side menu.
-    val sidebarInterface = isTv
-    val sidebarGroupMode = isTv && !favoritesOnly
-    // Phone group selector (Logan 2026-09-05, Apple parity): drawer by
-    // default, pills on request. Separate preference from the TV's.
-    val phoneGroupSelector by settingsVm.phoneGroupSelector.collectAsStateWithLifecycle()
-    val phoneSidebarMode = !isTv && phoneGroupSelector != "pills" && !favoritesOnly
-    var phoneDrawerOpen by remember { mutableStateOf(false) }
-    // Apple issue #102 (Logan 2026-10-16): with the setting on, a drag toward
-    // the content that starts on the channel column slides the drawer out.
-    val edgeSwipeSetting by settingsVm.liveTvEdgeSwipeOpensSidebar.collectAsStateWithLifecycle()
-    val edgeDrawerDrag = remember { com.aeriotv.android.feature.livetv.EdgeDrawerDragState() }
+    val sidebarGroupMode = !favoritesOnly
     val remoteMap by settingsVm.remoteControlMap.collectAsStateWithLifecycle()
     val tabActive = com.aeriotv.android.feature.main.LocalTabIsActive.current
     var groupSidebarOpen by remember { mutableStateOf(false) }
@@ -250,28 +194,26 @@ fun GuideScreen(
     // Bumped when the sidebar should pull focus back onto its active row.
     var sidebarRefocusRequest by remember { mutableStateOf(0) }
 
-    val tvComfortScale = if (isTv) displayScaleLiveTv.coerceIn(0.85f, 1.75f) else 1f
+    val tvComfortScale = displayScaleLiveTv.coerceIn(0.85f, 1.75f)
     // System font size times the app Text Size (the root LocalDensity carries
     // both), so TV rows grow with the text they hold.
     val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
     // Phone / tablet rows keep their fixed canon heights at 100% and grow only
     // with the app Text Size (not the system font size, unchanged from before).
     val appTextScale = com.aeriotv.android.ui.scale.LocalAppTextScale.current
-    val hourWidth = if (isTv) 300.dp * guideScale * tvComfortScale else 320.dp * guideScale
-    val railWidth = if (isTv) 120.dp * tvComfortScale else 78.dp
+    val hourWidth = 300.dp * guideScale * tvComfortScale
+    val railWidth = 120.dp * tvComfortScale
     // Phone cells carry the subtitle and two description lines (Logan
     // 2026-09-05, EPGGuideView.swift:3415: 98pt on the phone idiom, 72 on
     // the iPad), so they are taller. Phone = smallest width under 600dp,
     // so a rotated phone keeps the tall rows like the iPhone does.
-    val isPhoneIdiom = !isTv && LocalConfiguration.current.smallestScreenWidthDp < 600
     // Channel Preview (tvOS "Live TV Layout", Logan 2026-09-05): a header
     // above the guide carries the focused program; rows keep title + tags
     // and are shorter (tvOS 96 vs 110 pt). Always on for TV.
-    val previewMode = isTv
     // Subtext Size grows rows only (never shrinks them) by the share of the
     // row that holds secondary lines (subtitle, description, time).
     val subtextGrowth = com.aeriotv.android.ui.scale.LocalSubtextScale.current.let { s ->
-        1f + (s - 1f).coerceAtLeast(0f) * (if (!isTv && isPhoneIdiom) GUIDE_PHONE_SUBTEXT_SHARE else GUIDE_SUBTEXT_SHARE)
+        1f + (s - 1f).coerceAtLeast(0f) * (GUIDE_SUBTEXT_SHARE)
     }
     // PHYSICAL PARITY WITH APPLE TV (Logan 2026-09-17). Apple TV points are
     // about 2x the Streamer's dp on the same physical screen (1080 pt tall vs
@@ -292,9 +234,9 @@ fun GuideScreen(
     // more of it), so the row count, not the row height, is what has to match.
     // The phone / tablet column still takes its small net growth: there the
     // band replaces a number line that used to sit under the logo.
-    val rowHeight = (if (isTv) (if (previewMode) 48.dp else 66.dp) * tvComfortScale * fontScale else if (isPhoneIdiom) 98.dp * appTextScale else 72.dp * appTextScale) * subtextGrowth +
-        (if (isTv) 0.dp else com.aeriotv.android.feature.livetv.grid.GUIDE_PHONE_ROW_BAND_GROWTH)
-    val headerHeight = if (isTv) 25.dp * tvComfortScale * fontScale else 32.dp * appTextScale
+    val rowHeight = ((48.dp) * tvComfortScale * fontScale) * subtextGrowth +
+        (0.dp)
+    val headerHeight = 25.dp * tvComfortScale * fontScale
 
     // Clock: 30 s tick for the now-line and the airing tint.
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -500,7 +442,7 @@ fun GuideScreen(
     val rows = remember(displayChannels, state.epgByChannel, windowStartMs, windowEndMs) {
         val held = grid.rows
         val roll = windowStartMs - held.windowStartMs
-        if (isTv && !held.isEmpty &&
+        if (!held.isEmpty &&
             held.catalog === (state.epgByChannel as? GuideCatalog) &&
             roll >= 0L && roll <= WINDOW_ROLL_REUSE_MAX_MS &&
             windowEndMs - held.windowEndMs == roll &&
@@ -510,7 +452,7 @@ fun GuideScreen(
             held
         } else {
             windowRoll[0] = 0L
-            if (isTv && !held.isEmpty) com.aeriotv.android.ui.tv.TvFocusTrace.guide(
+            if (!held.isEmpty) com.aeriotv.android.ui.tv.TvFocusTrace.guide(
                 "rows-reuse miss channelsSame=${held.channels == displayChannels} " +
                     "catalogSame=${held.catalog === (state.epgByChannel as? GuideCatalog)} roll=$roll " +
                     "endRoll=${windowEndMs - held.windowEndMs}",
@@ -703,13 +645,11 @@ fun GuideScreen(
     val bannerFocus = remember { FocusRequester() }
     val radioBannerFocus = remember { FocusRequester() }
     var clockSelectTrigger by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val previewProgram: EPGProgramme? = if (previewMode) grid.focusedCell() else null
-    val previewChannel: M3UChannel? = if (previewMode && grid.focusRow in 0 until grid.rows.size) grid.rows.channel(grid.focusRow) else null
-    if (previewMode) {
-        val pl = state.playlist
-        com.aeriotv.android.feature.livetv.grid.ActivePlaylistBase.baseUrl = pl?.urlString
-        com.aeriotv.android.feature.livetv.grid.ActivePlaylistBase.playlistId = pl?.id
-    }
+    val previewProgram: EPGProgramme? = grid.focusedCell()
+    val previewChannel: M3UChannel? = if (grid.focusRow in 0 until grid.rows.size) grid.rows.channel(grid.focusRow) else null
+    val pl = state.playlist
+    com.aeriotv.android.feature.livetv.grid.ActivePlaylistBase.baseUrl = pl?.urlString
+    com.aeriotv.android.feature.livetv.grid.ActivePlaylistBase.playlistId = pl?.id
     var programInfoTarget by remember { mutableStateOf<ProgramInfoTarget?>(null) }
     var recordTarget by remember { mutableStateOf<ProgramInfoTarget?>(null) }
     var menuFor by remember { mutableStateOf<Pair<M3UChannel, EPGProgramme>?>(null) }
@@ -723,7 +663,7 @@ fun GuideScreen(
             result.onSuccess { r ->
                 // TV: remember the launched cell and the timeline so the
                 // guide that composes again after the replay lands back here.
-                if (isTv) GuideCatchupReturn.set(channel.id, cell.startMillis, grid.viewportStartMs)
+                GuideCatchupReturn.set(channel.id, cell.startMillis, grid.viewportStartMs)
                 onPlayCatchup(channel.id, r.url, cell.title, cell.startMillis, cell.endMillis, r.panelTimeZoneId, r.channelUuid.orEmpty())
             }
         }
@@ -788,13 +728,11 @@ fun GuideScreen(
             " rows=${rows.size} focusRow=${grid.focusRow} topNavHasFocus=${topNavHasFocus.value}" +
             " guideHasFocus=$guideHasFocus]"
     }
-    if (isTv) {
-        val gateKey = traceGates().substringBefore(" rows=")
-        LaunchedEffect(gateKey) { com.aeriotv.android.ui.tv.TvFocusTrace.guide("gates ${traceGates()}") }
-    }
-    LaunchedEffect(isTv, rows.isEmpty, tabActive) {
+    val gateKey = traceGates().substringBefore(" rows=")
+    LaunchedEffect(gateKey) { com.aeriotv.android.ui.tv.TvFocusTrace.guide("gates ${traceGates()}") }
+    LaunchedEffect(rows.isEmpty, tabActive) {
         if (!tabActive) return@LaunchedEffect
-        if (isTv && !rows.isEmpty) {
+        if (!rows.isEmpty) {
             // Cold launch: the top bar's one-shot pull owns first focus (the
             // landing tab's pill). Wait for it instead of focusing row 0 first
             // and being pulled off a frame later (the visible flash). Bounded
@@ -833,8 +771,8 @@ fun GuideScreen(
     // this tab lands focus somewhere deterministic (Frankie B. 2026-09-15:
     // without one, focus was stranded and every key was declined).
     val tabEntryFocus = com.aeriotv.android.feature.main.LocalTvTabEntryFocus.current
-    androidx.compose.runtime.DisposableEffect(isTv, tabActive) {
-        if (isTv && tabActive) tabEntryFocus.value = gridFocus
+    androidx.compose.runtime.DisposableEffect(tabActive) {
+        if (tabActive) tabEntryFocus.value = gridFocus
         onDispose { if (tabEntryFocus.value === gridFocus) tabEntryFocus.value = null }
     }
 
@@ -851,25 +789,23 @@ fun GuideScreen(
     // watchdog used to fire, pull focus back to a guide cell and strand it
     // on "none" when MAIN left, stealing focus from the next screen.
     val guideResumed by androidx.compose.runtime.produceState(guideLifecycle.currentState, guideLifecycle) { guideLifecycle.currentStateFlow.collect { value = it } }
-    if (isTv) {
-        val stranded = guideResumed.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) &&
-            tabActive && !rows.isEmpty && !guideHasFocus && !topNavHasFocus.value &&
-            !groupSidebarOpen && !showManageGroups && !showJumpSheet && !searchActive &&
-            menuFor == null && programInfoTarget == null && recordTarget == null && collectionPickerFor == null
-        LaunchedEffect(stranded) {
-            if (!stranded) return@LaunchedEffect
-            // Let a legitimate hand-off (dialog opening, route change, the
-            // bar claiming focus a frame later) settle before assuming a trap.
-            delay(350L)
-            while (com.aeriotv.android.ui.tv.TvColdStartFocus.pending) delay(50L)
-            if (guideHasFocus || topNavHasFocus.value) return@LaunchedEffect
-            if (!guideLifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
-                com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus skipped=not-resumed state=${guideLifecycle.currentState}")
-                return@LaunchedEffect
-            }
-            val ok = runCatching { gridFocus.requestFocus() }.getOrDefault(false)
-            com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=stranded result=$ok ${traceGates()}")
+    val stranded = guideResumed.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) &&
+        tabActive && !rows.isEmpty && !guideHasFocus && !topNavHasFocus.value &&
+        !groupSidebarOpen && !showManageGroups && !showJumpSheet && !searchActive &&
+        menuFor == null && programInfoTarget == null && recordTarget == null && collectionPickerFor == null
+    LaunchedEffect(stranded) {
+        if (!stranded) return@LaunchedEffect
+        // Let a legitimate hand-off (dialog opening, route change, the
+        // bar claiming focus a frame later) settle before assuming a trap.
+        delay(350L)
+        while (com.aeriotv.android.ui.tv.TvColdStartFocus.pending) delay(50L)
+        if (guideHasFocus || topNavHasFocus.value) return@LaunchedEffect
+        if (!guideLifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus skipped=not-resumed state=${guideLifecycle.currentState}")
+            return@LaunchedEffect
         }
+        val ok = runCatching { gridFocus.requestFocus() }.getOrDefault(false)
+        com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=stranded result=$ok ${traceGates()}")
     }
 
     // Idle boundary refocus (Logan 2026-10-03): when the focused program ends
@@ -879,19 +815,17 @@ fun GuideScreen(
     // changes (the locked Left/Right/clock model and the viewport are
     // untouched). Skipped after a recent key, with any sheet or menu up, and
     // whenever the grid does not hold focus.
-    if (isTv) {
-        val previousTick = remember { longArrayOf(nowMs) }
-        LaunchedEffect(nowMs) {
-            val prevTickMs = previousTick[0]
-            previousTick[0] = nowMs
-            if (!tabActive || !gridHasFocus || rows.isEmpty) return@LaunchedEffect
-            if (System.currentTimeMillis() - lastGuideKeyAt[0] < 5_000L) return@LaunchedEffect
-            if (groupSidebarOpen || showManageGroups || showJumpSheet || searchActive || menuFor != null ||
-                programInfoTarget != null || recordTarget != null || collectionPickerFor != null) return@LaunchedEffect
-            val row = grid.focusRow
-            val moved = grid.boundaryRetarget(nowMs, prevTickMs) ?: return@LaunchedEffect
-            com.aeriotv.android.ui.tv.TvFocusTrace.guide("boundary refocus row=$row from=${moved.first.title} to=${moved.second.title}")
-        }
+    val previousTick = remember { longArrayOf(nowMs) }
+    LaunchedEffect(nowMs) {
+        val prevTickMs = previousTick[0]
+        previousTick[0] = nowMs
+        if (!tabActive || !gridHasFocus || rows.isEmpty) return@LaunchedEffect
+        if (System.currentTimeMillis() - lastGuideKeyAt[0] < 5_000L) return@LaunchedEffect
+        if (groupSidebarOpen || showManageGroups || showJumpSheet || searchActive || menuFor != null ||
+            programInfoTarget != null || recordTarget != null || collectionPickerFor != null) return@LaunchedEffect
+        val row = grid.focusRow
+        val moved = grid.boundaryRetarget(nowMs, prevTickMs) ?: return@LaunchedEffect
+        com.aeriotv.android.ui.tv.TvFocusTrace.guide("boundary refocus row=$row from=${moved.first.title} to=${moved.second.title}")
     }
 
     // Logan 2026-09-02: backing out of a full-screen channel lands the guide
@@ -903,7 +837,7 @@ fun GuideScreen(
         if (miniChannelId == null) miniAnchoredFor = null
         if (!tabActive) return@LaunchedEffect
         val id = miniChannelId ?: return@LaunchedEffect
-        if (!isTv || rows.isEmpty) return@LaunchedEffect
+        if (rows.isEmpty) return@LaunchedEffect
         // GH #128: the guide opened from fullscreen lands on NOW as well as
         // the playing channel (a held Left used to leave it panned back).
         // A catch-up return restores its own timeline in the effect below.
@@ -911,10 +845,8 @@ fun GuideScreen(
         miniAnchoredFor = id
         val found = grid.focusChannel(id)
         val requested = if (found) runCatching { gridFocus.requestFocus() }.getOrDefault(false) else false
-        if (isTv) {
-            androidx.compose.runtime.withFrameNanos { }
-            com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=mini-channel channel=$id found=$found requested=$requested gridHasFocus=$gridHasFocus cell=${guideTraceCell(grid)} ${traceGates()}")
-        }
+        androidx.compose.runtime.withFrameNanos { }
+        com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=mini-channel channel=$id found=$found requested=$requested gridHasFocus=$gridHasFocus cell=${guideTraceCell(grid)} ${traceGates()}")
     }
 
     // Returning from a catch-up replay launched from this guide: the player
@@ -923,7 +855,7 @@ fun GuideScreen(
     // and hold grid focus against the tab bar's one-shot initial pill pull,
     // which lands a few frames after the guide recomposes.
     LaunchedEffect(rows.isEmpty, tabActive) {
-        if (!isTv || !tabActive || rows.isEmpty) return@LaunchedEffect
+        if (!tabActive || rows.isEmpty) return@LaunchedEffect
         val ret = GuideCatchupReturn.consume() ?: return@LaunchedEffect
         val row = grid.rows.indexOfChannel(ret.channelId)
         if (row < 0) {
@@ -961,7 +893,6 @@ fun GuideScreen(
         CollectionPill(
             collection = c,
             selected = state.selectedGroup == token,
-            isTv = isTv,
             onSelect = { viewModel.onGroupSelected(token) },
             onSetPlacement = { p -> collectionsVm.setPlacement(c.id, p) },
             onDelete = {
@@ -974,7 +905,7 @@ fun GuideScreen(
     val openMainMenu = com.aeriotv.android.feature.main.LocalTvRequestCurrentTabPill.current
     val openGroupMenu: () -> Boolean = {
         // Favorites has no groups; in the sidebar style its Back goes to the menu.
-        if (favoritesOnly) sidebarInterface && openMainMenu?.invoke() == true
+        if (favoritesOnly) true && openMainMenu?.invoke() == true
         else if (sidebarGroupMode) {
             sidebarOriginalGroup = state.selectedGroup
             groupSidebarOpen = true
@@ -1080,7 +1011,7 @@ fun GuideScreen(
     // which opens BESIDE it (the column stays). Standard:
     // Back reverts the previewed group and closes the sidebar.
     BackHandler(enabled = tabActive && groupSidebarOpen) {
-        if (sidebarInterface && openMainMenu?.invoke() == true) return@BackHandler
+        if (openMainMenu?.invoke() == true) return@BackHandler
         restoreSidebarGroup()
         sidebarOriginalGroup = null
         groupSidebarOpen = false
@@ -1089,7 +1020,7 @@ fun GuideScreen(
     // Sidebar style: the menu closed (Right) with the groups column still open:
     // focus returns to the column. topNavHasFocus is the menu's open flag.
     LaunchedEffect(topNavHasFocus.value) {
-        if (sidebarInterface && !topNavHasFocus.value && groupSidebarOpen) sidebarRefocusRequest += 1
+        if (!topNavHasFocus.value && groupSidebarOpen) sidebarRefocusRequest += 1
     }
 
     // With a mini player up on TV, Back belongs to the player host
@@ -1097,9 +1028,6 @@ fun GuideScreen(
     // guide. Phone and tablet have no mini Back host, so the ladder stays
     // installed there: a Back after the player minimized fell through to the
     // Activity and closed AerioTV (onn tablet 2026-10-14, audio-only mini).
-    val uiModeTv = (androidx.compose.ui.platform.LocalConfiguration.current.uiMode and
-        android.content.res.Configuration.UI_MODE_TYPE_MASK) ==
-        android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     // Radio Mode double Back (Logan 2026-10-14, Apple TV parity): on TV a
     // second Back inside PlayerDoubleBack.WINDOW_MS stops Radio Mode, as
     // Back twice closes the full-screen player. As on tvOS, the first Back
@@ -1125,7 +1053,7 @@ fun GuideScreen(
     // parity 2026-10-15); presses on the way to the banner never move it.
     val radioOriginAnchor = remember { arrayOfNulls<Pair<String, Long>>(1) }
     LaunchedEffect(radioSessionNow != null) {
-        if (radioSessionNow != null && isTv) {
+        if (radioSessionNow != null) {
             radioCaptureFocus()
             radioOriginAnchor[0] = radioFocusAnchor[0]
         }
@@ -1136,7 +1064,7 @@ fun GuideScreen(
     }
     LaunchedEffect(Unit) {
         com.aeriotv.android.feature.player.RadioMode.stops.collect { reason ->
-            if (!isTv || !tabActive) return@collect
+            if (!tabActive) return@collect
             if (reason != "double Back" && reason != "hold-right" && reason != "card") return@collect
             val anchor = if (reason == "card") radioOriginAnchor[0] ?: radioFocusAnchor[0] else radioFocusAnchor[0]
             radioFocusAnchor[0] = null
@@ -1203,7 +1131,7 @@ fun GuideScreen(
         val mapped = remoteMap.guideAction(slot, sidebarGroupMode)
         val untouched = mapped == com.aeriotv.android.core.remote.RemoteControlMap.DEFAULT.guideAction(slot, sidebarGroupMode)
         when {
-            !sidebarInterface || !untouched -> mapped
+            !untouched -> mapped
             slot == com.aeriotv.android.core.remote.RemoteSlot.BACK_SHORT &&
                 grid.isAwayFromNow(System.currentTimeMillis()) -> com.aeriotv.android.core.remote.GuideRemoteAction.JUMP_TO_NOW
             slot == com.aeriotv.android.core.remote.RemoteSlot.BACK_SHORT -> com.aeriotv.android.core.remote.GuideRemoteAction.FOCUS_GROUP_PILLS
@@ -1212,15 +1140,11 @@ fun GuideScreen(
         }
     }
     val runMappedBack: () -> Unit = {
-        if (uiModeTv) {
-            runGuideMapped(guideBackAction(com.aeriotv.android.core.remote.RemoteSlot.BACK_SHORT), "single")
-        } else {
-            runGuideBackLadder()
-        }
+        runGuideMapped(guideBackAction(com.aeriotv.android.core.remote.RemoteSlot.BACK_SHORT), "single")
     }
     // Sidebar style: the guide keeps Back while the preview plays (the mini
     // overlay's expand-on-Back is off in that layout; hold Back expands).
-    val guideBackEnabled = tabActive && !(miniActive && uiModeTv && !sidebarInterface) && !groupSidebarOpen && menuFor == null && programInfoTarget == null && recordTarget == null
+    val guideBackEnabled = tabActive && !groupSidebarOpen && menuFor == null && programInfoTarget == null && recordTarget == null
     BackHandler(enabled = guideBackEnabled) {
         if (miniActive) android.util.Log.i("AerioTV", "[GUIDE] Back with mini up (touch): guide ladder, app stays open")
         if (miniPlayerVm.session.expandInFlight()) {
@@ -1237,7 +1161,7 @@ fun GuideScreen(
             }
             return@BackHandler
         }
-        val radioTv = uiModeTv && com.aeriotv.android.feature.player.RadioMode.isActive
+        val radioTv = com.aeriotv.android.feature.player.RadioMode.isActive
         if (radioTv) {
             // First Back of a possible double: anchor the cell at press-down.
             radioCaptureFocus()
@@ -1255,7 +1179,7 @@ fun GuideScreen(
     // MainActivity then runs it on a hold released before the exit-prompt
     // hold (EXIT_PROMPT_HOLD_MS), and a longer hold still raises Exit AerioTV?.
     val backLongAction = guideBackAction(com.aeriotv.android.core.remote.RemoteSlot.BACK_LONG)
-    val holdBackOwned = uiModeTv && guideBackEnabled &&
+    val holdBackOwned = guideBackEnabled &&
         backLongAction != com.aeriotv.android.core.remote.GuideRemoteAction.NONE
     val latestBackLong = androidx.compose.runtime.rememberUpdatedState(backLongAction)
     androidx.compose.runtime.DisposableEffect(holdBackOwned) {
@@ -1280,7 +1204,7 @@ fun GuideScreen(
     val sideMenuWidth = com.aeriotv.android.feature.main.LocalTvSideMenuWidth.current
     var groupsColumnWidthPx by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val groupsPush by androidx.compose.animation.core.animateIntAsState(
-        targetValue = if (sidebarInterface && groupSidebarOpen) groupsColumnWidthPx else 0,
+        targetValue = if (groupSidebarOpen) groupsColumnWidthPx else 0,
         label = "sidebarGroupsPush",
     )
     Box(modifier = modifier.fillMaxSize()
@@ -1291,7 +1215,7 @@ fun GuideScreen(
             if (e.type == KeyEventType.KeyDown) lastGuideKeyAt[0] = System.currentTimeMillis()
             // Trace only, never consumes: a D-pad key inside the guide that the
             // grid node will not see (focus is on the banner, pills, sidebar...).
-            if (isTv && !gridHasFocus && e.type == KeyEventType.KeyDown) {
+            if (!gridHasFocus && e.type == KeyEventType.KeyDown) {
                 val name = when (e.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> "Center"
                     else -> com.aeriotv.android.ui.tv.TvFocusTrace.nameOf(e)
@@ -1301,84 +1225,25 @@ fun GuideScreen(
             false
         }) {
     Row(modifier = Modifier.fillMaxSize()) {
-    if (groupSidebarOpen && !isTv) {
-        GuideGroupSidebarPane(
-            groups = groups,
-            selectedToken = state.selectedGroup,
-            defaultToken = defaultGroupToken,
-            onSetDefault = viewModel::setDefaultGroup,
-            topOffset = 0.dp,
-            onCommit = commitSidebarGroup,
-            onManageGroups = openSidebarManageGroups,
-            hiddenGroupCount = hiddenGroups.size,
+    Column(modifier = Modifier.weight(1f).fillMaxSize().then(Modifier)) {
+        SidebarGuideHeader(
+            program = previewProgram,
+            channel = previewChannel,
+            nowMs = nowMs,
+            onOpenInfo = {
+                previewProgram?.let { cell ->
+                    programInfoTarget = cell.toInfoTarget(previewChannel?.name ?: "", previewChannel?.dispatcharrChannelId)
+                }
+            },
+            descriptionFocus = bannerFocus,
+            downTarget = gridFocus,
+            onDown = { clockSelectTrigger += 1; true },
+            miniActive = miniActive,
+            publishDock = tabActive,
         )
-    }
-    Column(modifier = Modifier.weight(1f).fillMaxSize().then(if (isTv) Modifier else Modifier.statusBarsPadding())) {
-        if (!isTv) {
-            // Phone / tablet: NO title bar (Logan 2026-09-05, Apple parity).
-            // The header row carries the groups control, the pills or the
-            // active group name + count, Search, Sort and the List / Guide
-            // toggle; the Column above already applies the status-bar inset.
-            LiveTvPhoneHeaderRow(
-                sidebarMode = phoneSidebarMode,
-                activeGroupLabel = groupLabelFor(state.selectedGroup),
-                channelCount = displayChannels.size,
-                onOpenGroups = { phoneDrawerOpen = true },
-                hiddenGroupsCount = hiddenGroups.size,
-                onManageGroups = { showManageGroups = true },
-                showPills = !favoritesOnly && (groups.size > 1 || collections.isNotEmpty() || hiddenGroups.isNotEmpty()),
-                groups = groups,
-                selectedGroup = state.selectedGroup,
-                onSelectGroup = { viewModel.onGroupSelected(it) },
-                defaultToken = defaultGroupToken,
-                onSetDefault = viewModel::setDefaultGroup,
-                collections = collections,
-                collectionPillItem = collectionPillItem,
-                searchActive = searchActive,
-                onToggleSearch = { searchActive = !searchActive; if (!searchActive) viewModel.onSearchQueryChange("") },
-                sortMode = state.sortMode,
-                onSortModeChange = viewModel::onSortModeChange,
-                onJumpToDay = { showJumpSheet = true },
-                canToggleViewMode = canToggleViewMode,
-                showingGuide = viewMode == LiveTVViewMode.Guide,
-                onToggleViewMode = onToggleViewMode,
-            )
-            if (searchActive) {
-                OutlinedTextField(
-                    value = state.searchQuery,
-                    onValueChange = viewModel::onSearchQueryChange,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    singleLine = true,
-                    placeholder = { Text("Search channels") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    trailingIcon = if (state.searchQuery.isNotEmpty()) {
-                        { IconButton(onClick = { viewModel.onSearchQueryChange("") }) { Icon(Icons.Filled.Close, contentDescription = "Clear search") } }
-                    } else null,
-                    shape = RoundedCornerShape(14.dp),
-                    keyboardOptions = com.aeriotv.android.ui.textfield.aerioTextFieldKeyboardOptions(imeAction = ImeAction.Search),
-                )
-            }
-        }
-        if (previewMode) {
-            SidebarGuideHeader(
-                program = previewProgram,
-                channel = previewChannel,
-                nowMs = nowMs,
-                onOpenInfo = {
-                    previewProgram?.let { cell ->
-                        programInfoTarget = cell.toInfoTarget(previewChannel?.name ?: "", previewChannel?.dispatcharrChannelId)
-                    }
-                },
-                descriptionFocus = bannerFocus,
-                downTarget = gridFocus,
-                onDown = { clockSelectTrigger += 1; true },
-                miniActive = miniActive,
-                publishDock = tabActive,
-            )
-        }
         // Radio Mode dock card (Android#127), below the header / pills and
         // above the grid.
-        if (isTv) com.aeriotv.android.feature.player.RadioTvBannerSlot(
+        com.aeriotv.android.feature.player.RadioTvBannerSlot(
             // The grid restores the cell it last focused.
             onReturnFocus = { runCatching { gridFocus.requestFocus() }.getOrDefault(false) },
             playFocusRequester = radioBannerFocus,
@@ -1416,7 +1281,6 @@ fun GuideScreen(
                 headerHeight = headerHeight,
                 favoriteIds = favoriteIds,
                 recordingWindows = recordingWindows,
-                isTv = isTv,
                 onPlay = { channel, cell ->
                     // Already-aired + within the catch-up window: play it from
                     // the start right away (no menu first). The rail tap hands
@@ -1427,7 +1291,7 @@ fun GuideScreen(
                     }
                     // OK on the channel already in the corner mini promotes the
                     // mini to fullscreen instead of re-tuning the same stream.
-                    else if (isTv && miniChannelId == channel.id) miniPlayerVm.session.requestResume()
+                    else if (miniChannelId == channel.id) miniPlayerVm.session.requestResume()
                     else onChannelClick(channel)
                 },
                 onOpenMenu = { channel, cell -> menuFor = channel to cell; menuGuard.arm() },
@@ -1441,51 +1305,36 @@ fun GuideScreen(
                 // selection-follows-focus, switched to Live TV.
                 onLeaveTop = {
                     val bannerUp = com.aeriotv.android.feature.player.RadioMode.isActive
-                    val bannerFocused = isTv && bannerUp &&
+                    val bannerFocused = bannerUp &&
                         runCatching { radioBannerFocus.requestFocus() }.getOrDefault(false)
                     com.aeriotv.android.ui.tv.TvFocusTrace.guide("leave-top radio-banner=$bannerFocused")
                     if (bannerFocused) true else when {
                         // Channel Preview with no pill row: the banner's
                         // description is the next stop above the clock.
-                        previewMode && (favoritesOnly || sidebarGroupMode) && previewProgram?.description?.isNotBlank() == true ->
+                        (favoritesOnly || sidebarGroupMode) && previewProgram?.description?.isNotBlank() == true ->
                             runCatching { bannerFocus.requestFocus() }.getOrDefault(false)
                         favoritesOnly -> guideFocusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Up)
                         else -> false
                     }
                 },
-                compact = previewMode,
+                compact = true,
                 // Sidebar style: the cursor stays in the guide; Up / Down wrap.
-                wrapRows = sidebarInterface,
+                wrapRows = true,
                 clockSelectTrigger = clockSelectTrigger,
                 // GH #127: phone / tablet cell info button (TV has the long-press menu).
                 programInfoButtonMode = programInfoButtonMode,
-                onOpenProgramInfo = if (isTv) null else { channel, cell ->
-                    programInfoTarget = cell.toInfoTarget(channel.name, channel.dispatcharrChannelId)
-                },
+                onOpenProgramInfo = null,
                 remoteAction = { slot -> remoteMap.guideAction(slot, sidebarGroupMode) },
                 onHostAction = hostAction,
                 onActionRunner = { gridRunner[0] = it },
                 focusRequester = gridFocus,
                 onGridFocusChanged = { gridHasFocus = it },
                 traceGates = traceGates,
-                modifier = Modifier.fillMaxSize().then(
-                    with(LocalDensity.current) {
-                        Modifier.edgeSwipeOpensSidebar(
-                            enabled = phoneSidebarMode && edgeSwipeSetting && !phoneDrawerOpen,
-                            drag = edgeDrawerDrag,
-                            railBandPx = railWidth.toPx(),
-                            topExcludePx = headerHeight.toPx(),
-                        ) { phoneDrawerOpen = true }
-                    },
-                ),
+                modifier = Modifier.fillMaxSize(),
             )
             }
             }
-            if (isTv) gridContent() else PullToRefreshBox(
-                isRefreshing = state.isLoading,
-                onRefresh = { viewModel.refreshPlaylist() },
-                modifier = Modifier.fillMaxSize(),
-            ) { gridContent() }
+            gridContent()
         }
         }
         }
@@ -1494,60 +1343,58 @@ fun GuideScreen(
     // Groups column: drawn in the shell's full-screen slot at full height
     // beside the side menu (when open); the guide is pushed right instead of
     // dimmed. Right or OK commit, Back reverts.
-    if (isTv) {
-        val drawerSlot = com.aeriotv.android.feature.main.LocalTvFullScreenOverlay.current
-        val drawerOverlay: @Composable () -> Unit = {
-            Box(
-                modifier = Modifier
-                    .offset { androidx.compose.ui.unit.IntOffset(sideMenuWidth.value.roundToPx(), 0) }
-                    .onSizeChanged { groupsColumnWidthPx = it.width }
-                    .onPreviewKeyEvent { e ->
-                        // Left from the groups column opens the main menu.
-                        e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft &&
-                            openMainMenu?.invoke() == true
-                    },
-            ) {
-                GuideGroupSidebarPane(
-                    groups = groups,
-                    selectedToken = state.selectedGroup,
-                    defaultToken = defaultGroupToken,
-                    onSetDefault = viewModel::setDefaultGroup,
-                    topOffset = 0.dp,
-                    onPreview = previewSidebarGroup,
-                    onCommit = commitSidebarGroup,
-                    refocusToken = sidebarActiveToken,
-                    refocusRequest = sidebarRefocusRequest,
-                    onManageGroups = openSidebarManageGroups,
-                    hiddenGroupCount = hiddenGroups.size,
-                )
-            }
+    val drawerSlot = com.aeriotv.android.feature.main.LocalTvFullScreenOverlay.current
+    val drawerOverlay: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .offset { androidx.compose.ui.unit.IntOffset(sideMenuWidth.value.roundToPx(), 0) }
+                .onSizeChanged { groupsColumnWidthPx = it.width }
+                .onPreviewKeyEvent { e ->
+                    // Left from the groups column opens the main menu.
+                    e.type == KeyEventType.KeyDown && e.key == Key.DirectionLeft &&
+                        openMainMenu?.invoke() == true
+                },
+        ) {
+            GuideGroupSidebarPane(
+                groups = groups,
+                selectedToken = state.selectedGroup,
+                defaultToken = defaultGroupToken,
+                onSetDefault = viewModel::setDefaultGroup,
+                topOffset = 0.dp,
+                onPreview = previewSidebarGroup,
+                onCommit = commitSidebarGroup,
+                refocusToken = sidebarActiveToken,
+                refocusRequest = sidebarRefocusRequest,
+                onManageGroups = openSidebarManageGroups,
+                hiddenGroupCount = hiddenGroups.size,
+            )
         }
-        if (drawerSlot != null) {
-            // As with Jump To: the shell reseats focus once the overlay is
-            // gone, after the commit asked for the grid.
-            var drawerWasOpen by remember { mutableStateOf(false) }
-            LaunchedEffect(groupSidebarOpen) {
-                if (groupSidebarOpen) { drawerWasOpen = true; return@LaunchedEffect }
-                if (!drawerWasOpen) return@LaunchedEffect
-                drawerWasOpen = false
-                repeat(3) { androidx.compose.runtime.withFrameNanos { } }
-                // Sidebar style: Back from the panel opened the main menu, which
-                // owns focus now.
-                if (topNavHasFocus.value) return@LaunchedEffect
-                val requested = runCatching { gridFocus.requestFocus() }.getOrDefault(false)
-                androidx.compose.runtime.withFrameNanos { }
-                com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=sidebar-close requested=$requested result=${if (gridHasFocus) "success" else "failure"} ${traceGates()}")
-            }
+    }
+    if (drawerSlot != null) {
+        // As with Jump To: the shell reseats focus once the overlay is
+        // gone, after the commit asked for the grid.
+        var drawerWasOpen by remember { mutableStateOf(false) }
+        LaunchedEffect(groupSidebarOpen) {
+            if (groupSidebarOpen) { drawerWasOpen = true; return@LaunchedEffect }
+            if (!drawerWasOpen) return@LaunchedEffect
+            drawerWasOpen = false
+            repeat(3) { androidx.compose.runtime.withFrameNanos { } }
+            // Sidebar style: Back from the panel opened the main menu, which
+            // owns focus now.
+            if (topNavHasFocus.value) return@LaunchedEffect
+            val requested = runCatching { gridFocus.requestFocus() }.getOrDefault(false)
+            androidx.compose.runtime.withFrameNanos { }
+            com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=sidebar-close requested=$requested result=${if (gridHasFocus) "success" else "failure"} ${traceGates()}")
         }
-        if (drawerSlot != null) {
-            androidx.compose.runtime.DisposableEffect(groupSidebarOpen) {
-                if (groupSidebarOpen) drawerSlot.value = drawerOverlay
-                else if (drawerSlot.value === drawerOverlay) drawerSlot.value = null
-                onDispose { if (drawerSlot.value === drawerOverlay) drawerSlot.value = null }
-            }
-        } else if (groupSidebarOpen) {
-            drawerOverlay()
+    }
+    if (drawerSlot != null) {
+        androidx.compose.runtime.DisposableEffect(groupSidebarOpen) {
+            if (groupSidebarOpen) drawerSlot.value = drawerOverlay
+            else if (drawerSlot.value === drawerOverlay) drawerSlot.value = null
+            onDispose { if (drawerSlot.value === drawerOverlay) drawerSlot.value = null }
         }
+    } else if (groupSidebarOpen) {
+        drawerOverlay()
     }
     // TV Jump To: drawn in the shell's full-screen slot so the scrim covers
     // the tab bar too; drawn here when no shell provides one.
@@ -1561,7 +1408,7 @@ fun GuideScreen(
             onDismiss = { showJumpSheet = false; runCatching { gridFocus.requestFocus() } },
         )
     }
-    if (isTv && fullScreenSlot != null) {
+    if (fullScreenSlot != null) {
         androidx.compose.runtime.DisposableEffect(showJumpSheet) {
             fullScreenSlot.value = if (showJumpSheet) jumpOverlay else null
             onDispose { if (fullScreenSlot.value === jumpOverlay) fullScreenSlot.value = null }
@@ -1579,34 +1426,8 @@ fun GuideScreen(
             androidx.compose.runtime.withFrameNanos { }
             com.aeriotv.android.ui.tv.TvFocusTrace.guide("refocus after=jump-close requested=$requested result=${if (gridHasFocus) "success" else "failure"} ${traceGates()}")
         }
-    } else if (showJumpSheet && isTv) {
+    } else if (showJumpSheet) {
         jumpOverlay()
-    }
-    if (!isTv) {
-        val drawerTokens = remember(groups, collections) {
-            collections.filter { it.placement == ChannelCollection.PLACEMENT_BEGINNING }.map { ChannelCollection.token(it.id) } +
-                groups +
-                collections.filter { it.placement != ChannelCollection.PLACEMENT_BEGINNING }.map { ChannelCollection.token(it.id) }
-        }
-        PhoneGroupDrawerHost(
-            open = phoneDrawerOpen,
-            onDismiss = { phoneDrawerOpen = false },
-            edgeDrag = edgeDrawerDrag,
-            tokens = drawerTokens,
-            selected = state.selectedGroup,
-            defaultToken = defaultGroupToken,
-            labelFor = groupLabelFor,
-            onSelect = { viewModel.onGroupSelected(it) },
-            // A drag in the drawer is a manual order (the saved order is only
-            // read in Manual mode), so the mode flips with the first drag.
-            onReorder = { order ->
-                settingsVm.setGroupSortMode(GroupSortMode.Manual.name)
-                settingsVm.setGroupOrder(order)
-            },
-            onManageGroups = { phoneDrawerOpen = false; showManageGroups = true },
-            onSetDefault = viewModel::setDefaultGroup,
-            hiddenGroupCount = hiddenGroups.size,
-        )
     }
     }
 
@@ -1614,7 +1435,6 @@ fun GuideScreen(
         AddToCollectionFlow(
             channelId = chId,
             channelName = chName,
-            isTv = isTv,
             collections = collections,
             onToggleMember = collectionsVm::toggleMember,
             onCreate = collectionsVm::create,
@@ -1623,53 +1443,36 @@ fun GuideScreen(
     }
 
     if (showManageGroups) {
-        if (isTv) {
-            TvGroupPicker(
-                allGroups = allGroupNames, hiddenGroups = effectiveHidden,
-                onDismiss = {
-                    showManageGroups = false
-                    if (manageGroupsFromSidebar && groupSidebarOpen) {
-                        // Apple TV parity: only the sheet closes. The sidebar
-                        // stays open with focus on the active group row; its
-                        // own preview / commit / Back rules carry on from there.
-                        manageGroupsFromSidebar = false
-                        sidebarRefocusRequest++
-                    } else {
-                        // Opened elsewhere: close the sidebar too, since leaving
-                        // it open with focus in the grid made a later held Left
-                        // a no-op (already "open"). Logan 2026-09-02.
-                        manageGroupsFromSidebar = false
-                        restoreSidebarGroup(); sidebarOriginalGroup = null; groupSidebarOpen = false
-                        runCatching { gridFocus.requestFocus() }
-                    }
-                },
-                reorderEnabled = true, sortMode = groupSortMode,
-                onSortModeChange = { settingsVm.setGroupSortMode(it.name) },
-                onCommit = { hidden, order ->
-                    com.aeriotv.android.feature.livetv.applyManagedGroups(
-                        hidden, hiddenGroups, recentGroupVisible,
-                        setHiddenGroups = { settingsVm.setHiddenGroups(it) },
-                        setRecentVisible = { settingsVm.setRecentGroupVisible(it) },
-                    )
-                    order?.let { settingsVm.setGroupOrder(it) }
-                },
-            )
-        } else {
-            ManageGroupsSheet(
-                allGroups = allGroupNames, hiddenGroups = effectiveHidden,
-                onSave = { committed ->
-                    com.aeriotv.android.feature.livetv.applyManagedGroups(
-                        committed, hiddenGroups, recentGroupVisible,
-                        setHiddenGroups = { settingsVm.setHiddenGroups(it) },
-                        setRecentVisible = { settingsVm.setRecentGroupVisible(it) },
-                    )
-                },
-                onDismiss = { showManageGroups = false },
-                reorderEnabled = true, sortMode = groupSortMode,
-                onSortModeChange = { settingsVm.setGroupSortMode(it.name) },
-                onReorder = { settingsVm.setGroupOrder(it) },
-            )
-        }
+        TvGroupPicker(
+            allGroups = allGroupNames, hiddenGroups = effectiveHidden,
+            onDismiss = {
+                showManageGroups = false
+                if (manageGroupsFromSidebar && groupSidebarOpen) {
+                    // Apple TV parity: only the sheet closes. The sidebar
+                    // stays open with focus on the active group row; its
+                    // own preview / commit / Back rules carry on from there.
+                    manageGroupsFromSidebar = false
+                    sidebarRefocusRequest++
+                } else {
+                    // Opened elsewhere: close the sidebar too, since leaving
+                    // it open with focus in the grid made a later held Left
+                    // a no-op (already "open"). Logan 2026-09-02.
+                    manageGroupsFromSidebar = false
+                    restoreSidebarGroup(); sidebarOriginalGroup = null; groupSidebarOpen = false
+                    runCatching { gridFocus.requestFocus() }
+                }
+            },
+            reorderEnabled = true, sortMode = groupSortMode,
+            onSortModeChange = { settingsVm.setGroupSortMode(it.name) },
+            onCommit = { hidden, order ->
+                com.aeriotv.android.feature.livetv.applyManagedGroups(
+                    hidden, hiddenGroups, recentGroupVisible,
+                    setHiddenGroups = { settingsVm.setHiddenGroups(it) },
+                    setRecentVisible = { settingsVm.setRecentGroupVisible(it) },
+                )
+                order?.let { settingsVm.setGroupOrder(it) }
+            },
+        )
     }
 
     menuFor?.let { (channel, cell) ->
@@ -1688,67 +1491,29 @@ fun GuideScreen(
             if (reminderSet) remindersVm.cancelReminder(key)
             else remindersVm.setReminder(channel.name, cell.title, cell.startMillis, cell.endMillis, channel.id)
         }
-        if (!isTv) {
-            // Phone and tablet: Material 3 modal bottom sheet (the platform's
-            // long-press action surface; Logan 2026-09-09), items in the iPhone
-            // context-menu order. Jump To lives on the clock cell here.
-            val sheetActions = buildList {
-                if (isLive && channel.url.isNotBlank()) add(TvMenuAction("Watch", Icons.Filled.PlayArrow) { com.aeriotv.android.feature.player.RadioSelect.watchAsVideo { onChannelClick(channel) } })
-                else if (replayable) add(TvMenuAction("Watch from Start", Icons.Outlined.History, onClick = watchFromStart))
-                com.aeriotv.android.feature.player.radioMenuAction(context, channel, if (isLive) cell.title else "") { miniPlayerVm.dismiss() }?.let { add(it) }
-            com.aeriotv.android.feature.player.radioFlagMenuAction(context, channel, state.playlist, viewModel)?.let { add(it) }
-                add(TvMenuAction(if (isFavorite) "Remove from Favorites" else "Add to Favorites", if (isFavorite) Icons.Outlined.StarOutline else Icons.Filled.Star) { favoritesVm.toggle(channel) })
-                // GH #130 (Apple d051505): only while the channel is in Recently Watched.
-                if (isRecent) add(TvMenuAction("Remove from Recently Watched", Icons.Outlined.History, destructive = true) { settingsVm.removeRecentChannel(channel.id) })
-                add(TvMenuAction("Add Channel to Collection", Icons.Outlined.CreateNewFolder) { collectionPickerFor = channel.id to channel.name })
-                if (!cell.isPlaceholder) {
-                    add(TvMenuAction("Program Info", Icons.Outlined.Info) { programInfoTarget = cell.toInfoTarget(channel.name, channel.dispatcharrChannelId) })
-                    if (canRecord) add(TvMenuAction(if (isLive) "Record from Now" else "Record", Icons.Outlined.FiberManualRecord) { recordTarget = cell.toInfoTarget(channel.name, channel.dispatcharrChannelId) })
-                    if (cell.startMillis > nowMs) add(TvMenuAction(if (reminderSet) "Cancel Reminder" else "Set Reminder", Icons.Outlined.Notifications, onClick = toggleReminder))
-                }
-            }
-            com.aeriotv.android.feature.livetv.LiveTvActionSheet(
-                title = cell.title,
-                subtitle = channel.name,
-                actions = sheetActions,
-                onDismiss = { menuFor = null },
-            )
-        } else {
-        val actions = buildList {
-            // Apple order on TV: Watch first only when a plain Select would
-            // open Radio Mode (declared radio or Radio Mode by Default), then
-            // Radio Mode.
-            if (isLive && channel.url.isNotBlank() && com.aeriotv.android.feature.player.RadioSelect.picksOpenRadio(channel)) {
-                add(TvMenuAction("Watch", Icons.Filled.PlayArrow) { com.aeriotv.android.feature.player.RadioSelect.watchAsVideo { onChannelClick(channel) } })
-            }
-            com.aeriotv.android.feature.player.radioMenuAction(context, channel, if (isLive) cell.title else "") { miniPlayerVm.dismiss() }?.let { add(it) }
-            com.aeriotv.android.feature.player.radioFlagMenuAction(context, channel, state.playlist, viewModel)?.let { add(it) }
-            add(TvMenuAction(if (isFavorite) "Remove from Favorites" else "Add to Favorites") { favoritesVm.toggle(channel) })
-            if (isRecent) add(TvMenuAction("Remove from Recently Watched", destructive = true) { settingsVm.removeRecentChannel(channel.id) })
-            add(TvMenuAction("Add Channel to Collection") { collectionPickerFor = channel.id to channel.name })
-            // Jump To and Back to Now live on the clock cell now (tvOS parity).
-            if (!cell.isPlaceholder) {
-                add(TvMenuAction("Program Info") { programInfoTarget = cell.toInfoTarget(channel.name, channel.dispatcharrChannelId) })
-                if (canRecord) add(TvMenuAction(if (isLive) "Record from Now" else "Record") { recordTarget = cell.toInfoTarget(channel.name, channel.dispatcharrChannelId) })
-                if (replayable) add(TvMenuAction("Watch from Start", onClick = watchFromStart))
-                if (cell.startMillis > nowMs) {
-                    add(TvMenuAction(if (reminderSet) "Cancel Reminder" else "Set Reminder", onClick = toggleReminder))
-                }
-            }
+    val actions = buildList {
+        // Apple order on TV: Watch first only when a plain Select would
+        // open Radio Mode (declared radio or Radio Mode by Default), then
+        // Radio Mode.
+        if (isLive && channel.url.isNotBlank() && com.aeriotv.android.feature.player.RadioSelect.picksOpenRadio(channel)) {
+            add(TvMenuAction("Watch", Icons.Filled.PlayArrow) { com.aeriotv.android.feature.player.RadioSelect.watchAsVideo { onChannelClick(channel) } })
         }
-        TvActionMenuDialog(title = cell.title, actions = actions, guard = menuGuard, onDismiss = { menuFor = null })
+        com.aeriotv.android.feature.player.radioMenuAction(context, channel, if (isLive) cell.title else "") { miniPlayerVm.dismiss() }?.let { add(it) }
+        com.aeriotv.android.feature.player.radioFlagMenuAction(context, channel, state.playlist, viewModel)?.let { add(it) }
+        add(TvMenuAction(if (isFavorite) "Remove from Favorites" else "Add to Favorites") { favoritesVm.toggle(channel) })
+        if (isRecent) add(TvMenuAction("Remove from Recently Watched", destructive = true) { settingsVm.removeRecentChannel(channel.id) })
+        add(TvMenuAction("Add Channel to Collection") { collectionPickerFor = channel.id to channel.name })
+        // Jump To and Back to Now live on the clock cell now (tvOS parity).
+        if (!cell.isPlaceholder) {
+            add(TvMenuAction("Program Info") { programInfoTarget = cell.toInfoTarget(channel.name, channel.dispatcharrChannelId) })
+            if (canRecord) add(TvMenuAction(if (isLive) "Record from Now" else "Record") { recordTarget = cell.toInfoTarget(channel.name, channel.dispatcharrChannelId) })
+            if (replayable) add(TvMenuAction("Watch from Start", onClick = watchFromStart))
+            if (cell.startMillis > nowMs) {
+                add(TvMenuAction(if (reminderSet) "Cancel Reminder" else "Set Reminder", onClick = toggleReminder))
+            }
         }
     }
-    if (showJumpSheet && !isTv) {
-        com.aeriotv.android.feature.livetv.GuideJumpSheet(
-            // Days follow the EPG that is actually loaded (Logan 2026-09-10),
-            // back no further than the grid's own history window.
-            daysBack = epgDaysBackOffered.coerceIn(0, 14),
-            daysAhead = epgDaysAheadOffered.coerceIn(1, 14),
-            onJump = startJump,
-            onBackToNow = snapToNow,
-            onDismiss = { showJumpSheet = false; runCatching { gridFocus.requestFocus() } },
-        )
+    TvActionMenuDialog(title = cell.title, actions = actions, guard = menuGuard, onDismiss = { menuFor = null })
     }
     programInfoTarget?.let { target ->
         ProgramInfoSheet(target = target, onDismiss = { programInfoTarget = null; runCatching { gridFocus.requestFocus() } })

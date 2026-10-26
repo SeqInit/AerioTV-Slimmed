@@ -1,24 +1,17 @@
 package com.aeriotv.android
 
-import android.app.PictureInPictureParams
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
-import android.util.Rational
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.activity.enableEdgeToEdge
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import com.aeriotv.android.core.pip.enterPip16x9
 import com.aeriotv.android.core.playback.AerioMediaPlaybackService
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
@@ -29,13 +22,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.background
 import androidx.compose.runtime.getValue
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import com.aeriotv.android.core.tv.TvActionMenuDialog
 import com.aeriotv.android.core.tv.TvMenuAction
 import com.aeriotv.android.core.tv.rememberTvMenuGuard
 import androidx.compose.ui.Modifier
-import com.aeriotv.android.core.pip.PipState
 import com.aeriotv.android.core.playback.AerioExoPlayerHolder
 import com.aeriotv.android.core.preferences.AppPreferences
 import com.aeriotv.android.core.system.NotificationPermissionGate
@@ -131,11 +122,9 @@ class MainActivity : ComponentActivity() {
      */
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (isTelevisionDevice()) {
-            com.aeriotv.android.ui.tv.TvFocusTrace.player(
-                "window focus=$hasFocus view=${currentFocus?.javaClass?.simpleName ?: "none"}",
-            )
-        }
+        com.aeriotv.android.ui.tv.TvFocusTrace.player(
+            "window focus=$hasFocus view=${currentFocus?.javaClass?.simpleName ?: "none"}",
+        )
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -147,8 +136,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
-            (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER) &&
-            isTelevisionDevice()
+            (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
         ) {
             com.aeriotv.android.ui.tv.TvFocusTrace.player(
                 "activity key Center view=${currentFocus?.javaClass?.simpleName ?: "none"} windowFocus=${hasWindowFocus()}",
@@ -168,8 +156,7 @@ class MainActivity : ComponentActivity() {
         // resumes (handled by the mini overlay's BackHandler).
         // Radio Mode on the TV guide (Apple TV parity, the banner's buttons):
         // Play/Pause switches to video, hold Right stops.
-        val radioOnGuide = isTelevisionDevice() &&
-            com.aeriotv.android.feature.player.RadioMode.isActive &&
+        val radioOnGuide = com.aeriotv.android.feature.player.RadioMode.isActive &&
             miniPlayerSession.state.value !is MiniPlayerSession.State.Active &&
             exoWindowState.mode.value != ExoWindowState.Mode.Fullscreen
         if (radioOnGuide && event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
@@ -191,8 +178,7 @@ class MainActivity : ComponentActivity() {
             }
             if (event.repeatCount >= 1) return true // held below threshold: hold position
         }
-        if (event.action == KeyEvent.ACTION_DOWN && isTelevisionDevice() &&
-            (event.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
+        if (event.action == KeyEvent.ACTION_DOWN && (event.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
                 event.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY) &&
             miniPlayerSession.state.value is MiniPlayerSession.State.Active
         ) {
@@ -225,8 +211,7 @@ class MainActivity : ComponentActivity() {
         if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && event.action == KeyEvent.ACTION_UP) {
             rightHoldPinUntil = 0L
         }
-        if (event.action == KeyEvent.ACTION_DOWN && isTelevisionDevice() &&
-            event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
         ) {
             if (android.os.SystemClock.uptimeMillis() < rightHoldPinUntil) {
                 return true   // pinned after close: hold position until release
@@ -272,8 +257,7 @@ class MainActivity : ComponentActivity() {
         // own debounce paces them so a held key surfs one channel at a time. If
         // the hook is null / declines (menu open, setting off, single channel) we
         // fall through so nothing else breaks.
-        if (isTelevisionDevice() &&
-            (event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+        if ((event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
                 event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) &&
             exoWindowState.mode.value == ExoWindowState.Mode.Fullscreen
         ) {
@@ -328,8 +312,7 @@ class MainActivity : ComponentActivity() {
         // 2026-10-04): a CUSTOM Left/Right map first (PR #101, the same
         // short/long split as UP/DOWN above), then Skip Without Controls
         // (GH #94), then the default (PlayerScreen's own Left/Right block).
-        if (isTelevisionDevice() &&
-            (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+        if ((event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
                 event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) &&
             exoWindowState.mode.value == ExoWindowState.Mode.Fullscreen
         ) {
@@ -418,8 +401,7 @@ class MainActivity : ComponentActivity() {
         // player is frontmost (BT/Shield/Onn remotes; the stock Google TV
         // remote lacks them). Slots per the plan's default map: FF/RW =
         // seek, Ch+/Ch- = channel flip.
-        if (event.action == KeyEvent.ACTION_DOWN && isTelevisionDevice() &&
-            exoWindowState.mode.value == ExoWindowState.Mode.Fullscreen
+        if (event.action == KeyEvent.ACTION_DOWN && exoWindowState.mode.value == ExoWindowState.Mode.Fullscreen
         ) {
             val mediaSlot = when (event.keyCode) {
                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> com.aeriotv.android.core.remote.RemoteSlot.FFWD
@@ -462,7 +444,7 @@ class MainActivity : ComponentActivity() {
      * Predictive back is off, so this legacy key path is authoritative.
      */
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && isTelevisionDevice()) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
             // Arm long-press tracking; the action is decided in onKeyLongPress
             // (resume) or onKeyUp (normal short back).
             event.startTracking()
@@ -499,7 +481,7 @@ class MainActivity : ComponentActivity() {
         // by accident; a deliberate hold restores a confirmable exit. Consuming
         // the long-press cancels the follow-up onKeyUp (event.isCanceled), so the
         // short-Back paths (mini resume, guide back-to-top, nav-up) are untouched.
-        if (keyCode == KeyEvent.KEYCODE_BACK && isTelevisionDevice()) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
             // Remote Control initiative (Logan 2026-07-20): while the LIVE
             // player is fullscreen, hold-Back STOPS playback outright (no
             // mini promotion) instead of raising the exit confirm - the
@@ -546,7 +528,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && isTelevisionDevice()) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
             // A handled long-press cancels this up -> ignore it. Otherwise it's
             // a short press: run the normal back through the dispatcher so the
             // existing BackHandlers / nav still work.
@@ -564,40 +546,8 @@ class MainActivity : ComponentActivity() {
         return super.onKeyUp(keyCode, event)
     }
 
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration,
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        PipState.inPictureInPicture.value = isInPictureInPictureMode
-        // Closing the PiP window with its X must STOP playback. Android only
-        // tells us "PiP ended"; the X-dismiss and the expand-back-to-app land
-        // in the same callback. They differ by lifecycle state: on expand the
-        // activity is on its way to RESUMED (>= STARTED here); on X-dismiss it
-        // was already stopped, so we sit at CREATED. Without this the player
-        // singleton kept decoding and audio played on in the background until
-        // a force-stop (tester report on 0.2.4/0.2.5). Same teardown order as
-        // the player's proven X-close path.
-        if (!isInPictureInPictureMode &&
-            !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        ) {
-            runCatching { miniPlayerSession.dismiss() }
-            runCatching { exoWindowState.hide() }
-            runCatching { exoHolder.stop() }
-            // VOD/DVR own a screen-local ExoPlayer the live holder above can't
-            // reach; the mounted player screen registers a stop hook so closing
-            // its PiP with the X stops it too instead of playing on at the
-            // launcher (#120).
-            runCatching { PipState.onPipDismissed?.invoke() }
-            AerioMediaPlaybackService.stop(this)
-        }
-    }
-
     override fun onResume() {
         super.onResume()
-        // Re-pin on resume so a fold/unfold display switch (the cover and inner
-        // panels expose different display-mode ids) keeps the highest rate.
-        requestHighestRefreshRate()
         // GH #40: re-match the output resolution when returning to a live
         // player that is still up (onStop restored native for the home screen).
         resMatchPlayer?.videoSize?.let { vs ->
@@ -655,12 +605,11 @@ class MainActivity : ComponentActivity() {
      * going). onStop ALWAYS fires when the activity goes invisible (HOME,
      * overview, app switch, screen off), so the TV stop lives here. Guarded by
      * !isChangingConfigurations so a config-change recreation (which also calls
-     * onStop) never kills audio, and by isTelevisionDevice so phones keep their
-     * background-audio / PiP behavior. Back-to-mini does NOT stop the activity,
+     * onStop) never kills audio. Back-to-mini does NOT stop the activity,
      * so the mini-player keeps playing -- only a real leave triggers this.
      */
     override fun onStop() {
-        if (isTelevisionDevice() && !isChangingConfigurations &&
+        if (!isChangingConfigurations &&
             !com.aeriotv.android.feature.player.RadioMode.isActive
         ) {
             android.util.Log.i("AerioLeave", "onStop: TV leave -> stopping playback")
@@ -713,39 +662,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        when {
-            // Android TV / leanback: there is no PiP and no music-app
-            // background-audio expectation, so leaving the app (HOME / overview)
-            // must STOP playback. Without this the live holder + foreground
-            // media service keep decoding and audio plays on at the launcher
-            // (jonzee222 report): syncAutoEnterPip no-ops with no PiP feature,
-            // the API<31 branch never runs on a modern TV, so the old when{}
-            // matched nothing and nothing tore down. onUserLeaveHint fires only
-            // on a genuine user leave -- never on config-change/fold recreation
-            // -- so this cannot kill audio on a recreation. stop() (not
-            // destroy()) so a quick relaunch reuses the holder. Same teardown
-            // order as the X-close path. Must be FIRST so it short-circuits the
-            // audio-only + API<31 video branches on TV.
-            // Radio Mode on TV stops when the app leaves the foreground, the
-            // same as Apple TV (owner decision 2026-10-14). Phones and tablets
-            // keep playing in the background with the media notification
-            // (Android#127).
-            com.aeriotv.android.feature.player.RadioMode.isActive && isTelevisionDevice() ->
-                com.aeriotv.android.feature.player.RadioMode.stop(this, "app backgrounded, TV")
-            com.aeriotv.android.feature.player.RadioMode.isActive ->
-                AerioMediaPlaybackService.startBackground(this)
-            isTelevisionDevice() -> stopTvPlaybackOnLeave("onUserLeaveHint")
-            // Audio-only: never enter PiP. Keep a foreground media notification
-            // alive so audio continues with status-bar + lock-screen controls.
-            PipState.audioPlaybackActive.value -> {
-                // MediaSession picks up title / subtitle / artwork from
-                // MediaItem.mediaMetadata automatically; no extras needed.
-                AerioMediaPlaybackService.startBackground(this)
-            }
-            // Video on API < 31 has no setAutoEnterEnabled, so trigger PiP here.
-            // API 31+ auto-enters via the params synced in syncAutoEnterPip.
-            PipState.videoPlaybackActive.value &&
-                Build.VERSION.SDK_INT < Build.VERSION_CODES.S -> enterPip16x9()
+        // There is no PiP and no music-app background-audio expectation on a
+        // TV, so leaving the app (HOME / overview) must STOP playback. Without
+        // this the live holder + foreground media service keep decoding and
+        // audio plays on at the launcher (jonzee222 report). onUserLeaveHint
+        // fires only on a genuine user leave -- never on config-change
+        // recreation -- so this cannot kill audio on a recreation. stop() (not
+        // destroy()) so a quick relaunch reuses the holder. Same teardown order
+        // as the X-close path. Radio Mode stops too, the same as Apple TV
+        // (owner decision 2026-10-14).
+        if (com.aeriotv.android.feature.player.RadioMode.isActive) {
+            com.aeriotv.android.feature.player.RadioMode.stop(this, "app backgrounded, TV")
+        } else {
+            stopTvPlaybackOnLeave("onUserLeaveHint")
         }
     }
 
@@ -765,79 +694,6 @@ class MainActivity : ComponentActivity() {
             AerioMediaPlaybackService.stop(this)
         }
         super.onDestroy()
-    }
-
-    /**
-     * Mirror [PipState.videoPlaybackActive] into the window's PiP params so the
-     * system auto-enters Picture-in-Picture on leave (API 31+). No-op on older
-     * versions (handled by onUserLeaveHint) and on devices without PiP.
-     */
-    private fun syncAutoEnterPip(videoActive: Boolean) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
-        // Modern Google TV / Android TV DOES support PiP (the Google TV
-        // Streamer auto-entered PiP on HOME), which kept audio + video playing
-        // at the launcher -- the "audio keeps playing after leaving" report.
-        // tvOS parity is: leaving the app STOPS playback (done in onStop). So
-        // never auto-enter PiP on a TV; phones keep auto-PiP.
-        val enable = videoActive && !isTelevisionDevice()
-        runCatching {
-            setPictureInPictureParams(
-                PictureInPictureParams.Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .setAutoEnterEnabled(enable)
-                    .build(),
-            )
-        }
-    }
-
-    /**
-     * Opt the window into the display's highest-refresh-rate mode at the current
-     * resolution (e.g. 120Hz on the Z Fold panels) so the UI renders at the full
-     * panel rate instead of being held at 60Hz. Samsung One UI in particular runs
-     * apps that don't request a mode at 60Hz, and Android's frame-rate "category"
-     * keeps non-voting surfaces low; pinning preferredDisplayModeId is the
-     * documented opt-in. Filters to the current resolution so we never switch the
-     * panel's pixel size, only its refresh rate. No-op when one mode exists.
-     */
-    /**
-     * True for Android TV / leanback set-top boxes (Mecool, Shield, Google TV
-     * Streamer, etc). FEATURE_LEANBACK is the canonical TV signal; the uiMode
-     * check is a belt-and-braces fallback for boxes that under-report it.
-     */
-    private fun isTelevisionDevice(): Boolean {
-        if (packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)) return true
-        val mode = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK
-        return mode == Configuration.UI_MODE_TYPE_TELEVISION
-    }
-
-    private fun requestHighestRefreshRate() {
-        // User report (v0.1.6, Mecool KM2 Plus / Amlogic S905X4): "the screen
-        // goes black when opening the app." Pinning preferredDisplayModeId
-        // forces an HDMI display-mode switch, and TV boxes (Amlogic especially)
-        // do a full black-screen re-handshake on ANY mode change. This routine
-        // exists for Samsung Z Fold panels, where 60->120Hz switching is
-        // seamless and worthwhile; on a TV the panel is already at its native
-        // rate, so the only effect is a black flash on every resume for zero
-        // gain. Skip it on TV/leanback devices; keep it for phones + foldables.
-        if (isTelevisionDevice()) return
-        val disp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display
-        } else {
-            @Suppress("DEPRECATION") windowManager.defaultDisplay
-        } ?: return
-        val current = disp.mode ?: return
-        val best = disp.supportedModes
-            .filter {
-                it.physicalWidth == current.physicalWidth &&
-                    it.physicalHeight == current.physicalHeight
-            }
-            .maxByOrNull { it.refreshRate } ?: return
-        if (window.attributes.preferredDisplayModeId != best.modeId) {
-            window.attributes = window.attributes.apply {
-                preferredDisplayModeId = best.modeId
-            }
-        }
     }
 
     // ------------------------------------------------------------------
@@ -875,7 +731,7 @@ class MainActivity : ComponentActivity() {
     private fun applyStartupRefreshRate(wire: String) {
         if (startupRefreshApplied) return
         startupRefreshApplied = true
-        if (!isTelevisionDevice() || wire == "off") return
+        if (wire == "off") return
         val target = wire.toFloatOrNull() ?: return
         val disp = currentDisplay() ?: return
         val current = disp.mode ?: return
@@ -916,7 +772,7 @@ class MainActivity : ComponentActivity() {
         lastContentRate = rate
         // Android#134: gated by Match Frame Rate alone. The mode pick below
         // keeps the current physical size, so this never changes resolution.
-        if (!matchFrameRateEnabled || !isTelevisionDevice()) return
+        if (!matchFrameRateEnabled) return
         val player = resMatchPlayer ?: return
         if (!player.playWhenReady) return
         val disp = currentDisplay() ?: return
@@ -944,7 +800,7 @@ class MainActivity : ComponentActivity() {
 
     /** GH #40: switch the display to the content's resolution class. */
     private fun applyContentResolutionMode(videoW: Int, videoH: Int) {
-        if (!matchContentResolutionEnabled || !isTelevisionDevice()) return
+        if (!matchContentResolutionEnabled) return
         if (resolutionMatchUnsupported) return
         if (videoH <= 0) return
         val disp = currentDisplay() ?: return
@@ -1134,19 +990,6 @@ class MainActivity : ComponentActivity() {
         // orientation. TVs never rotate - skip entirely. The player's
         // forced-landscape toggle overrides this while engaged and restores
         // through AutoRotateState.restingOrientation.
-        if (!isTelevisionDevice()) {
-            lifecycleScope.launch {
-                appPreferences.autoRotate.collect { enabled ->
-                    com.aeriotv.android.core.preferences.AutoRotateState.enabled = enabled
-                    val forcedLandscape = requestedOrientation ==
-                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-                    if (!forcedLandscape) {
-                        requestedOrientation =
-                            com.aeriotv.android.core.preferences.AutoRotateState.restingOrientation
-                    }
-                }
-            }
-        }
         // GH #38: one-shot startup refresh-rate pin (first emitted value only -
         // changing the setting later applies on next launch, avoiding a live
         // HDMI re-handshake underneath a playing stream).
@@ -1248,19 +1091,8 @@ class MainActivity : ComponentActivity() {
         // oscillation, and the keyboard-on-OK gate means the IME only opens
         // on a deliberate click, so the focused field is scrolled above the
         // keyboard by ordinary inset handling and is never covered.
-        if (isTelevisionDevice()) {
-            @Suppress("DEPRECATION")
-            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        }
-        // Keep the window's PiP params in sync with player video state so the
-        // system auto-enters Picture-in-Picture when the user leaves the app while
-        // video is playing (API 31+). Audio-only is excluded -- onUserLeaveHint
-        // surfaces a background media notification for that case instead.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                PipState.videoPlaybackActive.collect { syncAutoEnterPip(it) }
-            }
-        }
+        @Suppress("DEPRECATION")
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         // Debug-only auto-load hook so dev iteration on emulators doesn't have to fight
         // Gboard's stylus tutorial when typing test URLs. Hard-gated behind BuildConfig.DEBUG
         // so release builds NEVER accept a URL via intent extra. Production deep-link

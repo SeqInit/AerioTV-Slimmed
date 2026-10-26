@@ -1,7 +1,6 @@
 package com.aeriotv.android.feature.settings
 
 import com.aeriotv.android.ui.scale.subtext
-import com.aeriotv.android.ui.theme.textAccent
 import com.aeriotv.android.core.data.db.entity.sanitizeGuideDays
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,7 +26,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,9 +53,7 @@ import com.aeriotv.android.ui.settings.SettingsSubPageHost
 import com.aeriotv.android.ui.settings.SettingsTextField
 import com.aeriotv.android.ui.settings.SettingsToggleRow
 import com.aeriotv.android.ui.settings.settingsFormWidth
-import com.aeriotv.android.ui.settings.SettingsHeaderTextButton
 import com.aeriotv.android.ui.settings.dpadFocusRing
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.textfield.aerioTextFieldKeyboardOptions
 import com.aeriotv.android.feature.onboarding.SettingUpScreen
 import com.aeriotv.android.ui.tv.TvKeyboardOnOkHost
@@ -195,7 +191,6 @@ fun EditPlaylistScreen(
     val clearSaveError = { if (saveError != null) saveError = null }
     val canSave = url.trim().isNotEmpty() && name.trim().isNotEmpty() &&
         !state.isLoading && !saving
-    val isTv = rememberIsTvDevice()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
@@ -205,7 +200,6 @@ fun EditPlaylistScreen(
         // Off with the IME before the result lands: a floating keyboard covers
         // the bottom half of the form on phones and most of it on TV.
         keyboard?.hide()
-        if (!isTv) focusManager.clearFocus()
         viewModel.saveEdits(
             name = name,
             url = url,
@@ -295,22 +289,10 @@ fun EditPlaylistScreen(
             navigationIcon = {
                 // No Cancel/back affordance on Android TV -- the remote BACK
                 // discards and pops the screen. Phones/tablets keep Cancel.
-                if (!isTv) {
-                    TextButton(onClick = onBack) {
-                        Text("Cancel", color = MaterialTheme.colorScheme.textAccent)
-                    }
-                }
             },
             actions = {
                 // TV gets a Save row at the END of the form instead (a corner
                 // action is off the natural D-pad path through the fields).
-                if (!isTv) {
-                    SettingsHeaderTextButton(
-                        label = "Save",
-                        enabled = canSave,
-                        onClick = performSave,
-                    )
-                }
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -336,8 +318,7 @@ fun EditPlaylistScreen(
         // focused text field sits at the floating IME's top edge (see
         // TvImeNoJitterBringIntoViewSpec).
         val bringIntoViewSpec =
-            if (rememberIsTvDevice()) com.aeriotv.android.ui.tv.TvImeNoJitterBringIntoViewSpec
-            else androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+            com.aeriotv.android.ui.tv.TvImeNoJitterBringIntoViewSpec
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides bringIntoViewSpec,
         ) {
@@ -347,12 +328,8 @@ fun EditPlaylistScreen(
         // stays on Save so the user reads the reason and can press again.
         LaunchedEffect(saveError) {
             if (saveError == null) return@LaunchedEffect
-            if (isTv) {
-                val target = (listState.layoutInfo.totalItemsCount - 2).coerceAtLeast(0)
-                runCatching { listState.animateScrollToItem(target) }
-            } else {
-                runCatching { listState.animateScrollToItem(0) }
-            }
+            val target = (listState.layoutInfo.totalItemsCount - 2).coerceAtLeast(0)
+            runCatching { listState.animateScrollToItem(target) }
         }
         LazyColumn(
             state = listState,
@@ -371,11 +348,6 @@ fun EditPlaylistScreen(
             // intact and says why, instead of popping back to a detail page
             // still showing the previous credentials. On TV the same card is
             // emitted just above the Save Changes row instead (see below).
-            if (!isTv) {
-                saveError?.let { message ->
-                    item("save-error") { SaveFailedCard(message) }
-                }
-            }
 
             item("connection") {
                 SettingsSection(header = "Connection") {
@@ -749,24 +721,22 @@ fun EditPlaylistScreen(
 
             // TV: Save lives at the end of the form, where the D-pad lands
             // after the last field. Phones keep the iOS-style header Save.
-            if (isTv) {
-                saveError?.let { message ->
-                    item("save-error") { SaveFailedCard(message) }
-                }
-                item("save") {
-                    SettingsActionRow(
-                        label = if (saving) "Saving..." else "Save Changes",
-                        leadingIcon = Icons.Filled.Check,
-                        onClick = performSave,
-                        enabled = canSave,
-                        running = saving,
-                        subtitle = when {
-                            saving -> "Checking the connection with the new details"
-                            canSave -> null
-                            else -> "Name and URL are required"
-                        },
-                    )
-                }
+            saveError?.let { message ->
+                item("save-error") { SaveFailedCard(message) }
+            }
+            item("save") {
+                SettingsActionRow(
+                    label = if (saving) "Saving..." else "Save Changes",
+                    leadingIcon = Icons.Filled.Check,
+                    onClick = performSave,
+                    enabled = canSave,
+                    running = saving,
+                    subtitle = when {
+                        saving -> "Checking the connection with the new details"
+                        canSave -> null
+                        else -> "Name and URL are required"
+                    },
+                )
             }
         }
         }

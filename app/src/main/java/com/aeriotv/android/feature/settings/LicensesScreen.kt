@@ -21,7 +21,6 @@ package com.aeriotv.android.feature.settings
 import com.aeriotv.android.ui.scale.subtext
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,7 +34,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Description
@@ -69,7 +67,6 @@ import com.aeriotv.android.ui.settings.SettingsNavRow
 import com.aeriotv.android.ui.settings.SettingsSectionFooter
 import com.aeriotv.android.ui.settings.SettingsSectionHeader
 import com.aeriotv.android.ui.settings.TvSettingsMetrics
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsFootnoteStyle
 import com.aeriotv.android.ui.settings.settingsRowValueStyle
 import kotlinx.coroutines.Dispatchers
@@ -94,7 +91,6 @@ fun LicensesScreen(onBack: () -> Unit) {
     // TV rail's pushed-route slot, which reads as a settings section.
     var viewing by remember { mutableStateOf<BundledLicense?>(null) }
     var qrLink by remember { mutableStateOf<TvQrLink?>(null) }
-    val isTv = rememberIsTvDevice()
     val context = LocalContext.current
 
     // BACK closes the open text first, then leaves the screen. Without this the
@@ -102,22 +98,11 @@ fun LicensesScreen(onBack: () -> Unit) {
     BackHandler(enabled = viewing != null) { viewing = null }
 
     val openUrl: (String, String) -> Unit = { title, url ->
-        if (isTv) {
-            qrLink = TvQrLink(
-                title = title,
-                caption = "Scan with your phone to open this page.",
-                url = url,
-            )
-        } else {
-            runCatching {
-                context.startActivity(
-                    android.content.Intent(
-                        android.content.Intent.ACTION_VIEW,
-                        android.net.Uri.parse(url),
-                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }
-        }
+        qrLink = TvQrLink(
+            title = title,
+            caption = "Scan with your phone to open this page.",
+            url = url,
+        )
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -156,7 +141,7 @@ private fun LicenseIndex(
     // A takeover has no rail to inset it, so it owes its own title-safe
     // margin. 16dp lands a third of the way into the overscan strip on a
     // 1080p Streamer; overscanStart is the 5% the rest of Settings uses.
-    val sideInset = if (rememberIsTvDevice()) TvSettingsMetrics.overscanStart else 16.dp
+    val sideInset = TvSettingsMetrics.overscanStart
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = sideInset, vertical = 12.dp),
@@ -166,7 +151,6 @@ private fun LicenseIndex(
             TmdbAttribution(
                 modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 16.dp),
                 long = true,
-                isTv = rememberIsTvDevice(),
             )
         }
         item("aerio-header") { SettingsSectionHeader("AerioTV") }
@@ -369,7 +353,6 @@ private fun LicenseTextViewer(license: BundledLicense) {
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val isTv = rememberIsTvDevice()
     val focusRequester = remember { FocusRequester() }
 
     // A license text has no focusable children, so on TV nothing would take
@@ -377,8 +360,8 @@ private fun LicenseTextViewer(license: BundledLicense) {
     // itself focusable and translate UP/DOWN into a scroll. Note focusable()
     // is applied WITHOUT a clickable() ahead of it: that ordering swallows
     // focus on Compose TV.
-    LaunchedEffect(isTv, paragraphs.isEmpty()) {
-        if (isTv && paragraphs.isNotEmpty()) runCatching { focusRequester.requestFocus() }
+    LaunchedEffect(paragraphs.isEmpty()) {
+        if (paragraphs.isNotEmpty()) runCatching { focusRequester.requestFocus() }
     }
 
     LazyColumn(
@@ -386,7 +369,7 @@ private fun LicenseTextViewer(license: BundledLicense) {
         modifier = Modifier
             .fillMaxSize()
             .then(
-                if (!isTv) Modifier else Modifier
+                Modifier
                     .focusRequester(focusRequester)
                     .focusable()
                     .onPreviewKeyEvent { event ->
@@ -401,7 +384,7 @@ private fun LicenseTextViewer(license: BundledLicense) {
                     },
             ),
         contentPadding = PaddingValues(
-            horizontal = if (isTv) TvSettingsMetrics.overscanStart else 20.dp,
+            horizontal = TvSettingsMetrics.overscanStart,
             vertical = 12.dp,
         ),
     ) {

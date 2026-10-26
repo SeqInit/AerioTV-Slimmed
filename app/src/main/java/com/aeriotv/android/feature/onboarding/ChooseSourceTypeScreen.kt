@@ -16,7 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,13 +26,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -50,7 +46,6 @@ import com.aeriotv.android.core.data.SourceType
 import com.aeriotv.android.feature.onboarding.components.SourceTypeCard
 import com.aeriotv.android.ui.adaptive.rememberViewport
 import com.aeriotv.android.ui.settings.dpadFocusRing
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 
 /**
  * "Add Playlist" / onboarding source picker: Dispatcharr Direct Connect is
@@ -78,25 +73,12 @@ fun ChooseSourceTypeScreen(
                     // navigation-icon slot and drops the title onto Material's
                     // 16dp inset - inside the title-safe margin. Re-establish
                     // the same left edge the Settings rail uses.
-                    modifier = if (rememberIsTvDevice()) {
-                        Modifier.padding(start = TvSettingsMetrics.topAppBarTitleOverscanPadding)
-                    } else {
-                        Modifier
-                    },
+                    modifier = Modifier.padding(start = TvSettingsMetrics.topAppBarTitleOverscanPadding),
                 )
             },
             navigationIcon = {
                 // No back arrow on Android TV -- the remote BACK steps back
                 // (out of the Add Playlist wizard). Phones/tablets keep it.
-                if (!rememberIsTvDevice()) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,

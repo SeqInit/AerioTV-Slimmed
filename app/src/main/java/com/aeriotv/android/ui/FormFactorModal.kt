@@ -8,26 +8,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import com.aeriotv.android.ui.scale.ModalBottomSheet
 import androidx.compose.material3.Surface
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aeriotv.android.ui.scale.Dialog
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.window.DialogProperties
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 
 /**
  * The app's standard modal container, split by form factor:
@@ -93,125 +82,32 @@ fun FormFactorModal(
     sheetContainerColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val isTv = rememberIsTvDevice()
-    if (isTv) {
-        androidx.compose.runtime.DisposableEffect(Unit) {
-            com.aeriotv.android.ui.tv.TvFocusTrace.settingsLifecycle("sheet open", traceName)
-            onDispose {
-                com.aeriotv.android.ui.tv.TvFocusTrace.settingsLifecycle("sheet close", traceName)
-            }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        com.aeriotv.android.ui.tv.TvFocusTrace.settingsLifecycle("sheet open", traceName)
+        onDispose {
+            com.aeriotv.android.ui.tv.TvFocusTrace.settingsLifecycle("sheet close", traceName)
         }
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(usePlatformDefaultWidth = false),
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(tvWidthFraction)
+                .heightIn(max = tvMaxHeight),
+            shape = RoundedCornerShape(16.dp),
+            color = com.aeriotv.android.ui.tv.TvChrome.dialogSurface(),
         ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth(tvWidthFraction)
-                    .heightIn(max = tvMaxHeight),
-                shape = RoundedCornerShape(16.dp),
-                color = com.aeriotv.android.ui.tv.TvChrome.dialogSurface(),
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.aeriotv.android.ui.settings.LocalSettingsTracePage provides "sheet:$traceName",
             ) {
-                androidx.compose.runtime.CompositionLocalProvider(
-                    com.aeriotv.android.ui.settings.LocalSettingsTracePage provides "sheet:$traceName",
-                ) {
-                    Column(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        content = content,
-                    )
-                }
+                Column(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    content = content,
+                )
             }
-        }
-    } else {
-        // Expandable sheets opt out of the sheet's own TOP content inset.
-        //
-        // ModalBottomSheet pads its content column with
-        // `contentWindowInsets` (safeDrawing top + bottom) while the sheet
-        // itself consumes `WindowInsets(top = sheetState.offset)`. The top
-        // padding is therefore (statusBar - currentOffset): it is ZERO while
-        // the sheet sits low and GROWS to the full status bar height as the
-        // sheet is dragged to the top. Content height then depends on the
-        // sheet's own offset, the Expanded anchor is recomputed from that
-        // height (fullHeight - sheetSize.height), the sheet chases the moving
-        // anchor, and the sheet bounces up and down -- the same class of loop
-        // as 45483dd5. Keeping only the BOTTOM inset makes the measured
-        // height independent of the offset, so both anchors are stable.
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = !sheetExpandable),
-            sheetGesturesEnabled = sheetGesturesEnabled,
-            containerColor = if (sheetContainerColor != androidx.compose.ui.graphics.Color.Unspecified) {
-                sheetContainerColor
-            } else {
-                MaterialTheme.colorScheme.background
-            },
-            // Bottom inset only for BOTH paths. With the default insets the
-            // non-expandable sheet got the same offset-dependent top padding:
-            // once its content was tall enough to sit near the status bar
-            // (the compact Record from Now sheet, Nothing Phone recording
-            // 2026-10-02 15:23) every scroll re-measured the content and the
-            // sheet jumped between two heights.
-            contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
-        ) {
-            // Bound the content column to the window height.
-            //
-            // Without a max, this Column wraps its content, and a caller whose
-            // content scrolls (RecordProgramSheet wraps everything in a
-            // verticalScroll Column) gets measured with an unbounded height:
-            // the scroll viewport becomes exactly as tall as its content, so
-            // there is nothing left to scroll, and the sheet grows past the
-            // bottom of the screen. Anything below the fold -- Record from
-            // Now's Destination toggle and Remove Commercials rows -- was then
-            // unreachable, and dragging the sheet up did nothing because the
-            // sheet was already fully expanded (skipPartiallyExpanded).
-            //
-            // Capping at 88% of the window leaves the scrim tap-target at the
-            // top and gives the inner scroll a real viewport, so long sheets
-            // scroll to their last row. Short sheets are unaffected (they
-            // measure below the cap and still wrap).
-            val maxSheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.88f
-            // Fixed, offset-independent height for the expandable sheet:
-            // the window height minus the top inset we no longer let the
-            // sheet pad for us, minus the drag handle block (4dp handle +
-            // 22dp padding above and below) and the bottom safe-drawing
-            // inset the sheet still applies. The sheet then measures exactly
-            // (window - status bar) tall no matter where it sits, so the
-            // Expanded anchor is a constant and the drag settles.
-            val density = LocalDensity.current
-            val windowHeightPx = LocalWindowInfo.current.containerSize.height
-            val topInsetPx = WindowInsets.safeDrawing.getTop(density)
-            val bottomInsetPx = WindowInsets.safeDrawing.getBottom(density)
-            val expandedContentHeight = with(density) {
-                (windowHeightPx - topInsetPx - bottomInsetPx - DragHandleBlockHeight.roundToPx())
-                    .coerceAtLeast(0)
-                    .toDp()
-            }
-            // `sheetMaxWidth` narrows and centres the column inside the
-            // full-width sheet. Done here rather than on the ModalBottomSheet
-            // itself so the scrim, drag handle and dismiss gesture keep
-            // spanning the window - only the CONTENT is bounded, which is what
-            // makes it read as a panel without breaking swipe-to-dismiss.
-            Column(
-                modifier = Modifier
-                    .then(
-                        if (sheetMaxWidth != null) {
-                            Modifier
-                                .fillMaxWidth()
-                                .widthIn(max = sheetMaxWidth)
-                                .align(Alignment.CenterHorizontally)
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .then(
-                        if (sheetExpandable) Modifier.height(expandedContentHeight)
-                        else Modifier.heightIn(max = maxSheetHeight),
-                    ),
-                content = content,
-            )
         }
     }
 }
 
-/** Height of the ModalBottomSheet drag handle block: 4dp handle + 22dp padding each side. */
-private val DragHandleBlockHeight = 48.dp

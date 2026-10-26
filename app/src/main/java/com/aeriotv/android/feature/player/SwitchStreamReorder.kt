@@ -9,14 +9,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.draw.clip
 import com.aeriotv.android.ui.settings.dpadFocusRing
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -42,13 +40,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import android.util.Log
-import com.aeriotv.android.core.pip.isTelevision
 import com.aeriotv.android.ui.scale.DropdownMenu
 
 /**
@@ -79,7 +73,6 @@ internal fun ReorderableStreamList(
     onPendingOrder: (List<Int>) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val isTv = remember(context) { context.isTelevision() }
     // Local order so a drag can preview; reset whenever the server list changes.
     var order by remember { mutableStateOf(streams) }
     var dragIndex by remember { mutableStateOf(-1) }
@@ -87,9 +80,8 @@ internal fun ReorderableStreamList(
     // but never under a finger: a refetch landing mid-drag used to reset the
     // order and the drag index, and the drag died. It applies on the drop.
     // Touch Reorder mode keeps the local order until Finish saves it.
-    val holdLocal = !isTv && touchReordering
-    androidx.compose.runtime.LaunchedEffect(streams, saving, dragIndex, holdLocal) {
-        if (!saving && dragIndex < 0 && !holdLocal) order = streams
+    androidx.compose.runtime.LaunchedEffect(streams, saving, dragIndex, false) {
+        if (!saving && dragIndex < 0) order = streams
     }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var rowHeightPx by remember { mutableFloatStateOf(1f) }
@@ -132,117 +124,51 @@ internal fun ReorderableStreamList(
         val moreFocus = remember(stream.id) { FocusRequester() }
         var rowFocused by remember(stream.id) { mutableStateOf(false) }
         val dragging = dragIndex == index
-        if (isTv) {
-            // TV (Apple TV parity): the row (radio + title) is ONE focus stop
-            // whose ring hugs the row content, and the options button is a
-            // visibly separate rounded button to its right with its own ring.
-            // Right from the row reaches it, Left leaves it. Long press on the
-            // row still opens the same Move Up / Move Down menu.
-            val shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
-                    .padding(vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(shape)
-                        .dpadFocusRing(shape, washTint = MaterialTheme.colorScheme.primary)
-                        .focusRequester(rowFocus)
-                        .onPreviewKeyEvent { event ->
-                            rowFocused && !saving &&
-                                event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight &&
-                                runCatching { moreFocus.requestFocus() }.isSuccess
-                        }
-                        .onFocusChanged {
-                            rowFocused = it.isFocused
-                            if (it.isFocused) com.aeriotv.android.ui.tv.TvFocusTrace.focus("switch:row$index")
-                            else com.aeriotv.android.ui.tv.TvFocusTrace.blurred("switch:row$index")
-                        }
-                        .combinedClickable(
-                            onClick = { onSelect(stream.id) },
-                            onLongClick = { if (!saving) menuOpen = true },
-                        )
-                        .padding(vertical = 6.dp)
-                        .padding(end = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Display only: the row is the select target on TV.
-                    RadioButton(
-                        selected = currentStreamId == stream.id,
-                        onClick = null,
-                        colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
-                    Text(
-                        text = stream.label,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(56.dp)
-                        .clip(shape)
-                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.10f), shape)
-                        .dpadFocusRing(shape, washTint = MaterialTheme.colorScheme.primary)
-                        .focusRequester(moreFocus)
-                        .onPreviewKeyEvent { event ->
-                            event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft &&
-                                runCatching { rowFocus.requestFocus() }.isSuccess
-                        }
-                        .onFocusChanged {
-                            if (it.isFocused) com.aeriotv.android.ui.tv.TvFocusTrace.focus("switch:more$index")
-                            else com.aeriotv.android.ui.tv.TvFocusTrace.blurred("switch:more$index")
-                        }
-                        .clickable(enabled = !saving) { menuOpen = true },
-                ) {
-                    Icon(
-                        Icons.Filled.MoreVert,
-                        contentDescription = "Stream Order Options",
-                        tint = MaterialTheme.colorScheme.onBackground,
-                    )
-                    StreamMoveMenu(
-                        expanded = menuOpen,
-                        onDismiss = { menuOpen = false },
-                        canMoveUp = index > 0,
-                        canMoveDown = index < order.lastIndex,
-                        onMove = { delta -> menuOpen = false; move(index, index + delta) },
-                    )
-                }
-            }
-        } else {
+        // TV (Apple TV parity): the row (radio + title) is ONE focus stop
+        // whose ring hugs the row content, and the options button is a
+        // visibly separate rounded button to its right with its own ring.
+        // Right from the row reaches it, Left leaves it. Long press on the
+        // row still opens the same Move Up / Move Down menu.
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .onSizeChanged { rowHeightPx = it.height.toFloat().coerceAtLeast(1f) }
-                .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
-                .padding(vertical = 6.dp),
+                .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+                .padding(vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
         ) {
-            // Tap on the radio + title selects. The handle sits OUTSIDE this
-            // click target, so a press held on the handle never selects the
-            // stream on release. No long press on touch: it opened the TV
-            // Move Up / Move Down menu under a finger resting on the handle.
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = !touchReordering) { onSelect(stream.id) },
+                    .fillMaxHeight()
+                    .clip(shape)
+                    .dpadFocusRing(shape, washTint = MaterialTheme.colorScheme.primary)
+                    .focusRequester(rowFocus)
+                    .onPreviewKeyEvent { event ->
+                        rowFocused && !saving &&
+                            event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight &&
+                            runCatching { moreFocus.requestFocus() }.isSuccess
+                    }
+                    .onFocusChanged {
+                        rowFocused = it.isFocused
+                        if (it.isFocused) com.aeriotv.android.ui.tv.TvFocusTrace.focus("switch:row$index")
+                        else com.aeriotv.android.ui.tv.TvFocusTrace.blurred("switch:row$index")
+                    }
+                    .combinedClickable(
+                        onClick = { onSelect(stream.id) },
+                        onLongClick = { if (!saving) menuOpen = true },
+                    )
+                    .padding(vertical = 6.dp)
+                    .padding(end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Display only: the row is the select target on TV.
                 RadioButton(
                     selected = currentStreamId == stream.id,
                     onClick = null,
                     colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp),
                 )
                 Text(
                     text = stream.label,
@@ -251,67 +177,38 @@ internal fun ReorderableStreamList(
                     modifier = Modifier.weight(1f),
                 )
             }
-            // 48dp square hit box (the old 24dp icon was the whole target;
-            // touches a few px off it fell to the row or the sheet). The drag
-            // starts on the first move past touch slop, no long-press delay.
-            if (touchReordering) Box(
+            Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(48.dp)
-                    .pointerInput(stream.id) {
-                        var from = -1
-                        detectDragGestures(
-                            onDragStart = {
-                                from = latestOrder.indexOfFirst { it.id == stream.id }
-                                dragIndex = from
-                                dragOffset = 0f
-                                latestOnDragActive(true)
-                                Log.i(SWITCH_TAG, "[SwitchStream] drag start id=${stream.id} index=$from")
-                            },
-                            onDrag = { change, amount ->
-                                change.consume()
-                                dragOffset += amount.y
-                                val cur = dragIndex
-                                if (cur < 0) return@detectDragGestures
-                                val step = when {
-                                    dragOffset > rowHeightPx * 0.5f && cur < latestOrder.lastIndex -> 1
-                                    dragOffset < -rowHeightPx * 0.5f && cur > 0 -> -1
-                                    else -> 0
-                                }
-                                if (step != 0) {
-                                    order = latestOrder.toMutableList().apply { add(cur + step, removeAt(cur)) }
-                                    dragIndex = cur + step
-                                    dragOffset -= step * rowHeightPx
-                                    Log.i(SWITCH_TAG, "[SwitchStream] drag swap id=${stream.id} ${cur}->${cur + step}")
-                                }
-                            },
-                            onDragEnd = {
-                                val to = dragIndex
-                                dragIndex = -1
-                                dragOffset = 0f
-                                val changed = from >= 0 && to >= 0 && from != to
-                                Log.i(SWITCH_TAG, "[SwitchStream] drop id=${stream.id} from=$from to=$to save=$changed")
-                                if (changed) latestOnPendingOrder(latestOrder.map { it.id })
-                                latestOnDragActive(false)
-                            },
-                            onDragCancel = {
-                                Log.i(SWITCH_TAG, "[SwitchStream] drag cancel id=${stream.id} from=$from")
-                                dragIndex = -1
-                                dragOffset = 0f
-                                order = latestStreams
-                                latestOnDragActive(false)
-                            },
-                        )
-                    },
+                    .fillMaxHeight()
+                    .width(56.dp)
+                    .clip(shape)
+                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.10f), shape)
+                    .dpadFocusRing(shape, washTint = MaterialTheme.colorScheme.primary)
+                    .focusRequester(moreFocus)
+                    .onPreviewKeyEvent { event ->
+                        event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft &&
+                            runCatching { rowFocus.requestFocus() }.isSuccess
+                    }
+                    .onFocusChanged {
+                        if (it.isFocused) com.aeriotv.android.ui.tv.TvFocusTrace.focus("switch:more$index")
+                        else com.aeriotv.android.ui.tv.TvFocusTrace.blurred("switch:more$index")
+                    }
+                    .clickable(enabled = !saving) { menuOpen = true },
             ) {
                 Icon(
-                    imageVector = Icons.Filled.DragHandle,
-                    contentDescription = "Drag to Reorder",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp),
+                    Icons.Filled.MoreVert,
+                    contentDescription = "Stream Order Options",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+                StreamMoveMenu(
+                    expanded = menuOpen,
+                    onDismiss = { menuOpen = false },
+                    canMoveUp = index > 0,
+                    canMoveDown = index < order.lastIndex,
+                    onMove = { delta -> menuOpen = false; move(index, index + delta) },
                 )
             }
-        }
         }
     }
     }
@@ -337,4 +234,3 @@ private fun StreamMoveMenu(
     }
 }
 
-private const val SWITCH_TAG = "PlayerScreen"

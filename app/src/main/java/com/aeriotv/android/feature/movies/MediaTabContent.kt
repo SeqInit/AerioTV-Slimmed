@@ -8,51 +8,32 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.CircularProgressIndicator
 import com.aeriotv.android.ui.scale.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
@@ -64,13 +45,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import com.aeriotv.android.feature.livetv.ManageGroupsSheet
-import com.aeriotv.android.feature.livetv.rememberLiveTvFormFactor
 import com.aeriotv.android.feature.ondemand.OnDemandViewModel
 import com.aeriotv.android.feature.settings.SettingsViewModel
-import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import kotlinx.coroutines.launch
 
 /**
  * Movies / TV Shows tab, phone and tablet (media-center redesign, Apple
@@ -202,7 +178,7 @@ fun MediaTabContent(
         if (tabIsActive) viewModel.setLibraryVisible(true)
         onDispose { if (tabIsActive) viewModel.setLibraryVisible(false) }
     }
-    val compact = rememberLiveTvFormFactor().widthClass == WindowWidthSizeClass.Compact
+
     val hiddenGroups by (if (kind == MediaKind.Movies) settingsVm.hiddenMovieGroups else settingsVm.hiddenSeriesGroups)
         .collectAsStateWithLifecycle(initialValue = emptySet())
     val sortWire by (if (kind == MediaKind.Movies) settingsVm.moviesSortOrder else settingsVm.seriesSortOrder)
@@ -221,7 +197,6 @@ fun MediaTabContent(
         searchActive = false
         query = ""
     }
-    var showSort by remember { mutableStateOf(false) }
     var showManageGroups by remember { mutableStateOf(false) }
 
     val groupNames = if (kind == MediaKind.Movies) state.movieGroupNames else state.seriesGroupNames
@@ -274,7 +249,7 @@ fun MediaTabContent(
     // stays on screen until the new one lands. Built inline it stalled the
     // first open of Movies for ~3 s and TV Shows for ~1 s on the Nothing
     // Phone (Logan 2026-09-09, "switching tabs freezes for a couple seconds").
-    val gridState = if (com.aeriotv.android.ui.settings.rememberIsTvDevice()) com.aeriotv.android.ui.tv.rememberTvMediaGridState() else rememberLazyGridState()
+    val gridState = com.aeriotv.android.ui.tv.rememberTvMediaGridState()
     // Re-tap of the Movies / TV Shows tab you are already on: the grid goes
     // back to the top. A detail is a route of its own (the bar is not up
     // there), so there is nothing to pop first. Phone and tablet only.
@@ -456,13 +431,12 @@ fun MediaTabContent(
         })
     }
 
-    val isTv = rememberLiveTvFormFactor().isTv
     // TV hero "Play" for a SERIES: the library / watchlist hero used to fall
     // through to Details because a series carries no movieUuid. Resolve the
     // same target episode the series detail page does (Apple tvSeriesTarget,
     // VODDetailView.swift:731-751) and play it, labelled "Play S1 E1" /
     // "Resume S2 E3". Only the hero's own series is prefetched.
-    val heroSeriesId = if (kind == MediaKind.TVShows && isTv) {
+    val heroSeriesId = if (kind == MediaKind.TVShows) {
         (heroPages.firstOrNull()?.item ?: library.firstOrNull())?.seriesId
     } else null
     LaunchedEffect(heroSeriesId) { heroSeriesId?.let { viewModel.loadEpisodes(it) } }
@@ -474,143 +448,58 @@ fun MediaTabContent(
     val heroSeriesTarget = remember(heroSeriesEpisodes, heroSeriesProgress) {
         com.aeriotv.android.feature.ondemand.seriesTarget(heroSeriesEpisodes, heroSeriesProgress)
     }
-    if (isTv) {
-        com.aeriotv.android.feature.movies.tv.TvMediaTab(
-            kind = kind, gridState = gridState, heroPages = heroPages, progressKeys = progressKeys, watchlistPages = watchlistPages,
-            backdrops = backdrops, library = library, gridItems = gridItems, available = available,
-            railIndexOf = libraryBuilt.indexOfLetter,
-            // Search hits are a plain list; only the catalog window needs the
-            // indexed key lookup for the return-from-detail restore.
-            gridIndexOfKey = if (isSearching) null else libraryBuilt.indexOfKey,
-            posterUrlFor = posterUrlFor,
-            isSearching = isSearching, searchActive = searchActive, query = query,
-            onQueryChange = { submitQuery(it) },
-            onSearchToggle = { searchActive = !searchActive; if (!searchActive) submitQuery("") },
-            onClearSearch = { submitQuery("") },
-            personMatchName = personMatchName, showProviderPills = showProviderPills, providerIds = providerIds,
-            providerNames = state.providerNames, selectedProviderId = selectedProviderId,
-            onSelectProvider = { viewModel.selectProvider(it, kind == MediaKind.Movies) },
-            genrePills = genrePills, selectedGenre = selectedGenre, onGenre = { viewModel.setSelectedGenre(kind == MediaKind.Movies, it) },
-            sortOrder = sortOrder,
-            onSort = { if (kind == MediaKind.Movies) settingsVm.setMoviesSortOrder(it.wire) else settingsVm.setSeriesSortOrder(it.wire) },
-            onFilter = { showManageGroups = true }, filterActive = hiddenGroups.isNotEmpty(),
-            filterOpen = showManageGroups,
-            watchlistKeys = watchlistKeys, onToggleWatchlist = { watchlistVm.toggle(it) }, onRemoveWatchlist = { watchlistVm.remove(it) },
-            hiddenKeys = hiddenTitles, onToggleHidden = { viewModel.toggleHidden(it.key) },
-            onRemoveProgress = { watchVm.delete(it) },
-            onPlay = { videoId, title ->
-                if (kind == MediaKind.Movies) { viewModel.noteMovieTitle(videoId, title); onPlayMovie(videoId) } else onEpisodeResume(videoId)
-            },
-            onPlayFromStart = { videoId, title ->
-                if (kind == MediaKind.Movies) { viewModel.noteMovieTitle(videoId, title); onPlayMovieFromStart(videoId) } else onEpisodeResumeFromStart(videoId)
-            },
-            onOpen = { item -> item.movieUuid?.let { u -> viewModel.noteMovieTitle(u, item.title); onMovieClick(u) } ?: item.seriesId?.let(onSeriesClick) },
-            seriesPlayLabel = { item ->
-                if (item.seriesId != null && item.seriesId == heroSeriesId) heroSeriesTarget?.label else null
-            },
-            onPlaySeries = { item ->
-                val target = heroSeriesTarget?.takeIf { item.seriesId == heroSeriesId }
-                val sid = item.seriesId
-                if (target != null) onEpisodeResume(target.episode.uuid) else if (sid != null) onSeriesClick(sid)
-            },
-            isLoading = isLoading, libraryPending = libraryPending,
-            isSearchBusy = state.isSearching || state.isSearchingSeries,
-        )
-        if (showManageGroups && groupNames.isNotEmpty()) {
-            // Native tvOS Filter page on TV (the phone branch below keeps the
-            // bottom sheet).
-            com.aeriotv.android.ui.tv.TvFilterPage(
-                groups = filterGroups,
-                hiddenGroups = filterHidden,
-                onChange = { next ->
-                    onFilterChange(next)
-                    // tvOS drops a genre selection once its group is hidden.
-                    selectedGenre?.let { g -> if (g in next) viewModel.setSelectedGenre(kind == MediaKind.Movies, null) }
-                },
-                onDismiss = { showManageGroups = false },
-            )
-        }
-        return
-    }
-
-    MediaPageScaffold(
-        gridState = gridState,
-        compact = compact,
-        decks = listOf(
-            PageDeck("Continue Watching", heroPages, { it.key }, heroCard),
-            PageDeck("Watchlist", watchlistPages, { it.key }, wlCard),
-        ),
-        headerTitle = if (isSearching) "Results" else kind.libraryTitle,
-        headerCount = gridItems.size,
-        sortMenu = {
-            DropdownMenu(expanded = showSort, onDismissRequest = { showSort = false }) {
-                MediaSortOrder.entries.forEach { order ->
-                    DropdownMenuItem(
-                        text = { Text(order.label) },
-                        trailingIcon = { if (order == sortOrder) Icon(Icons.Filled.Check, contentDescription = null) },
-                        onClick = {
-                            showSort = false
-                            if (kind == MediaKind.Movies) settingsVm.setMoviesSortOrder(order.wire)
-                            else settingsVm.setSeriesSortOrder(order.wire)
-                        },
-                    )
-                }
-            }
-        },
-        onSort = { showSort = true },
-        onFilter = { showManageGroups = true },
-        searchEnabled = true,
-        searchActive = searchActive,
-        query = query,
+    com.aeriotv.android.feature.movies.tv.TvMediaTab(
+        kind = kind, gridState = gridState, heroPages = heroPages, progressKeys = progressKeys, watchlistPages = watchlistPages,
+        backdrops = backdrops, library = library, gridItems = gridItems, available = available,
+        railIndexOf = libraryBuilt.indexOfLetter,
+        // Search hits are a plain list; only the catalog window needs the
+        // indexed key lookup for the return-from-detail restore.
+        gridIndexOfKey = if (isSearching) null else libraryBuilt.indexOfKey,
+        posterUrlFor = posterUrlFor,
+        isSearching = isSearching, searchActive = searchActive, query = query,
         onQueryChange = { submitQuery(it) },
         onSearchToggle = { searchActive = !searchActive; if (!searchActive) submitQuery("") },
-        searchPlaceholder = if (kind == MediaKind.Movies) "Search movies" else "Search TV shows",
-        isSearching = isSearching,
-        searchExtras = searchExtras,
-        pills = genrePills,
-        selectedPill = selectedGenre,
-        onPill = { viewModel.setSelectedGenre(kind == MediaKind.Movies, it) },
-        gridItems = gridItems,
-        gridKey = { it.key },
-        cell = { item ->
-            val open = { item.movieUuid?.let(onMovieClick) ?: item.seriesId?.let(onSeriesClick); Unit }
-            MediaPosterCard(
-                item = item,
-                posterUrl = posterUrlFor(item),
-                onClick = open,
-                menu = { close ->
-                    DropdownMenuItem(text = { Text("Details") }, onClick = { close(); open() })
-                    DropdownMenuItem(
-                        text = { Text(if (item.key in watchlistKeys) "Remove from Watchlist" else "Add to Watchlist") },
-                        onClick = { close(); watchlistVm.toggle(item) },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (item.key in hiddenTitles) "Unhide" else "Hide") },
-                        onClick = { close(); viewModel.toggleHidden(item.key) },
-                    )
-                },
-            )
+        onClearSearch = { submitQuery("") },
+        personMatchName = personMatchName, showProviderPills = showProviderPills, providerIds = providerIds,
+        providerNames = state.providerNames, selectedProviderId = selectedProviderId,
+        onSelectProvider = { viewModel.selectProvider(it, kind == MediaKind.Movies) },
+        genrePills = genrePills, selectedGenre = selectedGenre, onGenre = { viewModel.setSelectedGenre(kind == MediaKind.Movies, it) },
+        sortOrder = sortOrder,
+        onSort = { if (kind == MediaKind.Movies) settingsVm.setMoviesSortOrder(it.wire) else settingsVm.setSeriesSortOrder(it.wire) },
+        onFilter = { showManageGroups = true }, filterActive = hiddenGroups.isNotEmpty(),
+        filterOpen = showManageGroups,
+        watchlistKeys = watchlistKeys, onToggleWatchlist = { watchlistVm.toggle(it) }, onRemoveWatchlist = { watchlistVm.remove(it) },
+        hiddenKeys = hiddenTitles, onToggleHidden = { viewModel.toggleHidden(it.key) },
+        onRemoveProgress = { watchVm.delete(it) },
+        onPlay = { videoId, title ->
+            if (kind == MediaKind.Movies) { viewModel.noteMovieTitle(videoId, title); onPlayMovie(videoId) } else onEpisodeResume(videoId)
         },
-        emptyContent = {
-            if (isLoading || (!isSearching && libraryPending) || (isSearching && (state.isSearching || state.isSearchingSeries))) CircularProgressIndicator()
-            else Text(if (isSearching) "No results" else kind.emptyTitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        onPlayFromStart = { videoId, title ->
+            if (kind == MediaKind.Movies) { viewModel.noteMovieTitle(videoId, title); onPlayMovieFromStart(videoId) } else onEpisodeResumeFromStart(videoId)
         },
-        railLetters = available,
-        // The library is a window over the catalog (GH #109): the rail index
-        // comes from its bucket array, never from walking the rows.
-        railIndexOf = libraryBuilt.indexOfLetter,
-        isRefreshing = isLoading && gridItems.isNotEmpty(),
-        onRefresh = { if (kind == MediaKind.Movies) viewModel.refresh() else viewModel.refreshSeries() },
-        // TMDB's terms ask for the logo and wording wherever their data and
-        // images are shown; the posters in this grid are TMDB art.
-        footer = { com.aeriotv.android.ui.TmdbAttribution(long = true, isTv = false) },
+        onOpen = { item -> item.movieUuid?.let { u -> viewModel.noteMovieTitle(u, item.title); onMovieClick(u) } ?: item.seriesId?.let(onSeriesClick) },
+        seriesPlayLabel = { item ->
+            if (item.seriesId != null && item.seriesId == heroSeriesId) heroSeriesTarget?.label else null
+        },
+        onPlaySeries = { item ->
+            val target = heroSeriesTarget?.takeIf { item.seriesId == heroSeriesId }
+            val sid = item.seriesId
+            if (target != null) onEpisodeResume(target.episode.uuid) else if (sid != null) onSeriesClick(sid)
+        },
+        isLoading = isLoading, libraryPending = libraryPending,
+        isSearchBusy = state.isSearching || state.isSearchingSeries,
     )
-
     if (showManageGroups && groupNames.isNotEmpty()) {
-        ManageGroupsSheet(
-            allGroups = filterGroups,
+        // Native tvOS Filter page on TV (the phone branch below keeps the
+        // bottom sheet).
+        com.aeriotv.android.ui.tv.TvFilterPage(
+            groups = filterGroups,
             hiddenGroups = filterHidden,
-            onSave = onFilterChange,
+            onChange = { next ->
+                onFilterChange(next)
+                // tvOS drops a genre selection once its group is hidden.
+                selectedGenre?.let { g -> if (g in next) viewModel.setSelectedGenre(kind == MediaKind.Movies, null) }
+            },
             onDismiss = { showManageGroups = false },
         )
     }
@@ -618,7 +507,7 @@ fun MediaTabContent(
 
 @Composable
 internal fun EdgeToEdgePillRow(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
-    val compact = rememberLiveTvFormFactor().widthClass == WindowWidthSizeClass.Compact
+
     // The grid pads 18 dp each side; widen over both so the pills reach the
     // screen edges, and the row's own 16 dp lead keeps the first pill at 16.
     Box(modifier = Modifier.layout { measurable, constraints ->

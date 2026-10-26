@@ -1,29 +1,18 @@
 package com.aeriotv.android.feature.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ViewAgenda
-import androidx.compose.material.icons.automirrored.outlined.ViewSidebar
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.Subject
-import androidx.compose.material.icons.automirrored.filled.ViewSidebar
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.FilterNone
@@ -32,12 +21,9 @@ import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.SmartButton
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.ViewAgenda
-import androidx.compose.material.icons.filled.Web
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,9 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,15 +47,11 @@ import com.aeriotv.android.ui.settings.SettingsDetailTopBar
 import com.aeriotv.android.ui.settings.SettingsPickerOption
 import com.aeriotv.android.ui.settings.SettingsPickerRow
 import com.aeriotv.android.ui.settings.SettingsSection
-import com.aeriotv.android.ui.settings.SettingsSelectionRow
 import com.aeriotv.android.ui.settings.SettingsSubGroup
 import com.aeriotv.android.ui.settings.SettingsSubPageHost
 import com.aeriotv.android.ui.settings.SettingsToggleRow
 import com.aeriotv.android.ui.settings.settingsCountSummary
 import com.aeriotv.android.ui.settings.settingsFormWidth
-import com.aeriotv.android.ui.settings.settingsRowFocusCard
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
-import com.aeriotv.android.ui.theme.textAccent
 
 /**
  * Settings > Live TV. Everything that shapes the guide and the channel list:
@@ -90,11 +70,10 @@ fun LiveTvSettingsScreen(
     onOpenAddMoreCategories: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    val isTv = rememberIsTvDevice()
     // TV has no Live TV List view (Logan 2026-09-16, see core.ui.TvListView),
     // so the list-only options are hidden and the list-facing copy is written
     // for the Guide's channel column instead. The keys keep their values.
-    val listViewShown = !isTv || com.aeriotv.android.core.ui.TvListView.ENABLED
+    val listViewShown = com.aeriotv.android.core.ui.TvListView.ENABLED
 
     val showChannelLogos by viewModel.showChannelLogos.collectAsStateWithLifecycle(initialValue = true)
     val channelLogoSize by viewModel.channelLogoSize.collectAsStateWithLifecycle(initialValue = 100)
@@ -107,7 +86,7 @@ fun LiveTvSettingsScreen(
     val defaultLiveTVView by viewModel.defaultLiveTVView.collectAsStateWithLifecycle(initialValue = "")
     val phoneGroupSelector by viewModel.phoneGroupSelector.collectAsStateWithLifecycle(initialValue = "sidebar")
     val edgeSwipeOpensSidebar by viewModel.liveTvEdgeSwipeOpensSidebar.collectAsStateWithLifecycle(initialValue = false)
-    val showEpgBadges by viewModel.showEpgBadges(isTv).collectAsStateWithLifecycle(initialValue = true)
+    val showEpgBadges by viewModel.showEpgBadges.collectAsStateWithLifecycle(initialValue = true)
     val hiddenEpgBadges by viewModel.hiddenEpgBadges.collectAsStateWithLifecycle(initialValue = emptySet())
     val scaleLiveTV by viewModel.displayScaleLiveTV.collectAsStateWithLifecycle(initialValue = 1.0f)
     val programInfoButton by viewModel.guideProgramInfoButton
@@ -145,11 +124,7 @@ fun LiveTvSettingsScreen(
                 item("guide-presentation") {
                     SettingsSection(
                         header = "Guide Presentation",
-                        footer = if (isTv) {
-                            "Turn logos or numbers off to give long channel names more room in the Guide's channel column."
-                        } else {
-                            null
-                        },
+                        footer = "Turn logos or numbers off to give long channel names more room in the Guide's channel column.",
                     ) {
                         SettingsToggleRow(
                             title = "Show Channel Logos",
@@ -158,7 +133,7 @@ fun LiveTvSettingsScreen(
                             } else {
                                 "Display each channel's logo in the Guide's channel column."
                             },
-                            leadingIcon = if (isTv) Icons.Filled.Tv else null,
+                            leadingIcon = Icons.Filled.Tv,
                             checked = showChannelLogos,
                             onCheckedChange = viewModel::setShowChannelLogos,
                         )
@@ -181,7 +156,7 @@ fun LiveTvSettingsScreen(
                             } else {
                                 "Display each channel's number in the Guide's channel column."
                             },
-                            leadingIcon = if (isTv) Icons.Filled.Numbers else null,
+                            leadingIcon = Icons.Filled.Numbers,
                             checked = showChannelNumbers,
                             onCheckedChange = viewModel::setShowChannelNumbers,
                         )
@@ -192,7 +167,7 @@ fun LiveTvSettingsScreen(
                             } else {
                                 "Turn off to hide channel names in the Guide's channel column."
                             },
-                            leadingIcon = if (isTv) Icons.Filled.TextFields else null,
+                            leadingIcon = Icons.Filled.TextFields,
                             checked = showChannelNames,
                             onCheckedChange = viewModel::setShowChannelNames,
                         )
@@ -203,55 +178,26 @@ fun LiveTvSettingsScreen(
                             } else {
                                 "Turn off to hide the episode or match name under each program title in the Guide, for EPGs that repeat the description there."
                             },
-                            leadingIcon = if (isTv) Icons.AutoMirrored.Filled.Subject else null,
+                            leadingIcon = Icons.AutoMirrored.Filled.Subject,
                             checked = showProgramSubtitles,
                             onCheckedChange = viewModel::setShowProgramSubtitles,
                         )
                         SettingsToggleRow(
                             title = "Rounded Guide Logos",
                             subtitle = "Round the channel logos in the guide.",
-                            leadingIcon = if (isTv) Icons.Filled.GridOn else null,
+                            leadingIcon = Icons.Filled.GridOn,
                             checked = roundedArtworkGuide,
                             onCheckedChange = viewModel::setRoundedArtworkGuide,
                         )
                         SettingsToggleRow(
                             title = "Rounded Program Cells",
                             subtitle = "Round the program cells in the guide to match the logos.",
-                            leadingIcon = if (isTv) Icons.Filled.RoundedCorner else null,
+                            leadingIcon = Icons.Filled.RoundedCorner,
                             checked = roundedProgramCells,
                             onCheckedChange = viewModel::setRoundedProgramCells,
                         )
                         // GH #127 (Apple d051505): phone and tablet only; TV
                         // reaches Program Info from the long-press menu.
-                        if (!isTv) SettingsPickerRow(
-                            title = "Program Info Button",
-                            inlineTitle = true,
-                            options = listOf(
-                                SettingsPickerOption(GuideProgramInfoButton.OFF, "Off", icon = Icons.Filled.Block),
-                                SettingsPickerOption(GuideProgramInfoButton.CURRENT, "Current Programs", icon = Icons.Filled.Sensors),
-                                SettingsPickerOption(GuideProgramInfoButton.ALL, "All Programs", icon = Icons.Outlined.Info),
-                            ),
-                            selected = programInfoButton,
-                            onSelect = viewModel::setGuideProgramInfoButton,
-                            leadingIcon = Icons.Outlined.Info,
-                            // Apple parity (2026-10-13): where the button
-                            // shows comes first on the picker's own page.
-                            headerContent = {
-                                SettingsToggleRow(
-                                    title = "Guide View",
-                                    subtitle = "Program Info button on guide program cells.",
-                                    checked = pibGuide,
-                                    onCheckedChange = viewModel::setProgramInfoButtonGuide,
-                                )
-                                SettingsToggleRow(
-                                    title = "List View",
-                                    subtitle = "Program Info button on channel list rows.",
-                                    checked = pibList,
-                                    onCheckedChange = viewModel::setProgramInfoButtonList,
-                                )
-                            },
-                            footer = "Adds an info button that opens Program Info in one tap. Guide View puts it on guide program cells; List View puts it on channel list rows. Current Programs shows it on programs airing now; All Programs shows it on every cell wide enough for it.",
-                        )
                     }
                 }
 
@@ -266,7 +212,7 @@ fun LiveTvSettingsScreen(
                         SettingsToggleRow(
                             title = "Rounded List Logos and Artwork",
                             subtitle = "Round the channel logos and program artwork in the channel list and on the app's cards.",
-                            leadingIcon = if (isTv) Icons.Filled.FilterNone else null,
+                            leadingIcon = Icons.Filled.FilterNone,
                             checked = roundedArtwork,
                             onCheckedChange = viewModel::setRoundedArtwork,
                         )
@@ -280,11 +226,7 @@ fun LiveTvSettingsScreen(
                             onSelect = viewModel::setDefaultLiveTVView,
                             // Apple rectangle.grid.1x2: two outlined stacked rows.
                             leadingIcon = Icons.Outlined.ViewAgenda,
-                            footer = if (isTv) {
-                                null
-                            } else {
-                                "The layout Live TV opens in. Automatic uses List on compact, portrait phones and Guide on regular width (unfolded foldable, iPad, Apple TV). You can still switch anytime with the List / Guide button; that switch lasts for the current session and does not change this default."
-                            },
+                            footer = null,
                         )
                     }
                 }
@@ -298,68 +240,21 @@ fun LiveTvSettingsScreen(
                 // guide always opens its groups as the sidebar panel, so
                 // there is nothing to choose there.
                 item("group-selection") {
-                    if (!isTv) {
-                        SettingsSection(
-                            header = "Group Selection",
-                            footer = "How Live TV picks a channel group. Sidebar Menu " +
-                                "opens a group list from the header button, where a long " +
-                                "press also reorders groups. Top Group Pills put the " +
-                                "groups in a strip across the header. Long press a pill " +
-                                "to set the default group.",
-                        ) {
-                            SettingsPickerRow(
-                                title = "Group Selection",
-                                options = listOf(
-                                    SettingsPickerOption("sidebar", "Sidebar Menu", icon = Icons.AutoMirrored.Filled.ViewSidebar),
-                                    SettingsPickerOption("pills", "Top Group Pills", icon = Icons.Filled.SmartButton),
-                                ),
-                                // iOS: icon "sidebar.leading" on the row and
-                                // on each choice (tvOS lists them bare).
-                                // Apple sidebar.leading is an outlined frame with
-                                // a side panel; the outlined glyph reads closer
-                                // than the solid one.
-                                leadingIcon = Icons.AutoMirrored.Outlined.ViewSidebar,
-                                selected = if (phoneGroupSelector == "pills") "pills" else "sidebar",
-                                onSelect = viewModel::setPhoneGroupSelector,
-                            )
-                        }
-                        // Apple issue #102 parity: only with Sidebar Menu.
-                        if (phoneGroupSelector != "pills") {
-                            SettingsSection(
-                                header = "",
-                                footer = "A swipe in from the left edge opens the group sidebar. " +
-                                    "Swiping left or right to change groups is off while this is on.",
-                            ) {
-                                SettingsToggleRow(
-                                    title = "Swipe from Left Edge Opens Sidebar",
-                                    checked = edgeSwipeOpensSidebar,
-                                    onCheckedChange = viewModel::setLiveTvEdgeSwipeOpensSidebar,
-                                )
-                            }
-                        }
-                    }
                 }
 
                 // MARK: Badges
                 item("badges") {
                     SettingsSection(
                         header = "Badges",
-                        footer = if (isTv) {
-                            "Show the LIVE, NEW, and season/episode pills on the guide, channel list, and program info. Remembered separately for Android TV and phone or tablet, and synced across your TVs."
-                        } else "Program badges are the LIVE, NEW, PREMIERE, FINALE, " +
-                            "REPEAT, and season/episode pills on the guide and channel " +
-                            "list. Remembered separately for " +
-                            (if (isTv) "TVs" else "phones and tablets") +
-                            " and synced across your " +
-                            (if (isTv) "TVs" else "mobile devices") + ".",
+                        footer = "Show the LIVE, NEW, and season/episode pills on the guide, channel list, and program info. Remembered separately for Android TV and phone or tablet, and synced across your TVs.",
                     ) {
                         SettingsToggleRow(
                             title = "Show Program Badges",
                             subtitle = "LIVE, NEW, and season/episode pills on the guide",
                             // tvOS "tag" glyph; the iOS toggle has none.
-                            leadingIcon = if (isTv) Icons.Filled.Sell else null,
+                            leadingIcon = Icons.Filled.Sell,
                             checked = showEpgBadges,
-                            onCheckedChange = { viewModel.setShowEpgBadges(isTv, it) },
+                            onCheckedChange = { viewModel.setShowEpgBadges(it) },
                         )
                         if (showEpgBadges) {
                             // Phase 3, item 4: the five per-badge toggles
@@ -392,7 +287,7 @@ fun LiveTvSettingsScreen(
                 settingsCard(
                     header = "Display Scale",
                     // tvOS prints no footer under the Guide scale row.
-                    footer = if (isTv && !listViewShown) null else if (listViewShown) {
+                    footer = if (!listViewShown) null else if (listViewShown) {
                         "Independent scale for the Live TV List. 100% matches the default; 85-150% lets you trade density for readability (larger steps show fewer, bigger items - handy on a TV across the room). Changes apply live."
                     } else {
                         "Independent scale for Live TV. 100% matches the default; 85-150% lets you trade density for readability (larger steps show fewer, bigger items - handy on a TV across the room). Changes apply live."
@@ -409,7 +304,7 @@ fun LiveTvSettingsScreen(
                 //
                 // tvOS: the master toggle only; the palette is edited on the
                 // phone or tablet, as Apple's tvOS page points to iPhone/iPad.
-                if (isTv) settingsCard(header = "Colors", footer = null) {
+                settingsCard(header = "Colors", footer = null) {
                     SettingsToggleRow(
                         title = "Color Programs by Category",
                         subtitle = "Tint guide cells by program type. Customize the palette on phone or tablet in Settings > Live TV.",
@@ -417,88 +312,6 @@ fun LiveTvSettingsScreen(
                         checked = palette.masterEnabled,
                         onCheckedChange = viewModel::setCategoryColorsEnabled,
                     )
-                } else settingsCard(
-                    header = "Colors",
-                    footer = "Tint EPG cells and channel cards by program category. Select a category below to override its hex.",
-                ) {
-                    ToggleRow(
-                        title = "Color Programs by Category",
-                        subtitle = "Apply category tints to the guide and channel rows.",
-                        checked = palette.masterEnabled,
-                        onCheckedChange = viewModel::setCategoryColorsEnabled,
-                    )
-                    DividerRow()
-                    BoxWithConstraints {
-                        val dim = if (palette.masterEnabled) 1f else 0.4f
-                        if (twoUpInPane(maxWidth)) {
-                            Column {
-                                ProgramCategory.defaultBuckets.chunked(2)
-                                    .forEachIndexed { rowIndex, pair ->
-                                        if (rowIndex > 0) DividerRow()
-                                        Row(modifier = Modifier.fillMaxWidth()) {
-                                            pair.forEach { bucket ->
-                                                Box(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .alpha(dim),
-                                                ) {
-                                                    CategoryPaletteRow(
-                                                        bucket = bucket,
-                                                        hex = palette.hexFor(bucket),
-                                                        enabled = palette.masterEnabled,
-                                                        onClick = { pickerTarget = bucket },
-                                                    )
-                                                }
-                                            }
-                                            if (pair.size == 1) Spacer(Modifier.weight(1f))
-                                        }
-                                    }
-                            }
-                        } else {
-                            Column {
-                                ProgramCategory.defaultBuckets.forEachIndexed { idx, bucket ->
-                                    if (idx > 0) DividerRow()
-                                    Box(modifier = Modifier.alpha(dim)) {
-                                        CategoryPaletteRow(
-                                            bucket = bucket,
-                                            hex = palette.hexFor(bucket),
-                                            enabled = palette.masterEnabled,
-                                            onClick = { pickerTarget = bucket },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    DividerRow()
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .settingsRowFocusCard()
-                            .clickable(enabled = palette.masterEnabled) { viewModel.resetCategoryPalette() }
-                            .alpha(if (palette.masterEnabled) 1f else 0.4f)
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Reset Colors to Defaults",
-                            style = MaterialTheme.typography.bodyMedium,
-                            // Phase 3: the app's destructive/reset token (the
-                            // same one Playlist Detail's Danger Zone and DVR's
-                            // Reset to Default use), not a hardcoded orange.
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                    DividerRow()
-                    Box(modifier = Modifier.alpha(if (palette.masterEnabled) 1f else 0.4f)) {
-                        AddMoreCategoriesRow(
-                            extraOn = ProgramCategory.additionalBuckets.count { palette.isBucketEnabled(it) },
-                            customCount = palette.custom.size,
-                            enabled = palette.masterEnabled,
-                            onClick = onOpenAddMoreCategories,
-                        )
-                    }
                 }
 
                 // MARK: Recently Watched (GH #130, Apple 5e34cf6)

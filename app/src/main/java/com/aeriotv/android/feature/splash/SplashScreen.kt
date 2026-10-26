@@ -34,7 +34,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aeriotv.android.R
 import com.aeriotv.android.feature.settings.SettingsViewModel
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import kotlinx.coroutines.delay
 
 /**
@@ -86,19 +85,18 @@ fun SplashGate(
 private fun SplashContent(modifier: Modifier = Modifier) {
     // iOS SplashView per-platform metrics: logo / title / subtitle.
     // tvOS 160/72/28; iPhone (compact) 100/50/18; iPad (regular) 130/64/24.
-    val isTv = rememberIsTvDevice()
     val compact = LocalConfiguration.current.smallestScreenWidthDp < 600
     // TV metrics are scaled to Apple TV's PROPORTIONS, not its point values:
     // tvOS lays out on a 1920pt canvas while a 1080p Android TV is ~960dp
     // wide, so the same numbers drew everything twice as large (Logan
     // 2026-09-03, emulator vs Apple TV side by side). Logo 8.3% of width,
     // title 3.75%, subtitle 1.5%.
-    val logoSize = if (isTv) 80.dp else if (compact) 100.dp else 130.dp
-    val titleSize = if (isTv) 36.sp else if (compact) 50.sp else 64.sp
-    val subtitleSize = if (isTv) 14.sp else if (compact) 18.sp else 24.sp
-    val logoBottomPad = if (isTv) 32.dp else if (compact) 24.dp else 32.dp
-    val subtitleTopPad = if (isTv) 6.dp else 10.dp
-    val glowRadius = if (isTv) 20.dp else if (compact) 20.dp else 30.dp
+    val logoSize = 80.dp
+    val titleSize = 36.sp
+    val subtitleSize = 14.sp
+    val logoBottomPad = 32.dp
+    val subtitleTopPad = 6.dp
+    val glowRadius = 20.dp
 
     val accent = Color(0xFF1AC4D8)
     // iOS fade envelope: easeIn 0.4s -> hold -> easeOut 0.4s starting at 2.3s.

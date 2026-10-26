@@ -21,13 +21,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import com.aeriotv.android.ui.scale.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,8 +51,6 @@ import com.aeriotv.android.ui.settings.settingsFormWidth
 import com.aeriotv.android.ui.settings.SettingsToggleAffordance
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
 import com.aeriotv.android.ui.settings.dpadFocusRing
-import com.aeriotv.android.ui.settings.dpadFocusWash
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.textfield.aerioTextFieldKeyboardOptions
 import java.util.UUID
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
@@ -95,15 +91,6 @@ fun AddMoreCategoriesScreen(
             },
             navigationIcon = {
                 // No back arrow on Android TV -- the remote BACK pops it.
-                if (!rememberIsTvDevice()) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,

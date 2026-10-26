@@ -106,6 +106,8 @@ private fun isRetiredPrefKey(name: String): Boolean =
  * values are dropped on the next DataStore open (see the migration above).
  */
 private val RETIRED_PREF_KEYS = setOf(
+    // Phone / tablet UI (the app is TV-only)
+    "ui_show_epg_badges_mobile",
     // Standard TV interface (Sidebar is the only layout)
     "tv_interface_layout",
     "live_tv_layout",
@@ -382,14 +384,10 @@ class AppPreferences @Inject constructor(
     /**
      * Whether the EPG program badges (LIVE / NEW / PREMIERE / FINALE / REPEAT +
      * season/episode pill) render in the guide, channel list, and info sheet.
-     * Default ON. Stored + Drive-synced PER DEVICE TYPE (a separate value for TV
-     * and for phone/tablet) so a TV's choice follows the user's TVs and a phone's
-     * follows their phones, independently. The UI reads/writes the key matching
-     * the current device via [showEpgBadges] / [setShowEpgBadges].
+     * Default ON. Stored and synced under the TV key (Apple keeps a separate
+     * value per device type; this build only ever writes the TV one).
      */
-    val showEpgBadgesTv: Flow<Boolean> = store.data.map { it[KEY_SHOW_EPG_BADGES_TV] ?: true }
-    val showEpgBadgesMobile: Flow<Boolean> = store.data.map { it[KEY_SHOW_EPG_BADGES_MOBILE] ?: true }
-    fun showEpgBadges(isTv: Boolean): Flow<Boolean> = if (isTv) showEpgBadgesTv else showEpgBadgesMobile
+    val showEpgBadges: Flow<Boolean> = store.data.map { it[KEY_SHOW_EPG_BADGES_TV] ?: true }
 
     /**
      * Per-badge visibility under the master "Show program badges" switch
@@ -411,8 +409,8 @@ class AppPreferences @Inject constructor(
             else prefs[KEY_HIDDEN_EPG_BADGES] = cur.joinToString("\n")
         }
     }
-    suspend fun setShowEpgBadges(isTv: Boolean, value: Boolean) {
-        store.edit { it[if (isTv) KEY_SHOW_EPG_BADGES_TV else KEY_SHOW_EPG_BADGES_MOBILE] = value }
+    suspend fun setShowEpgBadges(value: Boolean) {
+        store.edit { it[KEY_SHOW_EPG_BADGES_TV] = value }
     }
 
     /**
@@ -2122,7 +2120,6 @@ class AppPreferences @Inject constructor(
         val KEY_TIME_FORMAT = stringPreferencesKey("ui_time_format")
         val KEY_HIDDEN_EPG_BADGES = stringPreferencesKey("ui_hidden_epg_badges")
         val KEY_SHOW_EPG_BADGES_TV = booleanPreferencesKey("ui_show_epg_badges_tv")
-        val KEY_SHOW_EPG_BADGES_MOBILE = booleanPreferencesKey("ui_show_epg_badges_mobile")
         val KEY_VIDEO_SCALE_MODE = stringPreferencesKey("video_scale_mode")
         val KEY_CUSTOM_ACCENT_HEX = stringPreferencesKey("custom_accent_hex")
         val KEY_DEFAULT_LIVE_TV_VIEW = stringPreferencesKey("default_live_tv_view")

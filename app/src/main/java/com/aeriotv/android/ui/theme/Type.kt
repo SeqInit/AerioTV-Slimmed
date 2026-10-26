@@ -36,14 +36,15 @@ import androidx.compose.ui.unit.isSpecified
  */
 private const val TV_TYPE_SCALE = 0.9f
 
-private val PhoneTypography = Typography()
+private val MaterialTypography = Typography()
 
 private fun TextStyle.scaledForTv(factor: Float): TextStyle = copy(
     fontSize = if (fontSize.isSpecified) fontSize * factor else fontSize,
     lineHeight = if (lineHeight.isSpecified) lineHeight * factor else lineHeight,
 )
 
-private val TvTypography = with(PhoneTypography) {
+/** The app's type scale: Material's defaults scaled for 10-foot viewing. */
+val TvTypography = with(MaterialTypography) {
     Typography(
         displayLarge = displayLarge.scaledForTv(TV_TYPE_SCALE),
         displayMedium = displayMedium.scaledForTv(TV_TYPE_SCALE),
@@ -62,9 +63,3 @@ private val TvTypography = with(PhoneTypography) {
         labelSmall = labelSmall.scaledForTv(TV_TYPE_SCALE),
     )
 }
-
-/** Material type scale for the active form factor (TV gets the scaled table). */
-fun aerioTypography(isTv: Boolean): Typography = if (isTv) TvTypography else PhoneTypography
-
-/** Back-compat alias for existing references; equals the phone (default) scale. */
-val Typography: Typography = PhoneTypography

@@ -30,12 +30,11 @@ import com.aeriotv.android.core.playback.DispatcharrConnectionLimit
 @Composable
 fun ConnectionLimitCard(
     notice: DispatcharrConnectionLimit.Notice,
-    isTv: Boolean,
     onRetry: () -> Unit,
     compact: Boolean = false,
 ) {
     val retryFocus = remember { FocusRequester() }
-    if (isTv && !compact) {
+    if (!compact) {
         LaunchedEffect(notice) {
             runCatching { retryFocus.requestFocus() }
         }

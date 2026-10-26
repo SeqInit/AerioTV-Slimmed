@@ -21,15 +21,13 @@ import com.aeriotv.android.R
 fun TmdbAttribution(
     modifier: Modifier = Modifier,
     long: Boolean = true,
-    isTv: Boolean = false,
     /** Settings: caption-size lines (the Settings footnote style). */
     caption: Boolean = false,
 ) {
     val logoHeight = when {
-        long && isTv -> 20.dp
+        long -> 20.dp
         long -> 12.dp
-        isTv -> 44.dp
-        else -> 28.dp
+        else-> 44.dp
     }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Image(
@@ -39,8 +37,7 @@ fun TmdbAttribution(
         )
         val style = when {
             caption -> com.aeriotv.android.ui.settings.settingsFootnoteStyle()
-            isTv -> MaterialTheme.typography.bodyMedium
-            else -> MaterialTheme.typography.bodySmall
+            else-> MaterialTheme.typography.bodyMedium
         }
         // Their required line first, ours second.
         Text(

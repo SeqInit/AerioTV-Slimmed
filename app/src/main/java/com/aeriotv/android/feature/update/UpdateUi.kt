@@ -23,7 +23,6 @@ import com.aeriotv.android.ui.scale.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -44,10 +43,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.aeriotv.android.BuildConfig
 import com.aeriotv.android.Routes
 import com.aeriotv.android.core.update.UpdateState
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 
 /**
  * Launch-prompt gate for the in-app updater (github flavor; renders nothing
@@ -138,30 +135,17 @@ fun UpdatePromptSheet(
     onLater: () -> Unit,
     onHide: () -> Unit,
 ) {
-    val isTv = rememberIsTvDevice()
-    if (isTv) {
-        Dialog(
-            onDismissRequest = onHide,
-            properties = DialogProperties(usePlatformDefaultWidth = false),
+    Dialog(
+        onDismissRequest = onHide,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.55f),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.background,
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(0.55f),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.background,
-            ) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    UpdatePromptBody(state, onPrimary, onLater, autoFocusPrimary = true)
-                }
-            }
-        }
-    } else {
-        ModalBottomSheet(
-            onDismissRequest = onHide,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = MaterialTheme.colorScheme.background,
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                UpdatePromptBody(state, onPrimary, onLater, autoFocusPrimary = false)
+            Column(modifier = Modifier.padding(24.dp)) {
+                UpdatePromptBody(state, onPrimary, onLater, autoFocusPrimary = true)
             }
         }
     }

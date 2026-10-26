@@ -169,8 +169,7 @@ fun SettingsSliderRow(
                     text = valueText,
                     // Apple: labelSmall (11pt) in textTertiary. TV keeps the
                     // footnote size, which is already scaled for 10 feet.
-                    style = (if (rememberIsTvDevice()) settingsFootnoteStyle()
-                    else MaterialTheme.typography.labelSmall).subtext(),
+                    style = (settingsFootnoteStyle()).subtext(),
                     color = settingsDimTint(),
                 )
             } else {
@@ -194,8 +193,7 @@ fun SettingsSliderRow(
         if (footer != null) {
             Text(
                 text = footer,
-                style = (if (rememberIsTvDevice()) settingsFootnoteStyle()
-                else MaterialTheme.typography.labelSmall).subtext(),
+                style = (settingsFootnoteStyle()).subtext(),
                 color = settingsDimTint(),
             )
         }

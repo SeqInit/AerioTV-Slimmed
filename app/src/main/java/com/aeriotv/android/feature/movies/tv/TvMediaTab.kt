@@ -4,14 +4,12 @@ import com.aeriotv.android.ui.scale.subtext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -284,6 +282,6 @@ internal fun TvMediaTab(
         pageId = pageId,
         // TMDB's terms ask for the logo and wording wherever their data and
         // images are shown; the posters in this grid are TMDB art.
-        footer = { com.aeriotv.android.ui.TmdbAttribution(long = true, isTv = true) },
+        footer = { com.aeriotv.android.ui.TmdbAttribution(long = true) },
     )
 }

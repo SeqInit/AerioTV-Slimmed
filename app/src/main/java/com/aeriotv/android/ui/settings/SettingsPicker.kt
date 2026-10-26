@@ -107,7 +107,7 @@ fun <T> ColumnScope.SettingsPickerRow(
      *  Info Button's Guide View / List View toggles). Inline too. */
     headerContent: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    if (tvChoiceSheet && rememberIsTvDevice()) {
+    if (tvChoiceSheet) {
         // The sheet opens with focus on the CURRENT value (a long list such
         // as Catch-Up Time Offset opened on its first option, -180).
         val selectedFocus = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -219,7 +219,7 @@ fun ColumnScope.SettingsSubGroup(
     tvOptionsSheet: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (tvOptionsSheet && rememberIsTvDevice()) {
+    if (tvOptionsSheet) {
         SettingsTvOptionsSheetRow(
             title = title,
             summary = summary,

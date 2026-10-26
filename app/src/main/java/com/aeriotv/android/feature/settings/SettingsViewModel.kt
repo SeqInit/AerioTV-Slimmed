@@ -16,9 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
@@ -138,16 +136,15 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setShowChannelNumbers(value) }
     }
 
-    // EPG program badges. Per-device-type: the Settings screen passes the
-    // current device's isTv so the right value is read/written and synced.
-    fun showEpgBadges(isTv: Boolean): Flow<Boolean> = prefs.showEpgBadges(isTv)
+    // EPG program badges (synced as showEpgBadgesTv).
+    val showEpgBadges: Flow<Boolean> = prefs.showEpgBadges
     val hiddenEpgBadges: StateFlow<Set<String>> = prefs.hiddenEpgBadges
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
     fun setBadgeHidden(label: String, hidden: Boolean) {
         viewModelScope.launch { prefs.setBadgeHidden(label, hidden) }
     }
-    fun setShowEpgBadges(isTv: Boolean, value: Boolean) {
-        viewModelScope.launch { prefs.setShowEpgBadges(isTv, value) }
+    fun setShowEpgBadges(value: Boolean) {
+        viewModelScope.launch { prefs.setShowEpgBadges(value) }
     }
 
     /**

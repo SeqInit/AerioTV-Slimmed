@@ -37,12 +37,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PictureInPicture
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -76,7 +73,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -89,15 +85,10 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aeriotv.android.BuildConfig
 import com.aeriotv.android.core.data.VodLearnedStream
-import com.aeriotv.android.core.pip.PipState
-import com.aeriotv.android.core.pip.enterPip16x9
-import com.aeriotv.android.core.pip.findActivity
-import com.aeriotv.android.core.pip.supportsPip
 import com.aeriotv.android.feature.ondemand.VodProviderOption
 import com.aeriotv.android.feature.ondemand.VodVersionPickerSheet
 import com.aeriotv.android.feature.player.PLAYER_CHROME_HIDE_MS
 import com.aeriotv.android.feature.settings.SettingsViewModel
-import com.aeriotv.android.feature.settings.bufferMillisFor
 import com.aeriotv.android.feature.watchprogress.WatchProgressViewModel
 import com.aeriotv.android.ui.tv.tvFocusScale
 import androidx.media3.common.C
@@ -109,7 +100,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -362,16 +352,7 @@ fun VODPlayerScreen(
     val watchVm: WatchProgressViewModel = hiltViewModel()
 
     val context = LocalContext.current
-    val inPip by PipState.inPictureInPicture
-    val pipAvailable = remember { context.supportsPip() }
 
-    // VOD is always video, so leaving the app should auto-enter PiP while this
-    // screen is up. Cleared when the player leaves composition.
-    DisposableEffect(Unit) {
-        PipState.videoPlaybackActive.value = true
-        PipState.audioPlaybackActive.value = false
-        onDispose { PipState.videoPlaybackActive.value = false }
-    }
 
     var chromeVisible by remember { mutableStateOf(true) }
     var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
@@ -528,49 +509,6 @@ fun VODPlayerScreen(
     // Which transport control the D-pad is "on" while chrome is up (TV only).
     // None on phone / while chrome hidden. PlayPause is the reveal default.
     var tvFocusZone by remember { mutableStateOf(TvVodFocusZone.None) }
-    val isTvForm = (
-        context.resources.configuration.uiMode and
-            android.content.res.Configuration.UI_MODE_TYPE_MASK
-        ) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-
-    // GH #7 (True Android Fullscreen), VOD parity with the live player: hide the
-    // status + nav bars in LANDSCAPE for edge-to-edge playback, but keep the
-    // status bar in PORTRAIT so the top control banner never slides under a
-    // camera cutout (in portrait the OS reliably reserves the cutout area with
-    // the status bar on every device; the DisplayCutout inset is not always
-    // exposed to apps, e.g. the Samsung Z Fold cover screen). Plus a manual
-    // fullscreen toggle (forcedLandscape) that force-rotates to landscape and
-    // pins it under a portrait rotation-lock (iOS PlayerView parity). Keyed on
-    // orientation so a rotation re-applies the right mode; restored on dispose.
-    var forcedLandscape by remember { mutableStateOf(false) }
-    if (!isTvForm) {
-        val activity = context.findActivity()
-        val isLandscape = LocalConfiguration.current.orientation ==
-            android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        DisposableEffect(activity, isLandscape) {
-            val window = activity?.window
-            val controller = window?.let {
-                androidx.core.view.WindowCompat.getInsetsController(it, it.decorView)
-            }
-            controller?.apply {
-                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat
-                    .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                if (isLandscape) {
-                    hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                } else {
-                    show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                }
-            }
-            onDispose {
-                controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            }
-        }
-        // Orientation restore must NOT live in the isLandscape-keyed effect
-        // above: that effect disposes on every rotation, so the forced
-        // landscape from the fullscreen button was released the moment the
-        // rotation landed and the phone snapped back to portrait.
-        RestoreOrientationOnExit(activity)
-    }
 
     // "Audio keeps playing after leaving the app" on TV (jonzee222): VOD owns
     // its OWN ExoPlayer (not the live holder MainActivity.onUserLeaveHint tears
@@ -578,30 +516,15 @@ fun VODPlayerScreen(
     // the launcher. Pause on ON_STOP when on a TV (also covers screen-off).
     // Phone keeps the existing PiP / continue behavior. The player stays built,
     // so returning resumes from where it paused.
-    if (isTvForm) {
-        val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-        DisposableEffect(lifecycleOwner, exoPlayer) {
-            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-                if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
-                    exoPlayer?.playWhenReady = false
-                }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, exoPlayer) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                exoPlayer?.playWhenReady = false
             }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
-    }
-
-    // Phone (#120): HOME auto-enters PiP and VOD SHOULD keep playing in that
-    // window, but CLOSING the PiP with its X must stop it -- mirroring the live
-    // #106 fix. MainActivity's onPictureInPictureModeChanged X-dismiss branch
-    // fires at the right moment (activity already CREATED) but reaches only the
-    // live holder, so it invokes PipState.onPipDismissed; register this VOD
-    // player's stop here. (onStop can't detect the X-dismiss: it runs BEFORE
-    // onPictureInPictureModeChanged flips inPictureInPicture.) Cleared on
-    // dispose so a backgrounded VOD screen is never stopped by a later live PiP.
-    DisposableEffect(exoPlayer) {
-        PipState.onPipDismissed = { exoPlayer?.playWhenReady = false }
-        onDispose { PipState.onPipDismissed = null }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Step the scrub preview one increment. Mirrors iOS PlayerView.scrubStep
@@ -955,7 +878,7 @@ fun VODPlayerScreen(
             // exoPlayer readiness so the loading screen's Close button
             // still receives OK presses.
             .onPreviewKeyEvent { event ->
-                if (!isTvForm || exoPlayer == null) return@onPreviewKeyEvent false
+                if (exoPlayer == null) return@onPreviewKeyEvent false
                 // The error overlay owns the remote while it is up. The player
                 // object still exists during a playback error, so without this
                 // the handler below keeps eating OK and the arrows for its
@@ -1115,7 +1038,7 @@ fun VODPlayerScreen(
         // data" / "Received X MB") under the spinner text, after 3 s. Kept in
         // LoadingDetailLine.kt and called with ONE line: this composable is at
         // the ART verifier's register limit.
-        VodLoadingDetail(loadingMessage, streamUrl, exoPlayer, tracer, isTvForm)
+        VodLoadingDetail(loadingMessage, streamUrl, exoPlayer, tracer)
         // Don't mount MPV until the proxy redirect has been resolved into a
         // session URL - otherwise libmpv hits the 301 path that strips our
         // auth headers and fails with "Failed to open".
@@ -1130,32 +1053,6 @@ fun VODPlayerScreen(
             // Close affordance during load / error. Phone/tablet only: the X is
             // not D-pad-reachable on TV (GH #32), so TV cancels a stuck load with
             // the remote Back button (pops the nav back stack) instead.
-            if (!isTvForm) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter)
-                        .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
-                        .padding(horizontal = 12.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.55f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        IconButton(onClick = onClose) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "Close",
-                                tint = Color.White,
-                            )
-                        }
-                    }
-                }
-            }
             return
         }
 
@@ -1458,7 +1355,7 @@ fun VODPlayerScreen(
             },
             update = { view ->
                 // Video Scale (Fit / Fill); PiP always stays Fit. See VideoScale.kt.
-                view.resizeMode = videoScaleResizeMode(videoScaleMode, inPip)
+                view.resizeMode = videoScaleResizeMode(videoScaleMode, false)
             },
             onRelease = { view ->
                 // Releases (with the task #149 native catch-up revoke), or keeps
@@ -1470,13 +1367,6 @@ fun VODPlayerScreen(
                 exoPlayer = null
             },
         )
-
-        // Transient "Fit" / "Fill" label for the pinch gesture on the tap layer
-        // below. Non-interactive: the detector itself is a modifier there, since
-        // a sibling overlay Box would swallow every tap. One line: all of the
-        // state lives in VideoScale.kt, since this composable is at the ART
-        // verifier's register limit.
-        VideoScaleLabelOverlay(enabled = !isTvForm && !inPip)
 
         // 1 s heartbeat poll for the tracer (parity with the live holder's
         // watchdog cadence). The tracer itself rate-limits to one [PERF] +
@@ -1842,37 +1732,30 @@ fun VODPlayerScreen(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                ) { chromeVisible = !chromeVisible }
-                // Pinch to switch Fit <-> Fill on touch devices, plus the phone
-                // top-strip swipe-down to the mini (PhoneVodMini.kt). Same
-                // modifier chain as the tap handler: a sibling overlay Box would
-                // win hit testing and swallow every tap.
-                .vodTapLayerGestures(settingsVm, enabled = !isTvForm && !inPip),
+                ) { chromeVisible = !chromeVisible },
         )
 
         // TV: park D-pad focus on the playback surface (mount + every chrome
         // toggle) so key events keep routing through the transport handler.
-        if (isTvForm) {
-            LaunchedEffect(chromeVisible, exoPlayer) {
-                delay(100)
-                runCatching { playbackFocus.requestFocus() }
-            }
-            // Drive the default transport zone off chrome visibility (Archie
-            // spec default focus). When chrome SHOWS (initial 4s auto-reveal or
-            // a tap toggle false->true), land focus on Play/Pause if no zone is
-            // active yet, so the first OK reveals nothing-new and OK lands on a
-            // highlighted Play/Pause instead of blindly toggling play/pause.
-            // When chrome HIDES, clear the zone so the next reveal re-defaults.
-            // An in-flight LEFT/RIGHT/UP transition (already a non-None zone) is
-            // left untouched.
-            LaunchedEffect(chromeVisible) {
-                tvFocusZone = if (!chromeVisible) {
-                    TvVodFocusZone.None
-                } else if (tvFocusZone == TvVodFocusZone.None) {
-                    TvVodFocusZone.PlayPause
-                } else {
-                    tvFocusZone
-                }
+        LaunchedEffect(chromeVisible, exoPlayer) {
+            delay(100)
+            runCatching { playbackFocus.requestFocus() }
+        }
+        // Drive the default transport zone off chrome visibility (Archie
+        // spec default focus). When chrome SHOWS (initial 4s auto-reveal or
+        // a tap toggle false->true), land focus on Play/Pause if no zone is
+        // active yet, so the first OK reveals nothing-new and OK lands on a
+        // highlighted Play/Pause instead of blindly toggling play/pause.
+        // When chrome HIDES, clear the zone so the next reveal re-defaults.
+        // An in-flight LEFT/RIGHT/UP transition (already a non-None zone) is
+        // left untouched.
+        LaunchedEffect(chromeVisible) {
+            tvFocusZone = if (!chromeVisible) {
+                TvVodFocusZone.None
+            } else if (tvFocusZone == TvVodFocusZone.None) {
+                TvVodFocusZone.PlayPause
+            } else {
+                tvFocusZone
             }
         }
 
@@ -1889,7 +1772,7 @@ fun VODPlayerScreen(
         }
 
         AnimatedVisibility(
-            visible = chromeVisible && !inPip,
+            visible = chromeVisible,
             enter = fadeIn(),
             exit = fadeOut(),
         ) {
@@ -1919,24 +1802,6 @@ fun VODPlayerScreen(
                     // Back/Menu button; here VOD Back falls through onPreviewKeyEvent
                     // to pop the nav back stack. TV keeps only the title + the
                     // bottom transport row.
-                    if (!isTvForm) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.55f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            IconButton(onClick = onClose) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = "Close",
-                                    tint = Color.White,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(12.dp))
-                    }
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
@@ -1944,56 +1809,8 @@ fun VODPlayerScreen(
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f),
                     )
-                    if (!isTvForm) {
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.55f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            IconButton(onClick = {
-                                forcedLandscape = !forcedLandscape
-                                context.findActivity()?.requestedOrientation = if (forcedLandscape) {
-                                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-                                } else {
-                                    // Auto-Rotate aware release (App Behaviors).
-                                    com.aeriotv.android.core.preferences.AutoRotateState.restingOrientation
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = if (forcedLandscape) {
-                                        Icons.Filled.FullscreenExit
-                                    } else {
-                                        Icons.Filled.Fullscreen
-                                    },
-                                    contentDescription = if (forcedLandscape) "Exit fullscreen" else "Fullscreen",
-                                    tint = Color.White,
-                                )
-                            }
-                        }
-                    }
                     // PiP is a phone/tablet affordance; the TV player has no PiP
                     // button (tvOS parity), and the top-bar cluster is hidden on TV.
-                    if (!isTvForm && pipAvailable) {
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.55f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            IconButton(onClick = { context.findActivity()?.enterPip16x9() }) {
-                                Icon(
-                                    imageVector = Icons.Filled.PictureInPicture,
-                                    contentDescription = "Picture in picture",
-                                    tint = Color.White,
-                                )
-                            }
-                        }
-                    }
                 }
 
                 // Bottom chrome: scrubber + position/duration + play/pause + skip.
@@ -2003,7 +1820,6 @@ fun VODPlayerScreen(
                 BottomChrome(
                     positionMs = scrubTargetMs ?: positionMs,
                     livePositionMs = positionMs,
-                    isTvForm = isTvForm,
                     tvFocusZone = tvFocusZone,
                     durationMs = durationMs,
                     isPaused = isPaused,
@@ -2047,7 +1863,7 @@ fun VODPlayerScreen(
                     // focus-zone transport and deliberately ignores the remote
                     // map), so the pairs follow the zone the user is in.
                     formatBadge = vodFormatBadge,
-                    hintPairs = if (isTvForm && showRemoteHints) {
+                    hintPairs = if (showRemoteHints) {
                         com.aeriotv.android.core.remote.RemoteControlHints
                             .vodPlayerStripHints(
                                 scrubberZone = tvFocusZone == TvVodFocusZone.Scrubber,
@@ -2076,9 +1892,7 @@ fun VODPlayerScreen(
                     .fillMaxSize()
                     .padding(32.dp)
                     .then(
-                        if (canSwitchVersion && !isTvForm) {
-                            Modifier.clickable { showVersionSheet = true }
-                        } else Modifier
+                        Modifier
                     ),
                 verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -2103,12 +1917,8 @@ fun VODPlayerScreen(
                 )
                 if (canSwitchVersion) {
                     Text(
-                        text = if (isTvForm) {
-                            "Open Options in the player controls, then Switch Version, " +
-                                "to try another copy of this title."
-                        } else {
-                            "Tap here to try another copy of this title."
-                        },
+                        text = "Open Options in the player controls, then Switch Version, " +
+                            "to try another copy of this title.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
@@ -2186,14 +1996,12 @@ fun VODPlayerScreen(
                         Text("Keep Watching")
                     }
                 }
-                if (isTvForm) {
-                    LaunchedEffect(Unit) {
-                        repeat(5) {
-                            if (runCatching { endPromptFocus.requestFocus() }.isSuccess) {
-                                return@LaunchedEffect
-                            }
-                            kotlinx.coroutines.delay(50)
+                LaunchedEffect(Unit) {
+                    repeat(5) {
+                        if (runCatching { endPromptFocus.requestFocus() }.isSuccess) {
+                            return@LaunchedEffect
                         }
+                        kotlinx.coroutines.delay(50)
                     }
                 }
             }
@@ -2280,22 +2088,20 @@ fun VODPlayerScreen(
                 // transport controls. Here there ARE no controls behind the
                 // overlay to point at, so the buttons have to be reachable.
                 val errorRetryFocus = remember { FocusRequester() }
-                if (isTvForm) {
-                    LaunchedEffect(errMsg, errorReconnecting) {
-                        // runCatching: requesting focus on a node that is not
-                        // yet attached throws, and a transient failure here
-                        // must not take down the error overlay itself. Retry
-                        // across a few frames rather than giving up on the
-                        // first throw - a single swallowed attempt left the
-                        // buttons unreachable (the original bug) whenever the
-                        // node attached a frame late, and nothing re-ran until
-                        // errMsg changed.
-                        repeat(5) {
-                            if (runCatching { errorRetryFocus.requestFocus() }.isSuccess) {
-                                return@LaunchedEffect
-                            }
-                            kotlinx.coroutines.delay(50)
+                LaunchedEffect(errMsg, errorReconnecting) {
+                    // runCatching: requesting focus on a node that is not
+                    // yet attached throws, and a transient failure here
+                    // must not take down the error overlay itself. Retry
+                    // across a few frames rather than giving up on the
+                    // first throw - a single swallowed attempt left the
+                    // buttons unreachable (the original bug) whenever the
+                    // node attached a frame late, and nothing re-ran until
+                    // errMsg changed.
+                    repeat(5) {
+                        if (runCatching { errorRetryFocus.requestFocus() }.isSuccess) {
+                            return@LaunchedEffect
                         }
+                        kotlinx.coroutines.delay(50)
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2399,7 +2205,7 @@ fun VODPlayerScreen(
     // is unchanged. On TV: every handled remote press re-arms the timer, a
     // pending scrub pins the chrome, and pause holds the chrome up until
     // resume (iOS scheduleControlsHide fires only while playing).
-    val tvHoldChrome = isTvForm && isPaused
+    val tvHoldChrome = isPaused
     // One hide job at a time: the keys cancel the running countdown and start
     // a fresh AUTO_HIDE_MS one, so a stale job from an earlier reveal can
     // never fire early. It does not start until the chrome is actually
@@ -2433,7 +2239,6 @@ internal val PLAYER_CHROME_BAND = Color.Black.copy(alpha = 0.88f)
 private fun BottomChrome(
     positionMs: Long,
     livePositionMs: Long,   // un-previewed playback position, for the delta
-    isTvForm: Boolean,
     tvFocusZone: TvVodFocusZone = TvVodFocusZone.None,
     durationMs: Long,
     isPaused: Boolean,
@@ -2479,7 +2284,7 @@ private fun BottomChrome(
                 durationMs = durationMs,
                 isDragging = isDragging,
                 dragFraction = dragFraction,
-                tvScrubberFocused = isTvForm && tvFocusZone == TvVodFocusZone.Scrubber,
+                tvScrubberFocused = tvFocusZone == TvVodFocusZone.Scrubber,
                 onDragStart = onDragStart,
                 onDragChanged = onDragChanged,
                 onDragEnd = onDragEnd,
@@ -2516,17 +2321,16 @@ private fun BottomChrome(
                 icon = SkipIntervals.backIcon(backSeconds),
                 contentDescription = SkipIntervals.backLabel(backSeconds),
                 onClick = onSkipBack,
-                focused = isTvForm && tvFocusZone == TvVodFocusZone.Rewind,
-                isTvForm = isTvForm,
+                focused = tvFocusZone == TvVodFocusZone.Rewind,
             )
             Spacer(Modifier.width(8.dp))
-            val ppFocused = isTvForm && tvFocusZone == TvVodFocusZone.PlayPause
+            val ppFocused = tvFocusZone == TvVodFocusZone.PlayPause
             // TV keeps the tvOS 30 dp control size (phone keeps its 52 dp
             // touch target); the glyph scales with it.
             Box(
                 modifier = Modifier
                     .tvFocusScale(ppFocused)
-                    .size(if (isTvForm) 36.dp else 52.dp)
+                    .size(36.dp)
                     .clip(CircleShape)
                     .background(if (ppFocused) Color.White else Color.White.copy(alpha = 0.18f))
                     .pointerInput(Unit) {
@@ -2538,7 +2342,7 @@ private fun BottomChrome(
                     imageVector = if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                     contentDescription = if (isPaused) "Play" else "Pause",
                     tint = if (ppFocused) Color.Black else Color.White,
-                    modifier = Modifier.size(if (isTvForm) 18.dp else 34.dp),
+                    modifier = Modifier.size(18.dp),
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -2546,8 +2350,7 @@ private fun BottomChrome(
                 icon = SkipIntervals.forwardIcon(forwardSeconds),
                 contentDescription = SkipIntervals.forwardLabel(forwardSeconds),
                 onClick = onSkipForward,
-                focused = isTvForm && tvFocusZone == TvVodFocusZone.Forward,
-                isTvForm = isTvForm,
+                focused = tvFocusZone == TvVodFocusZone.Forward,
             )
             }
             Row(
@@ -2603,13 +2406,12 @@ private fun BottomChrome(
                 icon = Icons.Outlined.Tune,
                 contentDescription = "Player options",
                 onClick = onOptions,
-                focused = isTvForm && tvFocusZone == TvVodFocusZone.Options,
-                isTvForm = isTvForm,
+                focused = tvFocusZone == TvVodFocusZone.Options,
             )
             // Resolution / frame rate readout, LAST in this right-hand group so
             // its right edge lines up with the scrubber track's (both end at
             // this block's own 16 dp inset). Plain Text: never focusable.
-            if (formatBadge != null && isTvForm) {
+            if (formatBadge != null) {
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = formatBadge,
@@ -2647,7 +2449,6 @@ private fun BottomChrome(
             deltaMs = delta,
             thumbCenterPx = thumbCenterPx,
             trackWidthPx = trackWidthPx,
-            isTvForm = isTvForm,
         )
     }
 }
@@ -2658,22 +2459,10 @@ private fun TransportIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     focused: Boolean,
-    isTvForm: Boolean,
 ) {
     // Touch (phone): a Material IconButton so the skip controls keep the 48dp
     // minimum touch target, the Material ripple, and the Role.Button semantics
     // they had before the IconButton -> TransportIconButton swap.
-    if (!isTvForm) {
-        IconButton(onClick = onClick) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = Color.White,
-                modifier = Modifier.size(28.dp),
-            )
-        }
-        return
-    }
     // TV: white-fill + grow focus visual matching PlayerPill so the targeted
     // skip button reads as selected under the app-owned D-pad zone model (focus
     // is driven by the root key handler, not Compose traversal, so this is
@@ -2728,7 +2517,6 @@ private fun ScrubReadoutBubble(
     deltaMs: Long,
     thumbCenterPx: Float,
     trackWidthPx: Float,
-    isTvForm: Boolean,
 ) {
     val density = LocalDensity.current
     // Approx bubble half-width so it clamps inside the track instead of
@@ -2740,7 +2528,7 @@ private fun ScrubReadoutBubble(
     )
     val bubbleXDp = with(density) { (clampedCenter - halfWidthPx).toDp() }
     // Sits above the track. TV chrome is larger so it lifts higher.
-    val liftDp = if (isTvForm) (-78).dp else (-52).dp
+    val liftDp = (-78).dp
 
     Box(
         modifier = Modifier
@@ -2762,8 +2550,8 @@ private fun ScrubReadoutBubble(
                         shape = RoundedCornerShape(12.dp),
                     )
                     .padding(
-                        horizontal = if (isTvForm) 22.dp else 14.dp,
-                        vertical = if (isTvForm) 12.dp else 8.dp,
+                        horizontal = 22.dp,
+                        vertical = 12.dp,
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -2772,8 +2560,7 @@ private fun ScrubReadoutBubble(
                     color = Color.White,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    style = if (isTvForm) MaterialTheme.typography.headlineSmall
-                            else MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.headlineSmall,
                 )
                 if (deltaMs != 0L) {
                     Spacer(Modifier.height(2.dp))
@@ -2782,8 +2569,7 @@ private fun ScrubReadoutBubble(
                         color = if (deltaMs < 0L) Color(0xFFFF9800) else Color(0xFF4CAF50),
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.SemiBold,
-                        style = if (isTvForm) MaterialTheme.typography.labelLarge
-                                else MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelLarge,
                     )
                 }
             }

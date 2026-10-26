@@ -143,8 +143,8 @@ object RoleRules {
      * toggle is on, 2+ profiles are visible, and the last active profile is
      * not a Child (a Child goes straight in).
      */
-    fun showLaunchPicker(isTv: Boolean, isDispatcharr: Boolean, toggleOn: Boolean, profileCount: Int, lastRole: ProfileRole?): Boolean =
-        isTv && isDispatcharr && toggleOn && profileCount >= 2 && lastRole != ProfileRole.Child
+    fun showLaunchPicker(isDispatcharr: Boolean, toggleOn: Boolean, profileCount: Int, lastRole: ProfileRole?): Boolean =
+        isDispatcharr && toggleOn && profileCount >= 2 && lastRole != ProfileRole.Child
 }
 
 /**

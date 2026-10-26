@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import com.aeriotv.android.ui.scale.AlertDialog
-import com.aeriotv.android.ui.scale.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,7 +32,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -46,7 +43,6 @@ import com.aeriotv.android.core.tv.rememberTvMenuGuard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -182,7 +178,6 @@ data class CollectionsMenuContext(
 fun CollectionPill(
     collection: ChannelCollection,
     selected: Boolean,
-    isTv: Boolean,
     onSelect: () -> Unit,
     onSetPlacement: (String) -> Unit,
     onDelete: () -> Unit,
@@ -196,7 +191,7 @@ fun CollectionPill(
     Box {
         Box(
             modifier = Modifier
-                .height(if (isTv) 30.dp else 32.dp)
+                .height(30.dp)
                 .clip(CircleShape)
                 .background(
                     when {
@@ -204,64 +199,52 @@ fun CollectionPill(
                         // TV group pills are soft filled capsules; phone group
                         // pills are outlined FilterChips. Match each so a
                         // collection pill is indistinguishable from a group pill.
-                        isTv -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        true -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
                         else -> Color.Transparent
                     },
                 )
                 .then(
                     when {
-                        isTv && focused -> Modifier.border(2.dp, Color.White, CircleShape)
-                        !isTv && !selected ->
-                            Modifier.border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        focused -> Modifier.border(2.dp, Color.White, CircleShape)
                         else -> Modifier
                     },
                 )
                 .then(
-                    if (isTv) {
-                        Modifier
-                            .onKeyEvent { ev ->
-                                if (ev.key != Key.DirectionCenter &&
-                                    ev.key != Key.Enter &&
-                                    ev.key != Key.NumPadEnter
-                                ) {
-                                    return@onKeyEvent false
+                    Modifier
+                        .onKeyEvent { ev ->
+                        if (ev.key != Key.DirectionCenter &&
+                            ev.key != Key.Enter &&
+                            ev.key != Key.NumPadEnter
+                        ) {
+                            return@onKeyEvent false
+                        }
+                        when (ev.type) {
+                            KeyEventType.KeyDown -> {
+                                if (ev.nativeKeyEvent.repeatCount == 0) {
+                                    centerLatched = false
+                                } else if (!centerLatched) {
+                                    centerLatched = true
+                                    manageOpen = true
+                                    manageGuard.arm()
                                 }
-                                when (ev.type) {
-                                    KeyEventType.KeyDown -> {
-                                        if (ev.nativeKeyEvent.repeatCount == 0) {
-                                            centerLatched = false
-                                        } else if (!centerLatched) {
-                                            centerLatched = true
-                                            manageOpen = true
-                                            manageGuard.arm()
-                                        }
-                                        true
-                                    }
-                                    KeyEventType.KeyUp -> {
-                                        if (!centerLatched) onSelect()
-                                        centerLatched = false
-                                        true
-                                    }
-                                    else -> false
-                                }
+                                true
                             }
-                            .focusable(interactionSource = interaction)
-                    } else {
-                        Modifier.combinedClickable(
-                            interactionSource = interaction,
-                            indication = null,
-                            onClick = onSelect,
-                            onLongClick = { manageOpen = true },
-                        )
-                    },
+                            KeyEventType.KeyUp -> {
+                                if (!centerLatched) onSelect()
+                                centerLatched = false
+                                true
+                            }
+                            else -> false
+                        }
+                        }
+                        .focusable(interactionSource = interaction),
                 )
-                .padding(horizontal = if (isTv) 12.dp else 14.dp),
+                .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = collection.name,
-                style = if (isTv) MaterialTheme.typography.labelMedium
-                else MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
                 color = if (selected) MaterialTheme.colorScheme.onPrimary
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -271,49 +254,23 @@ fun CollectionPill(
         // Manage menu (iOS collectionManageActions): whichever move applies
         // for the current placement, then the destructive delete.
         val atEnd = collection.placement != ChannelCollection.PLACEMENT_BEGINNING
-        if (isTv) {
-            if (manageOpen) {
-                TvActionMenuDialog(
-                    title = collection.name,
-                    actions = listOf(
-                        TvMenuAction(
-                            if (atEnd) "Move to Front" else "Move to Back",
-                        ) {
-                            onSetPlacement(
-                                if (atEnd) ChannelCollection.PLACEMENT_BEGINNING
-                                else ChannelCollection.PLACEMENT_END,
-                            )
-                        },
-                        TvMenuAction("Delete Collection", destructive = true) { onDelete() },
-                    ),
-                    guard = manageGuard,
-                    onDismiss = { manageOpen = false },
-                )
-            }
-        } else {
-            DropdownMenu(
-                expanded = manageOpen,
-                onDismissRequest = { manageOpen = false },
-                containerColor = MaterialTheme.colorScheme.surface,
-            ) {
-                DropdownMenuItem(
-                    text = { Text(if (atEnd) "Move to Front" else "Move to Back") },
-                    onClick = {
-                        manageOpen = false
+        if (manageOpen) {
+            TvActionMenuDialog(
+                title = collection.name,
+                actions = listOf(
+                    TvMenuAction(
+                        if (atEnd) "Move to Front" else "Move to Back",
+                    ) {
                         onSetPlacement(
                             if (atEnd) ChannelCollection.PLACEMENT_BEGINNING
                             else ChannelCollection.PLACEMENT_END,
                         )
                     },
-                )
-                DropdownMenuItem(
-                    text = { Text("Delete Collection", color = MaterialTheme.colorScheme.error) },
-                    onClick = {
-                        manageOpen = false
-                        onDelete()
-                    },
-                )
-            }
+                    TvMenuAction("Delete Collection", destructive = true) { onDelete() },
+                ),
+                guard = manageGuard,
+                onDismiss = { manageOpen = false },
+            )
         }
     }
 }
@@ -331,7 +288,6 @@ fun CollectionPill(
 fun AddToCollectionFlow(
     channelId: String,
     channelName: String,
-    isTv: Boolean,
     collections: List<ChannelCollection>,
     onToggleMember: (collectionId: String, channelId: String) -> Unit,
     onCreate: (name: String, firstMemberId: String, placement: String) -> Unit,
@@ -354,64 +310,23 @@ fun AddToCollectionFlow(
     }
 
     if (!naming) {
-        if (isTv) {
-            TvActionMenuDialog(
-                title = "Add to Collection",
-                actions = buildList {
-                    collections.forEach { c ->
-                        val member = channelId in c.memberIds
-                        add(
-                            // iOS marks membership with a literal check prefix.
-                            TvMenuAction(if (member) "✓ ${c.name}" else c.name) {
-                                onToggleMember(c.id, channelId)
-                            },
-                        )
-                    }
-                    add(TvMenuAction("New Collection…") { naming = true })
-                },
-                guard = pickerGuard,
-                onDismiss = { pendingClose = true },
-            )
-        } else {
-            AlertDialog(
-                onDismissRequest = onClose,
-                title = { Text("Add to Collection") },
-                text = {
-                    Column {
-                        collections.forEach { c ->
-                            val member = channelId in c.memberIds
-                            TextButton(
-                                onClick = {
-                                    onToggleMember(c.id, channelId)
-                                    onClose()
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    text = if (member) "✓ ${c.name}" else c.name,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Start,
-                                )
-                            }
-                        }
-                        TextButton(
-                            onClick = { naming = true },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                text = "New Collection…",
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Start,
-                            )
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = onClose) { Text("Cancel") }
-                },
-            )
-        }
+        TvActionMenuDialog(
+            title = "Add to Collection",
+            actions = buildList {
+                collections.forEach { c ->
+                    val member = channelId in c.memberIds
+                    add(
+                        // iOS marks membership with a literal check prefix.
+                        TvMenuAction(if (member) "✓ ${c.name}" else c.name) {
+                            onToggleMember(c.id, channelId)
+                        },
+                    )
+                }
+                add(TvMenuAction("New Collection…") { naming = true })
+            },
+            guard = pickerGuard,
+            onDismiss = { pendingClose = true },
+        )
     } else {
         AlertDialog(
             onDismissRequest = onClose,

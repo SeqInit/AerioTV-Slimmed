@@ -4,26 +4,21 @@ import com.aeriotv.android.ui.scale.subtext
 import com.aeriotv.android.core.ui.subtitleIsRedundant
 import com.aeriotv.android.core.ui.rememberClockMode
 import com.aeriotv.android.core.ui.ClockFormat
-import android.content.res.Configuration
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.offset
@@ -43,8 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -55,8 +48,6 @@ import com.aeriotv.android.ui.scale.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import coil3.compose.AsyncImage
-import com.aeriotv.android.core.category.CategoryPillsFlow
 import com.aeriotv.android.core.category.METADATA_TOKENS
 import com.aeriotv.android.core.category.categoryTokens
 import com.aeriotv.android.core.data.ProgramInfoTarget
@@ -66,11 +57,9 @@ import com.aeriotv.android.core.network.DispatcharrClient
 import com.aeriotv.android.core.network.TMDBService
 import com.aeriotv.android.core.preferences.AppPreferences
 import com.aeriotv.android.core.ui.EpgFlag
-import com.aeriotv.android.core.ui.EpgFlagsRow
 import com.aeriotv.android.core.ui.EpgLiveRed
 import com.aeriotv.android.core.ui.LocalShowEpgBadges
 import com.aeriotv.android.core.ui.ProgramArtSlot
-import com.aeriotv.android.core.ui.epgFlags
 import com.aeriotv.android.core.ui.seasonEpisodeLabel
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import dagger.hilt.android.EntryPointAccessors
@@ -193,68 +182,40 @@ fun ProgramInfoSheet(
         }
     }
 
-    val isTv = (
-        LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK
-        ) == Configuration.UI_MODE_TYPE_TELEVISION
-
-    if (isTv) {
-        // TV: a centered modal card, not a bottom-edge sheet. tvOS shows
-        // program detail as a focused panel in the middle of the screen;
-        // a ModalBottomSheet's drag handle + swipe-to-dismiss + edge
-        // anchoring are all touch idioms that read as "phone UI" on a
-        // 10-foot display and aren't reachable with a remote. Dialog +
-        // Back-to-dismiss is the correct TV affordance.
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            // tvOS ProgramInfoView.tvCard (Logan 2026-09-05), halved from the
-            // 1400x780 pt sheet: art beside the copy, the facts as a row of
-            // labelled columns, the description as the card's one focus
-            // target, then the metadata and category pills.
-            Surface(
-                shape = RoundedCornerShape(INFO_CARD_CORNER),
-                color = com.aeriotv.android.ui.tv.TvChrome.dialogSurface(),
-                tonalElevation = 6.dp,
-                modifier = Modifier
-                    .width(700.dp)
-                    .heightIn(max = 420.dp),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(rememberScrollState())
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    TvProgramInfoCard(
-                        target = target,
-                        effectiveCategory = effectiveCategory,
-                        posterUrl = posterUrl,
-                        enrichedRepeat = enrichedRepeat,
-                    )
-                }
-            }
-        }
-    } else {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.background,
+    // TV: a centered modal card, not a bottom-edge sheet. tvOS shows
+    // program detail as a focused panel in the middle of the screen;
+    // a ModalBottomSheet's drag handle + swipe-to-dismiss + edge
+    // anchoring are all touch idioms that read as "phone UI" on a
+    // 10-foot display and aren't reachable with a remote. Dialog +
+    // Back-to-dismiss is the correct TV affordance.
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        // tvOS ProgramInfoView.tvCard (Logan 2026-09-05), halved from the
+        // 1400x780 pt sheet: art beside the copy, the facts as a row of
+        // labelled columns, the description as the card's one focus
+        // target, then the metadata and category pills.
+        Surface(
+            shape = RoundedCornerShape(INFO_CARD_CORNER),
+            color = com.aeriotv.android.ui.tv.TvChrome.dialogSurface(),
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .width(700.dp)
+                .heightIn(max = 420.dp),
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                ProgramInfoBody(
+                TvProgramInfoCard(
                     target = target,
                     effectiveCategory = effectiveCategory,
                     posterUrl = posterUrl,
-                    posterWidth = 100.dp,
                     enrichedRepeat = enrichedRepeat,
                 )
-                Spacer(Modifier.height(24.dp))
             }
         }
     }
@@ -382,193 +343,6 @@ private fun TvInfoColumn(title: String, value: String) {
             letterSpacing = 1.2.sp, color = MaterialTheme.colorScheme.tertiary,
         )
         Text(value, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground)
-    }
-}
-
-/**
- * Shared program-detail body used by both the phone bottom-sheet and the
- * TV centered-dialog presentations. Program poster (when resolved) beside
- * the channel eyebrow + title + LIVE badge block, then the info-columns
- * block, description, and the metadata / category pills.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ProgramInfoBody(
-    target: ProgramInfoTarget,
-    effectiveCategory: String,
-    posterUrl: String?,
-    posterWidth: Dp,
-    /** Rerun flag lazily enriched from the program-detail endpoint; the bulk
-     *  grid Direct Connect guides ride carries no repeat field (mikec79). */
-    enrichedRepeat: Boolean = false,
-    // Defaults match the phone sheet; the TV dialog passes tighter values so
-    // the whole body fits inside its 500dp height cap.
-    sectionGap: Dp = 20.dp,
-    metaRowPadding: Dp = 4.dp,
-) {
-    Row(verticalAlignment = Alignment.Top) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = target.channelName.uppercase(Locale.getDefault()),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                letterSpacing = 1.5.sp,
-            )
-            Spacer(Modifier.height(6.dp))
-            // Title spans the FULL text column and wraps on word boundaries
-            // (badges no longer share its row, which had squeezed a long
-            // single-word title into ugly mid-word breaks like "Somethi/ng").
-            Text(
-                text = target.title.ifBlank { "Untitled" },
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold,
-                softWrap = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            // Feed-driven badges (LIVE / NEW / PREMIERE / FINALE / REPEAT),
-            // plus an "ON NOW" pill for a program airing right now that is
-            // not itself flagged a live broadcast (avoids a double LIVE).
-            // "ON NOW" is a live-airing status, not one of the toggleable feed
-            // pills, so it stays; the LIVE/NEW/etc feed flags follow the user's
-            // "Show program badges" preference. Rendered UNDER the title in a
-            // wrapping row so several badges flow onto extra lines instead of
-            // stealing width from the title.
-            val showEpgBadges = LocalShowEpgBadges.current
-            val badges = buildList {
-                if (target.isLiveNow() && !target.isLiveBroadcast) {
-                    add(EpgFlag("ON NOW", EpgLiveRed))
-                }
-                if (showEpgBadges) {
-                    val hidden = com.aeriotv.android.core.ui.LocalHiddenEpgBadges.current
-                    addAll(
-                        com.aeriotv.android.core.ui.epgFlagsOf(
-                            isNew = target.isNew,
-                            isLiveBroadcast = target.isLiveBroadcast,
-                            isPremiere = target.isPremiere,
-                            isFinale = target.isFinale,
-                            isRepeat = target.isRepeat || enrichedRepeat,
-                        ).filter { it.label !in hidden },
-                    )
-                }
-            }
-            if (badges.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                androidx.compose.foundation.layout.FlowRow(
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
-                ) {
-                    badges.forEach { flag ->
-                        com.aeriotv.android.core.ui.EpgFlagBadge(flag)
-                    }
-                }
-            }
-            target.subTitle?.takeIf { !subtitleIsRedundant(it, target.title, target.description) }?.let { sub ->
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = sub,
-                    style = MaterialTheme.typography.bodyMedium.subtext(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontStyle = FontStyle.Italic,
-                )
-            }
-        }
-        if (posterUrl != null) {
-            Spacer(Modifier.width(16.dp))
-            // GH #53: frame follows the REAL image ratio (width fixed,
-            // height derived). XMLTV `<icon>` art is usually landscape
-            // (EPG Guru sends 16:9); the old hard 2:3 portrait frame
-            // cropped the sides off. TMDB fallback posters (genuinely
-            // 2:3) render exactly as before. Clamped so a pathological
-            // banner can't stretch the sheet.
-            var posterRatio by remember(posterUrl) { mutableStateOf(2f / 3f) }
-            // Decoration only: deliberately NOT focusable, or it would insert
-            // itself into the TV dialog's D-pad scroll order.
-            AsyncImage(
-                model = posterUrl,
-                contentDescription = null,
-                // Fit, not Crop: the frame already follows the real ratio, and
-                // the clamp above can leave a sliver that Crop would shave off.
-                contentScale = ContentScale.Fit,
-                onSuccess = { state ->
-                    val s = state.painter.intrinsicSize
-                    if (s.width > 0f && s.height > 0f) {
-                        posterRatio = (s.width / s.height).coerceIn(0.55f, 1.9f)
-                    }
-                },
-                modifier = Modifier
-                    .width(posterWidth)
-                    .aspectRatio(posterRatio)
-                    .clip(com.aeriotv.android.core.ui.artworkTileShape(INFO_CARD_CORNER)),
-            )
-        }
-    }
-
-    Spacer(Modifier.height(sectionGap))
-    InfoColumnsRow(target, rowPadding = metaRowPadding)
-    target.recording?.let { facts ->
-        Spacer(Modifier.height(sectionGap))
-        Column {
-            facts.rows().forEach { (label, value) -> InfoRow(label = label, value = value, verticalPadding = metaRowPadding) }
-        }
-    }
-
-    Spacer(Modifier.height(sectionGap))
-    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-    Spacer(Modifier.height(sectionGap))
-
-    SectionLabel("Description")
-    Spacer(Modifier.height(8.dp))
-    if (target.description.isBlank()) {
-        Text(
-            text = "No program description provided in XMLTV.",
-            style = MaterialTheme.typography.bodyMedium.subtext(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontStyle = FontStyle.Italic,
-        )
-    } else {
-        Text(
-            text = target.description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-    }
-
-    val tokens = effectiveCategory.categoryTokens()
-    if (tokens.isNotEmpty()) {
-        val (metadata, genres) = tokens.partition { it.lowercase(Locale.getDefault()) in METADATA_TOKENS }
-        if (metadata.isNotEmpty()) {
-            Spacer(Modifier.height(sectionGap))
-            SectionLabel("Metadata")
-            Spacer(Modifier.height(8.dp))
-            CategoryPillsFlow(tokens = metadata)
-        }
-        if (genres.isNotEmpty()) {
-            Spacer(Modifier.height(sectionGap))
-            SectionLabel("Categories")
-            Spacer(Modifier.height(8.dp))
-            CategoryPillsFlow(tokens = genres)
-        }
-    }
-}
-
-@Composable
-private fun InfoColumnsRow(target: ProgramInfoTarget, rowPadding: Dp) {
-    val clockMode = rememberClockMode()
-    val timeFormat = remember(clockMode) { ClockFormat.short(clockMode) }
-    val dateFormat = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
-    val airs = "${timeFormat.format(Date(target.startMillis))} – ${timeFormat.format(Date(target.endMillis))}"
-    val date = dateFormat.format(Date(target.startMillis))
-    val duration = formatDuration(target.endMillis - target.startMillis)
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        InfoRow(label = "Channel", value = target.channelName, verticalPadding = rowPadding)
-        InfoRow(label = "Airs", value = airs, verticalPadding = rowPadding)
-        InfoRow(label = "Date", value = date, verticalPadding = rowPadding)
-        InfoRow(label = "Duration", value = duration, verticalPadding = rowPadding)
-        target.seasonEpisodeLabel()?.let {
-            InfoRow(label = "Episode", value = it, verticalPadding = rowPadding)
-        }
     }
 }
 

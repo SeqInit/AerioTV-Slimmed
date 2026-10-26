@@ -2,7 +2,6 @@ package com.aeriotv.android.feature.ondemand
 
 import com.aeriotv.android.ui.scale.subtext
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.foundation.focusGroup
 import com.aeriotv.android.ui.tv.tvFormFieldInput
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -10,8 +9,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -37,7 +34,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -60,19 +56,16 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,7 +95,6 @@ import com.aeriotv.android.core.tv.TvMenuGuard
 import com.aeriotv.android.core.tv.rememberTvMenuGuard
 import com.aeriotv.android.core.network.DispatcharrVODMovie
 import com.aeriotv.android.core.network.DispatcharrVODSeries
-import com.aeriotv.android.feature.livetv.rememberLiveTvFormFactor
 import com.aeriotv.android.ui.tv.rememberVodReturnFocus
 import com.aeriotv.android.ui.tv.vodGridDpadFallback
 import com.aeriotv.android.feature.main.collapsibleChrome
@@ -113,7 +105,6 @@ import com.aeriotv.android.feature.watchprogress.WatchProgressViewModel
 import com.aeriotv.android.ui.scale.WithDisplayScale
 import com.aeriotv.android.ui.tv.tvFocusScale
 import kotlinx.coroutines.launch
-import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 
 /**
  * On Demand tab shell. Mirrors iOS OnDemandView (Aerio/Features/VOD/OnDemandView.swift):
@@ -184,7 +175,6 @@ fun OnDemandTabContent(
     val settingsVm: SettingsViewModel = hiltViewModel()
     val scale by settingsVm.displayScaleMovies.collectAsStateWithLifecycle(initialValue = 1.0f)
 
-    val tabIsTv = rememberLiveTvFormFactor().isTv
     // Grid scroll state is hoisted out of the sub-screens so (a) BOTH the
     // chrome-collapse logic here and the per-grid BringIntoViewSpec / BACK
     // handling can observe it, and (b) the Movies scroll position survives a
@@ -210,8 +200,8 @@ fun OnDemandTabContent(
     // Up from the search / filter header returns to that pill.
     val sectionPillsFocus = remember { FocusRequester() }
     val tabEntry = com.aeriotv.android.feature.main.LocalTvTabEntryFocus.current
-    DisposableEffect(tabIsTv) {
-        if (tabIsTv) tabEntry.value = sectionPillsFocus
+    DisposableEffect(Unit) {
+        tabEntry.value = sectionPillsFocus
         onDispose { if (tabEntry.value === sectionPillsFocus) tabEntry.value = null }
     }
     WithDisplayScale(scale = scale) {
@@ -220,39 +210,20 @@ fun OnDemandTabContent(
         // the selected nav pill already says where you are, the Live TV tab
         // has no title either, and at 10 feet the 64dp bar was the top slice
         // of a chrome stack that consumed half the screen before any poster.
-        if (!tabIsTv) {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = "On Demand",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                ),
-            )
-        }
 
         // Same collapse treatment as the shell's top tab bar: shrink, never
         // unmount (the pills hold D-pad focus targets), and focus arriving on
         // a pill expands the row back even while scrolled.
         var pillsHaveFocus by remember { mutableStateOf(false) }
         val pillsFraction by animateFloatAsState(
-            targetValue = if (tabIsTv && scrolled && !pillsHaveFocus) 0f else 1f,
+            targetValue = if (scrolled && !pillsHaveFocus) 0f else 1f,
             animationSpec = tween(durationMillis = 250),
             label = "vodPillsCollapse",
         )
         Box(
-            modifier = if (tabIsTv) {
-                Modifier
-                    .onFocusChanged { pillsHaveFocus = it.hasFocus }
-                    .collapsibleChrome(pillsFraction)
-            } else {
-                Modifier
-            },
+            modifier = Modifier
+                .onFocusChanged { pillsHaveFocus = it.hasFocus }
+                .collapsibleChrome(pillsFraction),
         ) {
             SegmentPills(
                 sections = availableSections,
@@ -309,28 +280,23 @@ private fun SegmentPills(
     // into a small centered island would waste vertical layout. iOS
     // MoviesView / TVShowsView shows the same instinct: tvOS uses a
     // compact, centered Segmented Picker; iOS uses a full-width one.
-    val isTv = rememberLiveTvFormFactor().isTv
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = if (isTv) 4.dp else 8.dp),
-        horizontalArrangement = if (isTv) Arrangement.Center else Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         sections.forEachIndexed { index, entry ->
-            if (isTv && index > 0) Spacer(Modifier.width(12.dp))
+            if (index > 0) Spacer(Modifier.width(12.dp))
             SegmentPill(
                 label = entry.label,
                 icon = entry.icon,
                 selected = entry == current,
                 onClick = { onSelect(entry) },
-                modifier = (if (isTv) {
-                    // Just enough room for the longest label + icon + a bit
-                    // of breathing room for the focus border.
-                    Modifier.widthIn(min = 160.dp)
-                } else {
-                    Modifier.weight(1f)
-                }).then(
+                // Just enough room for the longest label + icon + a bit of
+                // breathing room for the focus border.
+                modifier = Modifier.widthIn(min = 160.dp).then(
                     if (entry == current && currentFocus != null) Modifier.focusRequester(currentFocus)
                     else Modifier,
                 ),
@@ -456,7 +422,6 @@ private fun MoviesSubScreen(
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val isTv = rememberLiveTvFormFactor().isTv
     // VOD group hide filter (iOS MoviesView hiddenMovieGroups, MoviesView.swift:74).
     // Categories are tagged on each movie row by OnDemandViewModel (from the XC
     // get_vod_categories lookup); items with no categoryName fall under the
@@ -483,7 +448,7 @@ private fun MoviesSubScreen(
     var showManageGroups by rememberSaveable { mutableStateOf(false) }
     // BACK from MovieDetail must land D-pad focus back on the poster / rail
     // card that opened it, not the top nav pills. See VodReturnFocusState.
-    val returnFocus = rememberVodReturnFocus(isTv)
+    val returnFocus = rememberVodReturnFocus(true)
     // TV BACK ladder, copied from GuideScreen: scrolled into the grid -> one
     // BACK returns to the top-left poster; already at the top -> this handler
     // is DISABLED so BACK falls through to MainScaffold's tab -> Live TV
@@ -500,7 +465,7 @@ private fun MoviesSubScreen(
     }
     val backScope = rememberCoroutineScope()
     val firstPosterFocus = remember { FocusRequester() }
-    androidx.activity.compose.BackHandler(enabled = com.aeriotv.android.feature.main.LocalTabIsActive.current && isTv && !miniActive && !atTop) {
+    androidx.activity.compose.BackHandler(enabled = com.aeriotv.android.feature.main.LocalTabIsActive.current && !miniActive && !atTop) {
         backScope.launch {
             gridState.animateScrollToItem(0)
             // The index-0 poster can compose a frame or two after the scroll
@@ -552,13 +517,11 @@ private fun MoviesSubScreen(
                     query = state.searchQuery,
                     onQueryChange = viewModel::setSearchQuery,
                     placeholder = "Search movies",
-                    isTv = isTv,
                 )
             },
             hiddenCount = hiddenMovieGroups.size,
             onManageGroups = { showManageGroups = true },
             onOpenSearch = onOpenSearch,
-            isTv = isTv,
             countLabel = state.totalCount.takeIf { it > 0 }?.let { total ->
                 "${visibleFiltered.size} / $total"
             },
@@ -566,14 +529,6 @@ private fun MoviesSubScreen(
 
         val countLabel = state.totalCount.takeIf { it > 0 }?.let { total ->
             "${visibleFiltered.size} / $total"
-        }
-        if (countLabel != null && !isTv) {
-            Text(
-                text = countLabel,
-                style = MaterialTheme.typography.labelSmall.subtext(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-            )
         }
 
         if (state.isLoading && state.movies.isEmpty()) {
@@ -612,8 +567,7 @@ private fun MoviesSubScreen(
         // TV: deadband spec kills the horizontal-move vertical jump (see
         // com.aeriotv.android.ui.tv.TvLargeCardBringIntoViewSpec). Phone keeps the inherited default.
         val bringIntoViewSpec =
-            if (isTv) com.aeriotv.android.ui.tv.TvLargeCardBringIntoViewSpec
-            else androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+            com.aeriotv.android.ui.tv.TvLargeCardBringIntoViewSpec
         // Grid D-pad fallback plumbing (see vodGridDpadFallback) and the
         // scroll-to-top on a NEW query: results replace the list under the
         // old scroll offset, which left the first row hidden under the
@@ -645,17 +599,17 @@ private fun MoviesSubScreen(
             // Larger posters + overscan-safe padding on the 10-foot TV; phone
             // keeps the compact grid whose 104dp bottom clears the bottom
             // NavigationBar (TV has top tabs, so it needs far less bottom inset).
-            columns = GridCells.Adaptive(minSize = if (isTv) 108.dp else 120.dp),
+            columns = GridCells.Adaptive(minSize = 108.dp),
             modifier = Modifier.fillMaxSize(),
             state = gridState,
             contentPadding = PaddingValues(
-                start = if (isTv) 48.dp else 12.dp,
-                end = if (isTv) 48.dp else 12.dp,
-                top = if (isTv) 16.dp else 8.dp,
-                bottom = if (isTv) 32.dp else LocalTabBarBottomInset.current,
+                start = 48.dp,
+                end = 48.dp,
+                top = 16.dp,
+                bottom = 32.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(if (isTv) 16.dp else 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (isTv) 16.dp else 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // (Continue Watching is its own On Demand sub-tab now, issue #9.)
             itemsIndexed(items = visibleFiltered, key = { _, it -> it.id }) { index, movie ->
@@ -671,16 +625,15 @@ private fun MoviesSubScreen(
                 }
                 MoviePoster(
                     movie = movie,
-                    isTv = isTv,
                     focusRequester = returnFocus.requesterFor("movie:${movie.uuid}"),
                     // Index 0 additionally carries the BACK-to-top requester;
                     // a separate hook so it never disturbs VodReturnFocusState.
-                    modifier = (if (isTv && index == 0) Modifier.focusRequester(firstPosterFocus) else Modifier)
-                        .then(if (isTv) Modifier.focusRequester(itemRequester).onPreviewKeyEvent { ev ->
+                    modifier = (if (index == 0) Modifier.focusRequester(firstPosterFocus) else Modifier)
+                        .then(Modifier.focusRequester(itemRequester).onPreviewKeyEvent { ev ->
                             vodGridDpadFallback(ev, index, visibleFiltered.size, gridState, gridFocusManager, gridScope) { i ->
                                 movieRequesters.getOrPut(visibleFiltered[i].id) { FocusRequester() }
                             }
-                        } else Modifier),
+                        }),
                     onClick = {
                         returnFocus.arm("movie:${movie.uuid}")
                         onMovieClick(movie)
@@ -716,7 +669,6 @@ private fun SeriesSubScreen(
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val isTv = rememberLiveTvFormFactor().isTv
     // Series-side group hide filter, mirrors MoviesSubScreen above.
     val hiddenSeriesGroups by settingsVm.hiddenSeriesGroups
         .collectAsStateWithLifecycle(initialValue = emptySet())
@@ -737,7 +689,7 @@ private fun SeriesSubScreen(
     var showManageGroups by rememberSaveable { mutableStateOf(false) }
     // BACK from SeriesDetail / the episode player must land D-pad focus back
     // on the poster / rail card that opened it. See VodReturnFocusState.
-    val returnFocus = rememberVodReturnFocus(isTv)
+    val returnFocus = rememberVodReturnFocus(true)
     // TV BACK ladder, same wiring as MoviesSubScreen above.
     val miniPlayerVm: MiniPlayerViewModel = hiltViewModel()
     val miniState by miniPlayerVm.state.collectAsStateWithLifecycle()
@@ -749,7 +701,7 @@ private fun SeriesSubScreen(
     }
     val backScope = rememberCoroutineScope()
     val firstPosterFocus = remember { FocusRequester() }
-    androidx.activity.compose.BackHandler(enabled = com.aeriotv.android.feature.main.LocalTabIsActive.current && isTv && !miniActive && !atTop) {
+    androidx.activity.compose.BackHandler(enabled = com.aeriotv.android.feature.main.LocalTabIsActive.current && !miniActive && !atTop) {
         backScope.launch {
             gridState.animateScrollToItem(0)
             repeat(10) {
@@ -785,13 +737,11 @@ private fun SeriesSubScreen(
                     query = state.seriesSearchQuery,
                     onQueryChange = viewModel::setSeriesSearchQuery,
                     placeholder = "Search series",
-                    isTv = isTv,
                 )
             },
             hiddenCount = hiddenSeriesGroups.size,
             onManageGroups = { showManageGroups = true },
             onOpenSearch = onOpenSearch,
-            isTv = isTv,
             countLabel = state.seriesTotalCount.takeIf { it > 0 }?.let { total ->
                 "${visibleSeriesFiltered.size} / $total"
             },
@@ -799,14 +749,6 @@ private fun SeriesSubScreen(
 
         val countLabel = state.seriesTotalCount.takeIf { it > 0 }?.let { total ->
             "${visibleSeriesFiltered.size} / $total"
-        }
-        if (countLabel != null && !isTv) {
-            Text(
-                text = countLabel,
-                style = MaterialTheme.typography.labelSmall.subtext(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-            )
         }
 
         if (state.isLoadingSeries && state.series.isEmpty()) {
@@ -844,8 +786,7 @@ private fun SeriesSubScreen(
 
         // TV: same deadband spec as the Movies grid (com.aeriotv.android.ui.tv.TvLargeCardBringIntoViewSpec).
         val bringIntoViewSpec =
-            if (isTv) com.aeriotv.android.ui.tv.TvLargeCardBringIntoViewSpec
-            else androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+            com.aeriotv.android.ui.tv.TvLargeCardBringIntoViewSpec
         // Grid D-pad fallback plumbing (see vodGridDpadFallback) and the
         // scroll-to-top on a NEW query: results replace the list under the
         // old scroll offset, which left the first row hidden under the
@@ -875,17 +816,17 @@ private fun SeriesSubScreen(
         ) {
         LazyVerticalGrid(
             // Series tab matches the Movies tab's TV / phone grid metrics.
-            columns = GridCells.Adaptive(minSize = if (isTv) 108.dp else 120.dp),
+            columns = GridCells.Adaptive(minSize = 108.dp),
             modifier = Modifier.fillMaxSize(),
             state = gridState,
             contentPadding = PaddingValues(
-                start = if (isTv) 48.dp else 12.dp,
-                end = if (isTv) 48.dp else 12.dp,
-                top = if (isTv) 16.dp else 8.dp,
-                bottom = if (isTv) 32.dp else LocalTabBarBottomInset.current,
+                start = 48.dp,
+                end = 48.dp,
+                top = 16.dp,
+                bottom = 32.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(if (isTv) 16.dp else 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (isTv) 16.dp else 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // (Continue Watching episodes are on the Continue Watching sub-tab, #9.)
             itemsIndexed(items = visibleSeriesFiltered, key = { _, it -> it.id }) { index, series ->
@@ -898,16 +839,15 @@ private fun SeriesSubScreen(
                 }
                 SeriesPoster(
                     series = series,
-                    isTv = isTv,
                     focusRequester = returnFocus.requesterFor("series:${series.id}"),
                     // Index 0 additionally carries the BACK-to-top requester;
                     // a separate hook so it never disturbs VodReturnFocusState.
-                    modifier = (if (isTv && index == 0) Modifier.focusRequester(firstPosterFocus) else Modifier)
-                        .then(if (isTv) Modifier.focusRequester(itemRequester).onPreviewKeyEvent { ev ->
+                    modifier = (if (index == 0) Modifier.focusRequester(firstPosterFocus) else Modifier)
+                        .then(Modifier.focusRequester(itemRequester).onPreviewKeyEvent { ev ->
                             vodGridDpadFallback(ev, index, visibleSeriesFiltered.size, gridState, gridFocusManager, gridScope) { i ->
                                 seriesRequesters.getOrPut(visibleSeriesFiltered[i].id) { FocusRequester() }
                             }
-                        } else Modifier),
+                        }),
                     onClick = {
                         returnFocus.arm("series:${series.id}")
                         onSeriesClick(series)
@@ -941,7 +881,6 @@ private fun VodHeaderRow(
     hiddenCount: Int,
     onManageGroups: () -> Unit,
     onOpenSearch: (() -> Unit)? = null,
-    isTv: Boolean = false,
     countLabel: String? = null,
     /** TV: Up from anything in this row lands here (the current sub-tab pill). */
     upTarget: FocusRequester? = null,
@@ -952,10 +891,10 @@ private fun VodHeaderRow(
             // TV: 48dp = the 5% overscan-safe margin the poster grid already
             // uses, and the library count joins this row instead of spending
             // its own line of vertical space.
-            .padding(horizontal = if (isTv) 48.dp else 12.dp, vertical = 4.dp),
+            .padding(horizontal = 48.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (isTv && countLabel != null) {
+        if (countLabel != null) {
             Text(
                 text = countLabel,
                 style = MaterialTheme.typography.labelMedium.subtext(),
@@ -970,32 +909,18 @@ private fun VodHeaderRow(
         // left of the group filter, in the same relative slot as the guide's
         // globe, so "search for shows" is discoverable right here on On Demand.
         if (onOpenSearch != null) {
-            if (isTv) {
-                TvHeaderIconButton(
-                    upTarget = upTarget,
-                    icon = Icons.Filled.TravelExplore,
-                    contentDescription = "Search",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = onOpenSearch,
-                )
-            } else {
-                IconButton(
-                    onClick = onOpenSearch,
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.TravelExplore,
-                        contentDescription = "Search",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.width(if (isTv) 8.dp else 4.dp))
+            TvHeaderIconButton(
+                upTarget = upTarget,
+                icon = Icons.Filled.TravelExplore,
+                contentDescription = "Search",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = onOpenSearch,
+            )
+            Spacer(Modifier.width(8.dp))
         }
         // Profiles phase 2b: a Child has no Manage Groups.
         if (com.aeriotv.android.feature.settings.rememberIsChildProfile()) {
-        } else if (isTv) {
+        } else {
             TvHeaderIconButton(
                 upTarget = upTarget,
                 icon = Icons.Filled.FilterList,
@@ -1004,21 +929,6 @@ private fun VodHeaderRow(
                 else MaterialTheme.colorScheme.primary,
                 onClick = onManageGroups,
             )
-        } else {
-            IconButton(
-                onClick = onManageGroups,
-                modifier = Modifier.size(40.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.FilterList,
-                    contentDescription = "Filter groups",
-                    tint = if (hiddenCount == 0)
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    else
-                        MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
         }
     }
 }
@@ -1101,7 +1011,6 @@ private const val UNCATEGORIZED = "Uncategorized"
 @Composable
 private fun SeriesPoster(
     series: DispatcharrVODSeries,
-    isTv: Boolean = false,
     /** Attached only on the item BACK should refocus (see VodReturnFocusState). */
     focusRequester: FocusRequester? = null,
     /** Extra hook for the grid's index-0 BACK-to-top requester. */
@@ -1130,7 +1039,7 @@ private fun SeriesPoster(
                 .then(
                     // D-pad focus ring so the highlighted poster is obvious at
                     // 10 feet. No-op on touch (phone posters never gain focus).
-                    if (isTv && focused)
+                    if (focused)
                         Modifier.border(
                             3.dp,
                             MaterialTheme.colorScheme.primary,
@@ -1161,8 +1070,7 @@ private fun SeriesPoster(
         Spacer(Modifier.height(6.dp))
         Text(
             text = series.displayName.ifBlank { "Untitled" },
-            style = if (isTv) MaterialTheme.typography.labelLarge
-            else MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.Medium,
             // minLines 2 keeps the year meta line at the same height
@@ -1175,11 +1083,9 @@ private fun SeriesPoster(
         series.year?.let { year ->
             Text(
                 text = year.toString(),
-                style = if (isTv) MaterialTheme.typography.labelMedium
-                else MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 // iOS parity: year = textSecondary tvOS / textTertiary iPhone.
-                color = if (isTv) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 2.dp),
             )
         }
@@ -1204,14 +1110,14 @@ private fun ContinueWatchingRail(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(
-                horizontal = if (rememberLiveTvFormFactor().isTv) 48.dp else 20.dp,
+                horizontal = 48.dp,
                 vertical = 8.dp,
             ),
         )
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(
-                horizontal = if (rememberLiveTvFormFactor().isTv) 44.dp else 12.dp,
+                horizontal = 44.dp,
             ),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -1404,14 +1310,14 @@ private fun SeriesContinueWatchingRail(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(
-                horizontal = if (rememberLiveTvFormFactor().isTv) 48.dp else 20.dp,
+                horizontal = 48.dp,
                 vertical = 8.dp,
             ),
         )
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(
-                horizontal = if (rememberLiveTvFormFactor().isTv) 44.dp else 12.dp,
+                horizontal = 44.dp,
             ),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -1554,7 +1460,6 @@ private fun SeriesContinueWatchingCard(
 @Composable
 private fun MoviePoster(
     movie: DispatcharrVODMovie,
-    isTv: Boolean = false,
     /** Attached only on the item BACK should refocus (see VodReturnFocusState). */
     focusRequester: FocusRequester? = null,
     /** Extra hook for the grid's index-0 BACK-to-top requester. */
@@ -1583,7 +1488,7 @@ private fun MoviePoster(
                 .then(
                     // D-pad focus ring so the highlighted poster is obvious at
                     // 10 feet. No-op on touch (phone posters never gain focus).
-                    if (isTv && focused)
+                    if (focused)
                         Modifier.border(
                             3.dp,
                             MaterialTheme.colorScheme.primary,
@@ -1618,8 +1523,7 @@ private fun MoviePoster(
             text = movie.displayName.ifBlank { "Untitled" },
             // labelMedium is ~10.8sp effective at the 0.9 TV type scale,
             // below couch readability; labelLarge on TV.
-            style = if (isTv) MaterialTheme.typography.labelLarge
-            else MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.Medium,
             // minLines 2 keeps the year meta line at the same height
@@ -1632,12 +1536,10 @@ private fun MoviePoster(
         movie.year?.let { year ->
             Text(
                 text = year.toString(),
-                style = if (isTv) MaterialTheme.typography.labelMedium
-                else MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 // iOS parity: year = textSecondary on tvOS, textTertiary on
                 // iPhone (VODPosterCard).
-                color = if (isTv) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 2.dp),
             )
         }
@@ -1719,37 +1621,8 @@ private fun VodSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     placeholder: String,
-    isTv: Boolean,
     upTarget: FocusRequester? = null,
 ) {
-    if (!isTv) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            singleLine = true,
-            placeholder = { Text(placeholder) },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-            trailingIcon = if (query.isNotEmpty()) {
-                {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Clear search",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            } else null,
-            shape = RoundedCornerShape(14.dp),
-            keyboardOptions = com.aeriotv.android.ui.textfield.aerioTextFieldKeyboardOptions(
-                imeAction = androidx.compose.ui.text.input.ImeAction.Search,
-            ),
-        )
-        return
-    }
     // TV: collapsed unless the user explicitly expands. A non-empty query
     // forces expansion so a saved state restoration doesn't strand the
     // user with a filter they can't see.

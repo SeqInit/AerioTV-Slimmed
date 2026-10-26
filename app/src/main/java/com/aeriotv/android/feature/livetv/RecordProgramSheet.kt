@@ -6,8 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.outlined.FiberManualRecord
@@ -17,7 +15,6 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.sp
 import com.aeriotv.android.ui.tv.tvFocusScale
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -28,31 +25,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.unit.Velocity
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.rememberOverscrollEffect
-import androidx.compose.foundation.overscroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Storage
 import com.aeriotv.android.ui.scale.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import com.aeriotv.android.ui.scale.ModalBottomSheet
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -278,332 +259,25 @@ fun RecordProgramSheet(
                 }
             }
 
-    val isTv = com.aeriotv.android.ui.settings.rememberIsTvDevice()
-    if (isTv) {
-        TvRecordForm(
-            target = target, isLive = isLive, onDismiss = onDismiss,
-            canOfferSeriesRule = canOfferSeriesRule, isDispatcharr = isDispatcharr, canRecordToServer = canRecordToServer,
-            series = series, onSeries = { series = it },
-            episodes = episodes, onEpisodes = { episodes = it },
-            customizeMatching = customizeMatching, onCustomizeMatching = { customizeMatching = it },
-            ruleTitleMode = ruleTitleMode, onRuleTitleMode = { ruleTitleMode = it },
-            ruleDescription = ruleDescription, onRuleDescription = { ruleDescription = it },
-            ruleDescriptionMode = ruleDescriptionMode, onRuleDescriptionMode = { ruleDescriptionMode = it },
-            ruleUntaggedIsNew = ruleUntaggedIsNew, onRuleUntaggedIsNew = { ruleUntaggedIsNew = it },
-            ruleAllChannels = ruleAllChannels, onRuleAllChannels = { ruleAllChannels = it },
-            preRoll = preRoll, onPreRoll = { preRoll = it },
-            postRoll = postRoll, onPostRoll = { postRoll = it },
-            onCustomPreRoll = { customBufferDraft = if (preRoll != 0) preRoll else 5; customBufferTarget = CustomBufferTarget.PreRoll },
-            onCustomPostRoll = { customBufferDraft = if (postRoll > 0) postRoll else 5; customBufferTarget = CustomBufferTarget.PostRoll },
-            destinationServer = destinationServer, onDestinationServer = { destinationServer = it },
-            removeCommercials = removeCommercials, onRemoveCommercials = { removeCommercials = it },
-            submitting = submitting, usingRule = usingRule, onSubmit = submit,
-        )
-    } else com.aeriotv.android.ui.FormFactorModal(
-        onDismiss = onDismiss,
-        tvWidthFraction = 0.7f,
-        tvMaxHeight = 620.dp,
-    ) {
-        // The header stays pinned above the scrolling body, as on the iPhone
-        // sheet: with it inside the scroll it slid away under the handle and
-        // left a blank band (Logan 2026-10-02).
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Header row: Cancel / title / Record. Record is the destructive-accent
-            // colour iOS uses (LIVE_RED) to signal it commits a scheduled action.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = if (isLive) "Record from Now" else "Record Program",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.weight(1f))
-                TextButton(
-                    enabled = !submitting,
-                    onClick = submit,
-                ) {
-                    Text(
-                        text = when {
-                            submitting -> "Scheduling…"
-                            usingRule -> "Save Rule"
-                            else -> "Record"
-                        },
-                        color = LIVE_RED,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            // End-of-list drag stretches the body (Compose overscroll) like
-            // the iPhone's rubber band instead of being handed to the sheet,
-            // which moved the sheet and snapped it back (Logan 2026-10-02).
-            // Only the downward leftover is kept: a pull past the TOP still
-            // reaches the sheet so dragging the content down dismisses it,
-            // as on iOS, and the handle drag is untouched.
-            val overscroll = rememberOverscrollEffect()
-            val keepBottomOverscroll = remember(overscroll) {
-                object : NestedScrollConnection {
-                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                        if (available.y >= 0f) return Offset.Zero
-                        overscroll?.applyToScroll(available, source) { Offset.Zero }
-                        return available
-                    }
-                    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                        if (available.y >= 0f) return Velocity.Zero
-                        overscroll?.applyToFling(available) { Velocity.Zero }
-                        return available
-                    }
-                }
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .nestedScroll(keepBottomOverscroll)
-                    .overscroll(overscroll)
-                    .verticalScroll(rememberScrollState(), overscrollEffect = null),
-            ) {
-            Spacer(Modifier.height(12.dp))
-
-            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                LabeledValue("Program", target.title.ifBlank { "Untitled" })
-                LabeledValue("Channel", target.channelName)
-                LabeledValue("Time", formatTimeRange(target))
-
-                if (canOfferSeriesRule) {
-                    Spacer(Modifier.height(18.dp))
-                    SectionLabel("Record")
-                    Spacer(Modifier.height(8.dp))
-                    RecordCard {
-                        RecordRadioRow("Just this one", "Record this airing only.", selected = !series) { series = false }
-                        com.aeriotv.android.ui.settings.SettingsRowDivider(startInset = 52.dp)
-                        RecordRadioRow("Series", "A rule on the server records this title's airings.", selected = series) { series = true }
-                    }
-                    if (series) {
-                        Spacer(Modifier.height(18.dp))
-                        SectionLabel("Episodes")
-                        Spacer(Modifier.height(8.dp))
-                        RecordCard {
-                            EpisodesMode.entries.forEachIndexed { i, m ->
-                                if (i > 0) com.aeriotv.android.ui.settings.SettingsRowDivider(startInset = 52.dp)
-                                RecordRadioRow(m.label, m.detail, selected = episodes == m) { episodes = m }
-                            }
-                            com.aeriotv.android.ui.settings.SettingsRowDivider(startInset = 16.dp)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { customizeMatching = !customizeMatching }
-                                    .padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text("Customize Matching", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.weight(1f))
-                                androidx.compose.material3.Icon(
-                                    if (customizeMatching) androidx.compose.material.icons.Icons.Filled.KeyboardArrowDown else androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                    if (series && customizeMatching) {
-                        Spacer(Modifier.height(10.dp))
-                        Text("Title Match", style = MaterialTheme.typography.bodySmall.subtext(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            val modes = listOf("exact" to "Exact", "contains" to "Contains", "search" to "Search", "regex" to "Regex")
-                            modes.forEachIndexed { i, (wire, label) ->
-                                SegmentedButton(
-                                    selected = ruleTitleMode == wire,
-                                    onClick = { ruleTitleMode = wire },
-                                    shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
-                                ) { Text(label) }
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        androidx.compose.material3.OutlinedTextField(
-                            value = ruleDescription,
-                            onValueChange = { ruleDescription = it },
-                            label = { Text("Description Contains (Optional)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        if (ruleDescription.isNotBlank()) {
-                            Spacer(Modifier.height(6.dp))
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                                val modes = listOf("contains" to "Contains", "search" to "Search", "regex" to "Regex")
-                                modes.forEachIndexed { i, (wire, label) ->
-                                    SegmentedButton(
-                                        selected = ruleDescriptionMode == wire,
-                                        onClick = { ruleDescriptionMode = wire },
-                                        shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
-                                    ) { Text(label) }
-                                }
-                            }
-                        }
-                    }
-                    if (series && customizeMatching && episodes == EpisodesMode.NewOnly) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Untagged Counts as New", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
-                                Text("For guides that only tag repeats.", style = MaterialTheme.typography.bodySmall.subtext(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Switch(checked = ruleUntaggedIsNew, onCheckedChange = { ruleUntaggedIsNew = it })
-                        }
-                    }
-                    if (usingRule && customizeMatching) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Match on Every Channel", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
-                                Text("Off records only on ${target.channelName}.", style = MaterialTheme.typography.bodySmall.subtext(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Switch(checked = ruleAllChannels, onCheckedChange = { ruleAllChannels = it })
-                        }
-                    }
-                }
-
-                if (!usingRule) {
-                Spacer(Modifier.height(18.dp))
-                SectionLabel("Start Early")
-                Spacer(Modifier.height(8.dp))
-                if (isLive) {
-                    Text(
-                        text = "Pre-roll unavailable (program already started).",
-                        style = MaterialTheme.typography.bodySmall.subtext(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    MinuteRadioFlow(
-                        options = ROLL_OPTIONS,
-                        selected = preRoll,
-                        onSelect = { preRoll = it },
-                        onCustom = {
-                            customBufferDraft = if (preRoll > 0) preRoll else 5
-                            customBufferTarget = CustomBufferTarget.PreRoll
-                        },
-                    )
-                }
-
-                Spacer(Modifier.height(18.dp))
-                SectionLabel("End Late")
-                Spacer(Modifier.height(8.dp))
-                MinuteRadioFlow(
-                    options = ROLL_OPTIONS,
-                    selected = postRoll,
-                    onSelect = { postRoll = it },
-                    onCustom = {
-                        customBufferDraft = if (postRoll > 0) postRoll else 5
-                        customBufferTarget = CustomBufferTarget.PostRoll
-                    },
-                )
-
-                // Destination toggle only for admins. A non-admin Dispatcharr
-                // account (or any non-Dispatcharr source) can only record to
-                // this device, so the server option is hidden and the record is
-                // forced local (destinationServer seeded false above).
-                if (canRecordToServer) {
-                    Spacer(Modifier.height(18.dp))
-                    SectionLabel("Destination")
-                    Spacer(Modifier.height(8.dp))
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SegmentedButton(
-                            selected = destinationServer,
-                            onClick = { destinationServer = true },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        ) { Text("Dispatcharr Server") }
-                        SegmentedButton(
-                            selected = !destinationServer,
-                            onClick = { destinationServer = false },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        ) { Text("This Device") }
-                    }
-                }
-
-                // iOS parity: a Dispatcharr non-admin live recording lands on
-                // this device. Surface an orange callout explaining why the
-                // server option isn't available. Mirrors iOS .orange
-                // "Saving to this device" hint.
-                if (isDispatcharr && !canRecordToServer) {
-                    Spacer(Modifier.height(18.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Storage,
-                            contentDescription = null,
-                            tint = Color(0xFFFF9500), // iOS .orange
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Saving to this device",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                text = "Recording to the Dispatcharr server needs DVR manage access on your account. Contact your server administrator for more information.",
-                                style = MaterialTheme.typography.bodySmall.subtext(),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-
-                // Comskip is server-side only; hide it entirely when the account
-                // can't record to the server (iOS parity).
-                if (canRecordToServer) {
-                    Spacer(Modifier.height(18.dp))
-                    RecordCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Remove Commercials (Comskip)",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Text(
-                                text = "Detect and remove ad breaks after recording. Processed server-side.",
-                                style = MaterialTheme.typography.bodySmall.subtext(),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = removeCommercials,
-                            onCheckedChange = { removeCommercials = it },
-                            enabled = destinationServer,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                            ),
-                        )
-                    }
-                    }
-                }
-
-                } // !usingRule
-
-                Spacer(Modifier.height(20.dp))
-            }
-            } // scrolling body
-        }
-    }
+    TvRecordForm(
+        target = target, isLive = isLive, onDismiss = onDismiss,
+        canOfferSeriesRule = canOfferSeriesRule, isDispatcharr = isDispatcharr, canRecordToServer = canRecordToServer,
+        series = series, onSeries = { series = it },
+        episodes = episodes, onEpisodes = { episodes = it },
+        customizeMatching = customizeMatching, onCustomizeMatching = { customizeMatching = it },
+        ruleTitleMode = ruleTitleMode, onRuleTitleMode = { ruleTitleMode = it },
+        ruleDescription = ruleDescription, onRuleDescription = { ruleDescription = it },
+        ruleDescriptionMode = ruleDescriptionMode, onRuleDescriptionMode = { ruleDescriptionMode = it },
+        ruleUntaggedIsNew = ruleUntaggedIsNew, onRuleUntaggedIsNew = { ruleUntaggedIsNew = it },
+        ruleAllChannels = ruleAllChannels, onRuleAllChannels = { ruleAllChannels = it },
+        preRoll = preRoll, onPreRoll = { preRoll = it },
+        postRoll = postRoll, onPostRoll = { postRoll = it },
+        onCustomPreRoll = { customBufferDraft = if (preRoll != 0) preRoll else 5; customBufferTarget = CustomBufferTarget.PreRoll },
+        onCustomPostRoll = { customBufferDraft = if (postRoll > 0) postRoll else 5; customBufferTarget = CustomBufferTarget.PostRoll },
+        destinationServer = destinationServer, onDestinationServer = { destinationServer = it },
+        removeCommercials = removeCommercials, onRemoveCommercials = { removeCommercials = it },
+        submitting = submitting, usingRule = usingRule, onSubmit = submit,
+    )
 
     // iOS parity (task #50): "Custom Buffer" stepper dialog, 1..120 minutes
     // (RecordProgramSheet.swift customSheet). Plain buttons so it D-pads
@@ -973,107 +647,12 @@ private fun tvSeriesRuleSummary(target: ProgramInfoTarget, mode: EpisodesMode, a
 private enum class CustomBufferTarget { PreRoll, PostRoll }
 
 @Composable
-private fun LabeledValue(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 34.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium.subtext(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
 private fun SectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontWeight = FontWeight.SemiBold,
-    )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun MinuteRadioFlow(
-    options: List<Int>,
-    selected: Int,
-    onSelect: (Int) -> Unit,
-    /** iOS parity (task #50): opens the Custom Buffer stepper dialog. */
-    onCustom: () -> Unit,
-) {
-    // A value set through the Custom dialog is not one of the presets; the
-    // trailing chip owns it and echoes the minutes.
-    val isCustomSelected = selected !in options
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        options.forEach { mins ->
-            MinuteChip(
-                label = if (mins == 0) "None" else "$mins min",
-                selected = mins == selected,
-                onClick = { onSelect(mins) },
-            )
-        }
-        MinuteChip(
-            // GH #67: a NEGATIVE pre-roll means "start recording after the
-            // listed start"; echo it in plain words instead of a minus sign.
-            label = when {
-                isCustomSelected && selected < 0 -> "Custom ${-selected} min after start"
-                isCustomSelected -> "Custom $selected min"
-                else -> "Custom"
-            },
-            selected = isCustomSelected,
-            onClick = onCustom,
-        )
-    }
-}
-
-/** Capsule chip for the Start Early / End Late rows (iPhone parity). */
-@Composable
-private fun MinuteChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .height(32.dp)
-            .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(if (selected) colors.primary else com.aeriotv.android.ui.settings.settingsCardFill())
-            .selectable(selected = selected, onClick = onClick)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (selected) colors.onPrimary else colors.onBackground,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        )
-    }
-}
-
-/** Grouped card matching the Settings card fill, 14 dp corners. */
-@Composable
-private fun RecordCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
-            .background(com.aeriotv.android.ui.settings.settingsCardFill()),
-        content = content,
     )
 }
 
@@ -1094,24 +673,3 @@ private enum class EpisodesMode(val label: String, val detail: String) {
     NewOnly("New episodes only", "Skips airings the guide marks as repeats."),
 }
 
-@Composable
-private fun RecordRadioRow(label: String, detail: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, onClick = onClick)
-            .padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = null,
-            colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary),
-            modifier = Modifier.size(48.dp),
-        )
-        Column {
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
-            Text(detail, style = MaterialTheme.typography.bodySmall.subtext(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}

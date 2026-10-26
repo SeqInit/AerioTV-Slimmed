@@ -4,7 +4,6 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -93,9 +92,6 @@ class DispatcharrSyncManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val state = context.getSharedPreferences("aerio_dsync", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
-    private val isTv: Boolean =
-        context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
-            context.packageManager.hasSystemFeature("android.software.leanback_only")
 
     /** What Settings shows on the Dispatcharr Sync row. */
     data class Ui(
@@ -1045,12 +1041,10 @@ class DispatcharrSyncManager @Inject constructor(
         DsyncKey.Settings -> DsyncPayloads.encodeSettings(base, SETTINGS_OWNED, prefs.dsyncSettingsOnce())
         DsyncKey.RemoteMap -> {
             // Phones and tablets round-trip the TV map untouched: never write it.
-            if (!isTv) null else {
-                val blob = prefs.remoteControlMap.first()
-                val tv = if (blob.isBlank()) JsonObject(emptyMap())
-                else runCatching { json.parseToJsonElement(blob) as? JsonObject }.getOrNull() ?: return null
-                DsyncPayloads.encodeRemoteMap(base, tv)
-            }
+            val blob = prefs.remoteControlMap.first()
+            val tv = if (blob.isBlank()) JsonObject(emptyMap())
+            else runCatching { json.parseToJsonElement(blob) as? JsonObject }.getOrNull() ?: return null
+            DsyncPayloads.encodeRemoteMap(base, tv)
         }
         DsyncKey.RadioDefault -> DsyncPayloads.encodeRadioDefault(base, prefs.radioModeByDefault.first())
         DsyncKey.Collections -> {
@@ -1282,7 +1276,7 @@ class DispatcharrSyncManager @Inject constructor(
             }
             DsyncKey.RemoteMap -> {
                 val tv = DsyncPayloads.decodeRemoteMap(d) ?: return ApplyResult.Malformed
-                if (isTv) prefs.setRemoteControlMap(if (tv.isEmpty()) "" else tv.toString())
+                prefs.setRemoteControlMap(if (tv.isEmpty()) "" else tv.toString())
             }
             DsyncKey.RadioDefault -> {
                 val on = DsyncPayloads.decodeRadioDefault(d) ?: return ApplyResult.Malformed

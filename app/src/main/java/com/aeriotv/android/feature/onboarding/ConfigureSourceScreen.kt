@@ -1,7 +1,6 @@
 package com.aeriotv.android.feature.onboarding
 
 import com.aeriotv.android.ui.scale.subtext
-import com.aeriotv.android.ui.theme.textAccent
 import com.aeriotv.android.core.data.db.entity.sanitizeGuideDays
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
@@ -11,7 +10,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,11 +21,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Tv
@@ -43,7 +39,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -72,13 +67,10 @@ import com.aeriotv.android.feature.onboarding.components.InfoBanner
 import com.aeriotv.android.feature.onboarding.components.SourceTypeCard
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.ui.settings.dpadFocusRing
-import com.aeriotv.android.ui.settings.dpadFocusWash
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.textfield.aerioTextFieldKeyboardOptions
 import com.aeriotv.android.ui.textfield.SecretRevealIconButton
 import com.aeriotv.android.ui.textfield.rememberSecretRevealState
 import com.aeriotv.android.ui.tv.TvKeyboardOnOkHost
-import com.aeriotv.android.ui.tv.dpadFocusEscape
 import com.aeriotv.android.ui.tv.tvFormFieldInput
 
 /**
@@ -155,25 +147,12 @@ fun ConfigureSourceScreen(
                     // See ChooseSourceTypeScreen: hiding the TV back arrow
                     // collapses the nav-icon slot and leaves the title inside
                     // the title-safe margin.
-                    modifier = if (rememberIsTvDevice()) {
-                        Modifier.padding(start = TvSettingsMetrics.topAppBarTitleOverscanPadding)
-                    } else {
-                        Modifier
-                    },
+                    modifier = Modifier.padding(start = TvSettingsMetrics.topAppBarTitleOverscanPadding),
                 )
             },
             navigationIcon = {
                 // No back arrow on Android TV -- the remote BACK steps back to
                 // source-type pick. Phones/tablets keep it.
-                if (!rememberIsTvDevice()) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -186,8 +165,7 @@ fun ConfigureSourceScreen(
         // focused text field sits at the floating IME's top edge (see
         // TvImeNoJitterBringIntoViewSpec). Same loop as Edit Playlist.
         val bringIntoViewSpec =
-            if (rememberIsTvDevice()) com.aeriotv.android.ui.tv.TvImeNoJitterBringIntoViewSpec
-            else androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+            com.aeriotv.android.ui.tv.TvImeNoJitterBringIntoViewSpec
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides bringIntoViewSpec,
         ) {
@@ -502,23 +480,6 @@ private fun M3uFields(state: PlaylistViewModel.UiState, viewModel: PlaylistViewM
     // (fetchViaTempFile parses file: URIs in place).
     val importContext = androidx.compose.ui.platform.LocalContext.current
     val importScope = androidx.compose.runtime.rememberCoroutineScope()
-    if (!rememberIsTvDevice()) {
-        val m3uPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-            androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
-        ) { uri ->
-            uri?.let {
-                importScope.launch {
-                    importPickedFile(importContext, it, "m3u")?.let(viewModel::onUrlChange)
-                }
-            }
-        }
-        ImportFileLink(label = "Import M3U from a file instead") {
-            // M3U MIME registration is a mess in the wild (x-mpegurl,
-            // audio/mpegurl, octet-stream, text/plain) -- accept anything,
-            // like iOS's [.data, .plainText] allowance.
-            m3uPicker.launch(arrayOf("*/*"))
-        }
-    }
     LabeledField(label = "EPG URL (Optional)") {
         IconTextField(
             value = state.epgUrl,
@@ -528,72 +489,10 @@ private fun M3uFields(state: PlaylistViewModel.UiState, viewModel: PlaylistViewM
             enabled = !state.isLoading,
         )
     }
-    if (!rememberIsTvDevice()) {
-        val epgPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-            androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
-        ) { uri ->
-            uri?.let {
-                importScope.launch {
-                    importPickedFile(importContext, it, "xml")?.let(viewModel::onEpgUrlChange)
-                }
-            }
-        }
-        ImportFileLink(label = "Import XMLTV from a file instead") {
-            epgPicker.launch(arrayOf("*/*"))
-        }
-    }
     InfoBanner(
         text = "Paste your M3U playlist URL. Works with Dispatcharr's /output/m3u, any IPTV " +
                 "provider, or a direct .m3u file link.",
     )
-}
-
-/** Task #45: small inline action under a URL field that swaps it for an
- *  imported local file. */
-@Composable
-private fun ImportFileLink(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.textAccent,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 6.dp),
-    )
-}
-
-/** Copies a picked document into filesDir/imports/ and returns its file://
- *  URI, or null when the stream can't be opened. The copy makes the source
- *  durable across reboots and permission-grant expiry (same reason iOS
- *  copies imports into its container) -- refresh re-parses the snapshot. */
-private suspend fun importPickedFile(
-    context: android.content.Context,
-    uri: android.net.Uri,
-    ext: String,
-): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    runCatching {
-        val dir = java.io.File(context.filesDir, "imports").apply { mkdirs() }
-        // Carry the picked document's display name into the stored copy so
-        // the auto-derived playlist name reads "sample" instead of a UUID
-        // (deriveName takes the URL's last path segment minus extension).
-        val display = context.contentResolver.query(
-            uri,
-            arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
-            null, null, null,
-        )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
-            ?.substringBeforeLast('.')
-            ?.replace(Regex("[^A-Za-z0-9 ._-]"), "")
-            ?.take(40)
-            ?.ifBlank { null }
-        val suffix = java.util.UUID.randomUUID().toString().take(8)
-        val dest = java.io.File(dir, "${display ?: "import"}-$suffix.$ext")
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            dest.outputStream().use { output -> input.copyTo(output) }
-        } ?: return@runCatching null
-        android.net.Uri.fromFile(dest).toString()
-    }.getOrNull()
 }
 
 /**
@@ -674,7 +573,6 @@ internal fun IconTextField(
         keyboardOptions = keyboardOptions,
     )
 }
-
 
 @Composable
 internal fun PasswordField(

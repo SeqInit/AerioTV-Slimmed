@@ -1,7 +1,6 @@
 package com.aeriotv.android.core.tv
 
 import android.content.Context
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
@@ -64,14 +63,10 @@ class HomeChannelsPublisher @Inject constructor(
     private val settleGate: com.aeriotv.android.core.app.AppSettleGate,
 ) {
 
-    private val isTv: Boolean
-        get() = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
-
     /** Begin observing the inputs and republishing on change. Call once from
-     *  MainActivity; safe to call on any form factor (no-op off-TV). */
+     *  MainActivity. */
     @OptIn(FlowPreview::class)
     fun start(scope: CoroutineScope) {
-        if (!isTv) return
         scope.launch(Dispatchers.IO) {
             // Nothing on the launcher's home row is urgent, and publishing it
             // is not cheap: it reads the whole channel snapshot out of Room and
@@ -108,7 +103,6 @@ class HomeChannelsPublisher @Inject constructor(
 
     /** One-shot publish with freshly-read inputs (INITIALIZE_PROGRAMS path). */
     suspend fun publishNow() {
-        if (!isTv) return
         val inputs = PublishInputs(
             activePlaylistId = playlistDao.firstActive()?.id,
             recentIds = emptyList(),

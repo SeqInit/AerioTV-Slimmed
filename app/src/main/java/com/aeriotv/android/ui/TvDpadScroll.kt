@@ -22,7 +22,6 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import kotlinx.coroutines.launch
 
 /**
@@ -36,7 +35,6 @@ import kotlinx.coroutines.launch
  * behaves exactly as before.
  */
 fun Modifier.tvDpadScrollable(state: ScrollState): Modifier = composed {
-    if (!rememberIsTvDevice()) return@composed this
     val scope = rememberCoroutineScope()
     val step = with(LocalDensity.current) { 120.dp.toPx() }
     var focused by remember { mutableStateOf(false) }

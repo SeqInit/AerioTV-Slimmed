@@ -2,7 +2,6 @@ package com.aeriotv.android
 
 import android.net.Uri
 import com.aeriotv.android.core.data.M3UChannel
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -18,9 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -39,11 +35,9 @@ import com.aeriotv.android.core.data.db.entity.capabilities
 import com.aeriotv.android.core.data.capability.CapabilitySet
 import com.aeriotv.android.ui.LocalCapabilities
 import com.aeriotv.android.core.data.guideMatchKey
-import com.aeriotv.android.core.pip.findActivity
 import com.aeriotv.android.core.preferences.AppPreferences
 import com.aeriotv.android.feature.main.MainScaffold
 import com.aeriotv.android.feature.main.MainScaffoldEntryPoint
-import com.aeriotv.android.feature.miniplayer.MiniPlayerSession
 import com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel
 import com.aeriotv.android.feature.onboarding.ChooseSourceTypeScreen
 import com.aeriotv.android.feature.onboarding.ConfigureSourceScreen
@@ -60,7 +54,6 @@ import com.aeriotv.android.feature.reminders.ReminderBannerHost
 import com.aeriotv.android.feature.update.UpdateGate
 import com.aeriotv.android.ui.LocalCanRecordToServer
 import com.aeriotv.android.ui.LocalIsDispatcharrAdmin
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -606,7 +599,6 @@ fun AerioTVNavHost(
 
                 // Task #148 milestone B: routing decision for catch-up
                 // (TV = unified live player, phone = recording player).
-                val isTvDevice = com.aeriotv.android.ui.settings.rememberIsTvDevice()
                 // Per-user capabilities from the active playlist's Dispatcharr
                 // snapshot. `?: true` / PERMISSIVE on a null playlist is
                 // deliberate: the row simply has not loaded yet, and an
@@ -667,17 +659,9 @@ fun AerioTVNavHost(
                     // expands. TV keeps its Remote Control setting gate.
                     // An on-demand mini (PhoneVodMini.kt) counts too: the
                     // channel replaces it in the same window.
-                    val phoneMiniUp = !isTvDevice &&
-                        exoWindowNav.mode.value ==
-                        com.aeriotv.android.feature.player.ExoWindowState.Mode.Mini &&
-                        (miniVmNav.state.value is MiniPlayerSession.State.Active ||
-                            com.aeriotv.android.feature.player.PhoneVodMini.isActive)
-                    if (((tuneStartsInMini && isTvDevice) || phoneMiniUp) &&
+                    if (((tuneStartsInMini)) &&
                         channel.url.isNotBlank()
                     ) {
-                        if (!isTvDevice) {
-                            com.aeriotv.android.feature.player.PhoneVodMini.close()
-                        }
                         exoHolderNav.httpHeaders = PlaybackHeaders.forPlaylist(state.playlist)
                         // Same fresh-tune guard as PlayerScreen's prime
                         // effect (GH #22): re-prime on a genuine channel
@@ -786,23 +770,13 @@ fun AerioTVNavHost(
                         // live PlayerScreen (unified transport + shared d-pad
                         // scrub, tvOS parity); phone keeps the seekable
                         // recording player (iPhone parity).
-                        if (isTvDevice) {
-                            navController.navigate(
-                                Routes.playerCatchup(
-                                    catchupChannelId, playbackUrl, title,
-                                    csStart = progStart, csEnd = progEnd,
-                                    csTz = panelTz, csUuid = channelUuid,
-                                ),
-                            )
-                        } else {
-                            navController.navigate(
-                                Routes.recordingPlayer(
-                                    playbackUrl, title,
-                                    csStart = progStart, csEnd = progEnd, csTz = panelTz,
-                                    csUuid = channelUuid, csChannel = catchupChannelId,
-                                ),
-                            )
-                        }
+                        navController.navigate(
+                            Routes.playerCatchup(
+                            catchupChannelId, playbackUrl, title,
+                            csStart = progStart, csEnd = progEnd,
+                            csTz = panelTz, csUuid = channelUuid,
+                            ),
+                        )
                     },
                     onWatchLive = { recordingUrl, recTitle, recIsDvr, recEnd, recChannelId ->
                         // Audit #50 / iOS v1.6.22: watch the in-progress server

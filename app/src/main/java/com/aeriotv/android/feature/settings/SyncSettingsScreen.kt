@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,7 +47,6 @@ import com.aeriotv.android.ui.settings.SettingsDetailTopBar
 import com.aeriotv.android.ui.settings.SettingsRowContainer
 import com.aeriotv.android.ui.settings.SettingsSection
 import com.aeriotv.android.ui.settings.SettingsToggleAffordance
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsFootnoteStyle
 import com.aeriotv.android.ui.settings.settingsFormWidth
 import com.aeriotv.android.ui.settings.settingsRowTitleStyle
@@ -69,7 +67,6 @@ fun SyncSettingsScreen(
     val enabled by viewModel.dispatcharrEnabled.collectAsStateWithLifecycle(initialValue = false)
     val available by viewModel.dispatcharrAvailable.collectAsStateWithLifecycle(initialValue = false)
     val dsyncUi by viewModel.dispatcharrUi.collectAsState()
-    val tvRows = rememberIsTvDevice()
 
     Column(modifier = Modifier.fillMaxSize()) {
         SettingsDetailTopBar(title = "Sync", onBack = onBack)
@@ -89,7 +86,7 @@ fun SyncSettingsScreen(
                 item {
                     SettingsSection(
                         header = "",
-                        footer = if (tvRows) null else "Dispatcharr keeps your favorites, progress, reminders, and settings on your Dispatcharr server, separately for each profile. Playlists and sign-in details never sync. Admins on your Dispatcharr server can view synced data.",
+                        footer = null,
                     ) {
                         SyncTileToggleRow(
                             icon = Icons.Filled.CloudSync,
@@ -117,7 +114,7 @@ fun SyncSettingsScreen(
                                 icon = Icons.Filled.Tune,
                                 title = "Sync Categories",
                                 subtitle = "Choose what syncs across your devices",
-                                chevron = !tvRows,
+                                chevron = false,
                                 onClick = onOpenSyncCategories,
                             )
                         }
@@ -280,7 +277,6 @@ fun SyncCategoriesScreen(
     onBack: () -> Unit,
     viewModel: SyncSettingsViewModel = hiltViewModel(),
 ) {
-    val isTv = rememberIsTvDevice()
     val footer = "Each toggle controls whether this device sends and receives that category through your Dispatcharr server. The toggles apply to this device only."
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -297,7 +293,7 @@ fun SyncCategoriesScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item {
-                    SettingsSection(header = "Categories", footer = if (isTv) null else footer) {
+                    SettingsSection(header = "Categories", footer = null) {
                         SyncCategory.entries.forEach { category ->
                             val enabled by viewModel.categoryEnabled(category)
                                 .collectAsStateWithLifecycle(initialValue = true)

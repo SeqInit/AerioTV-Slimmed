@@ -65,8 +65,7 @@ fun vodGridDpadFallback(
 }
 
 /**
- * BACK-from-detail D-pad focus restoration for TV grids and rails (every
- * member no-ops off TV so phone behavior is untouched).
+ * BACK-from-detail D-pad focus restoration for TV grids and rails.
  *
  * Detail screens are nav routes pushed ON TOP of MAIN, so the whole tab is
  * disposed while they are up; an in-composition focusRestorer cannot
@@ -76,7 +75,6 @@ fun vodGridDpadFallback(
  * return, and [restoreIfPending] pulls focus onto it.
  */
 class VodReturnFocusState(
-    private val isTv: Boolean,
     private val pendingKeyState: MutableState<String?>,
 ) {
     val requester = FocusRequester()
@@ -91,19 +89,19 @@ class VodReturnFocusState(
     /** Record the item being opened so focus can return to it after BACK.
      *  Call right before the navigation callback. */
     fun arm(key: String) {
-        if (isTv) pendingKeyState.value = key
+        pendingKeyState.value = key
     }
 
     /** The [FocusRequester] for [key]'s item, or null for every other item. */
     fun requesterFor(key: String): FocusRequester? =
-        if (isTv && key == pendingKey) requester else null
+        if (key == pendingKey) requester else null
 
     /** One-shot on the return composition: focus the armed item, retrying
      *  until it is attached, then re-assert once in case the initial-focus
      *  fallback lands after the first success. Gives up quietly if the item
      *  is gone. */
     suspend fun restoreIfPending() {
-        if (!isTv || pendingKey == null) return
+        if (pendingKey == null) return
         repeat(20) {
             if (runCatching { requester.requestFocus() }.isSuccess) {
                 delay(48L)
@@ -119,7 +117,6 @@ class VodReturnFocusState(
 
 @Composable
 fun rememberVodReturnFocus(
-    isTv: Boolean,
     /** false for pages that restore scroll + focus themselves off [VodReturnFocusState.pendingKeyOrNull]. */
     autoRestore: Boolean = true,
 ): VodReturnFocusState {
@@ -127,7 +124,7 @@ fun rememberVodReturnFocus(
     // while a detail route sits on top of MAIN. arm() writes it
     // synchronously in the click handler, before navigation saves state.
     val pendingKey = rememberSaveable { mutableStateOf<String?>(null) }
-    val state = remember { VodReturnFocusState(isTv, pendingKey) }
+    val state = remember { VodReturnFocusState(pendingKey) }
     if (autoRestore) LaunchedEffect(Unit) { state.restoreIfPending() }
     return state
 }

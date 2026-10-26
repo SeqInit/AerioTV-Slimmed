@@ -20,11 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,7 +53,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aeriotv.android.core.profiles.DispatcharrProfile
 import com.aeriotv.android.core.profiles.PinDirection
@@ -66,7 +60,6 @@ import com.aeriotv.android.core.profiles.PinRules
 import com.aeriotv.android.core.profiles.PinType
 import com.aeriotv.android.core.profiles.ProfileManager
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsRowCard
 import kotlinx.coroutines.launch
 
@@ -99,7 +92,6 @@ fun PinEntryDialog(
     /** Start focus on Clear instead of "1" (a step that follows another pad). */
     focusClear: Boolean = false,
 ) {
-    val isTv = rememberIsTvDevice()
     val entries = remember { mutableStateListOf<String>() }
     // A key press that started on the previous dialog (OK on Enter PIN)
     // must not land here: presses are ignored for 300 ms after opening.
@@ -168,7 +160,7 @@ fun PinEntryDialog(
                         Key.Backspace -> { if (down && entries.isNotEmpty()) entries.removeAt(entries.lastIndex); true }
                         else -> {
                             // TV Directions: the D-pad itself is the input.
-                            if (isTv && type == PinType.Directions) {
+                            if (type == PinType.Directions) {
                                 val dir = when (ev.key) {
                                     Key.DirectionUp -> PinDirection.Up
                                     Key.DirectionDown -> PinDirection.Down
@@ -218,7 +210,7 @@ fun PinEntryDialog(
                             firstFocus = rootFocus,
                             focusClear = focusClear,
                         )
-                        isTv -> {
+                        else-> {
                             // Focus target for the raw D-pad capture.
                             Box(
                                 Modifier
@@ -234,17 +226,6 @@ fun PinEntryDialog(
                                 )
                             }
                         }
-                        else -> DirectionPad(
-                            onDirection = { add(it.name) },
-                            onClear = { if (ready()) entries.clear() },
-                            onOk = { submit() },
-                            okEnabled = entries.size >= PinRules.MIN_LENGTH,
-                            firstFocus = rootFocus,
-                            focusClear = focusClear,
-                        )
-                    }
-                    if (onDismiss != null && !isTv) {
-                        SettingsDialogTextButton(label = "Cancel", onClick = onDismiss)
                     }
                 }
             }
@@ -330,35 +311,6 @@ private fun NumberPad(
             )
             PadKey(label = "0", onClick = { onDigit("0") })
             PadKey(label = "OK", enabled = okEnabled, onClick = onOk)
-        }
-    }
-}
-
-@Composable
-private fun DirectionPad(
-    onDirection: (PinDirection) -> Unit,
-    onClear: () -> Unit,
-    onOk: () -> Unit,
-    okEnabled: Boolean,
-    firstFocus: FocusRequester,
-    focusClear: Boolean = false,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        PadKey(
-            modifier = if (focusClear) Modifier else Modifier.focusRequester(firstFocus),
-            icon = Icons.Filled.KeyboardArrowUp,
-            contentDescription = "Up",
-            onClick = { onDirection(PinDirection.Up) },
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            PadKey(icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Left", onClick = { onDirection(PinDirection.Left) })
-            PadKey(label = "OK", enabled = okEnabled, onClick = onOk)
-            PadKey(icon = Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Right", onClick = { onDirection(PinDirection.Right) })
-        }
-        PadKey(icon = Icons.Filled.KeyboardArrowDown, contentDescription = "Down", onClick = { onDirection(PinDirection.Down) })
-        Spacer(Modifier.height(2.dp))
-        Box(if (focusClear) Modifier.focusRequester(firstFocus) else Modifier) {
-            SettingsDialogTextButton(label = "Clear", onClick = onClear)
         }
     }
 }

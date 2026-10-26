@@ -1,36 +1,24 @@
 package com.aeriotv.android.feature.player
 
-import com.aeriotv.android.core.pip.findActivity
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.aeriotv.android.feature.settings.SettingsViewModel
-import kotlinx.coroutines.delay
 import kotlin.math.hypot
 
 /** Letterbox / pillarbox the stream inside the surface (default). */
@@ -51,9 +39,6 @@ private const val PINCH_OUT_RATIO = 1.15f
 
 /** Pinch-in ratio that commits to Fit. */
 private const val PINCH_IN_RATIO = 0.85f
-
-/** How long the centered "Fit" / "Fill" label stays up after a pinch. */
-private const val SCALE_LABEL_MS = 1_000L
 
 fun videoScaleLabel(mode: String): String = when (mode) {
     VIDEO_SCALE_FILL -> "Fill"
@@ -174,54 +159,6 @@ fun Modifier.videoScalePinch(
     }
 }
 
-/**
- * The transient centered "Fit" / "Fill" / "Stretch" label for [videoScalePinch].
- *
- * Purely decorative: it installs no pointer input, so it never takes part in hit
- * testing and the tap layer underneath keeps receiving every touch. Both players
- * host it in one line because their top-level composables sit near the JVM
- * verifier's register limit, so all of the state lives here.
- */
-@Composable
-fun BoxScope.VideoScaleLabelOverlay(enabled: Boolean = true) {
-    // The brightness / volume edge-slide indicator rides along here rather than
-    // getting its own line in each player: both players already host this
-    // overlay under exactly the right gate (touch device, not in PiP), and
-    // VODPlayerScreen cannot take another call - it is at the JVM register
-    // limit. It also owns restoring the app's brightness override on dispose,
-    // so it must unmount with the player.
-    PlayerEdgeAdjustOverlay(enabled = enabled)
-    if (!enabled) return
-    // Ignore whatever a previous player instance left behind: only a pinch that
-    // happens while this overlay is composed may raise the label.
-    val baseSerial = remember { VideoScalePinchSignal.serial }
-    var labelVisible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(VideoScalePinchSignal.serial) {
-        if (VideoScalePinchSignal.serial == baseSerial) return@LaunchedEffect
-        labelVisible = true
-        delay(SCALE_LABEL_MS)
-        labelVisible = false
-    }
-
-    AnimatedVisibility(
-        visible = labelVisible,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = Modifier.align(Alignment.Center),
-    ) {
-        Text(
-            text = VideoScalePinchSignal.label,
-            fontSize = 28.sp,
-            color = Color.White,
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.Black.copy(alpha = 0.55f))
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-        )
-    }
-}
-
 private fun pinchSpan(
     a: androidx.compose.ui.geometry.Offset,
     b: androidx.compose.ui.geometry.Offset,
@@ -252,23 +189,3 @@ fun VideoScaleOptionRow(settingsVm: SettingsViewModel) {
     }
 }
 
-/**
- * Pinch-to-minimize callback for [videoScalePinch], or null when [enabled]
- * is false. Phones and tablets alike (the iPhone minimizes on pinch-in since
- * 2026-10-11; before that this was tablet only). Dispatches a system Back,
- * the same path as the top-strip minimize swipe. Kept out of PlayerScreen so
- * its top-level composable gains no locals (JVM register limit).
- */
-@androidx.compose.runtime.Composable
-fun tabletPinchMinimize(enabled: Boolean): (() -> Unit)? {
-    val tablet = true
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val action = androidx.compose.runtime.remember(context) {
-        {
-            (context.findActivity() as? androidx.activity.ComponentActivity)
-                ?.onBackPressedDispatcher?.onBackPressed()
-            Unit
-        }
-    }
-    return if (enabled && tablet) action else null
-}

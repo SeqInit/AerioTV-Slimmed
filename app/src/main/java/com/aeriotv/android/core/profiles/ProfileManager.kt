@@ -154,7 +154,7 @@ class ProfileManager @Inject constructor(
         // TV launch picker (phase 2b): "Ask who is watching at launch". A
         // Child goes straight in; its PIN (if any) is the launch gate below.
         val all = store.forPlaylist(pid)
-        if (RoleRules.showLaunchPicker(isTvDevice(), all.isNotEmpty(), store.askAtLaunch(pid), all.size, restored?.effectiveRole())) {
+        if (RoleRules.showLaunchPicker(all.isNotEmpty(), store.askAtLaunch(pid), all.size, restored?.effectiveRole())) {
             _launchPicker.value = LaunchPicker(pid, restored?.id)
             Log.i(TAG, "[PROFILE] launch picker armed (${all.size} profiles)")
             return
@@ -221,12 +221,6 @@ class ProfileManager @Inject constructor(
     fun setAskAtLaunch(playlistId: String, on: Boolean) {
         store.setAskAtLaunch(playlistId, on)
         Log.i(TAG, "[PROFILE] ask who is watching at launch = $on")
-    }
-
-    private fun isTvDevice(): Boolean {
-        val ui = context.getSystemService(android.app.UiModeManager::class.java)
-        return ui?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
-            context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
     }
 
     // ---- Roles (phase 2b) ----

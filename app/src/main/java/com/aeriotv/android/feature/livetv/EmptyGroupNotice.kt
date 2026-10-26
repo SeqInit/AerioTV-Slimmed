@@ -29,7 +29,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.tv.tvFocusScale
 
 /**
@@ -59,11 +58,10 @@ fun EmptyGroupNotice(
     onShowAllChannels: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isTv = rememberIsTvDevice()
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 32.dp, vertical = if (isTv) 56.dp else 40.dp),
+            .padding(horizontal = 32.dp, vertical = 56.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -71,12 +69,11 @@ fun EmptyGroupNotice(
             imageVector = if (isSearching) Icons.Outlined.SearchOff else Icons.Outlined.TvOff,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.size(if (isTv) 64.dp else 56.dp),
+            modifier = Modifier.size(64.dp),
         )
         Text(
             text = if (isSearching) "No Matching Channels" else "No Channels in This Group",
-            style = if (isTv) MaterialTheme.typography.headlineSmall
-            else MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
@@ -108,7 +105,6 @@ private fun ShowAllChannelsButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val isTv = rememberIsTvDevice()
     Box(
         modifier = modifier
             .tvFocusScale(focused, focusedScale = 1.04f)
@@ -131,14 +127,13 @@ private fun ShowAllChannelsButton(
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .focusable(interactionSource = interaction)
             .padding(
-                horizontal = if (isTv) 28.dp else 22.dp,
-                vertical = if (isTv) 12.dp else 10.dp,
+                horizontal = 28.dp,
+                vertical = 12.dp,
             ),
     ) {
         Text(
             text = "Show All Channels",
-            style = if (isTv) MaterialTheme.typography.titleMedium
-            else MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = if (focused) MaterialTheme.colorScheme.onPrimary
             else MaterialTheme.colorScheme.onBackground,

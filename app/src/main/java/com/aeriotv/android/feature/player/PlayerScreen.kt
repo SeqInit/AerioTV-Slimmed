@@ -2,9 +2,7 @@ package com.aeriotv.android.feature.player
 
 import kotlinx.coroutines.sync.withLock
 import android.util.Log
-import android.view.ViewGroup
 import android.widget.Toast
-import com.aeriotv.android.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -23,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -56,7 +55,6 @@ import com.aeriotv.android.core.data.M3UChannel
 import com.aeriotv.android.core.data.ProgramInfoTarget
 import com.aeriotv.android.core.data.guideMatchKey
 import com.aeriotv.android.core.pip.PipState
-import com.aeriotv.android.core.pip.findActivity
 import com.aeriotv.android.feature.livetv.RecordProgramSheet
 import com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel
 import com.aeriotv.android.feature.playlist.nowPlaying
@@ -328,11 +326,7 @@ fun PlayerScreen(
     // beneath our chrome overlays.
     // Start-in-mini eligibility, resolved once (TV live tunes only; declared
     // here because isTvForm's canonical val sits further down the file).
-    val startMiniEligible = startInMini && !isCatchupMode &&
-        (
-            context.resources.configuration.uiMode and
-                android.content.res.Configuration.UI_MODE_TYPE_MASK
-            ) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    val startMiniEligible = startInMini && !isCatchupMode
     LaunchedEffect(Unit) {
         // Apply Dispatcharr / Xtream auth headers + custom User-Agent
         // before the first setMediaSource so the DataSource picks them
@@ -551,12 +545,7 @@ fun PlayerScreen(
     //     vid off here would force vo=null and the mini would be black even
     //     after re-attaching the surface. PlaybackService isn't needed
     //     either because the app stays foregrounded behind the mini.
-    val isTvForm = (
-        context.resources.configuration.uiMode and
-            android.content.res.Configuration.UI_MODE_TYPE_MASK
-        ) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     // TV: Back with the controls up only hides them (BackHandler below).
-    val sidebarInterface = isTvForm
 
     // GH #7 (True Android Fullscreen): on phone/tablet, hide the status + nav
     // bars in LANDSCAPE so playback is genuinely edge-to-edge instead of
@@ -568,29 +557,6 @@ fun PlayerScreen(
     // apps (e.g. the Samsung Z Fold cover screen reports none). The banners also
     // pad by statusBars union displayCutout. Keyed on orientation so a rotation
     // re-applies the right mode; bars restored on dispose. TV has no system bars.
-    if (!isTvForm) {
-        val activity = context.findActivity()
-        val isLandscape = LocalConfiguration.current.orientation ==
-            android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        DisposableEffect(activity, isLandscape) {
-            val window = activity?.window
-            val controller = window?.let {
-                androidx.core.view.WindowCompat.getInsetsController(it, it.decorView)
-            }
-            controller?.apply {
-                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat
-                    .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                if (isLandscape) {
-                    hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                } else {
-                    show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                }
-            }
-            onDispose {
-                controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
 
     // UHD judder fix (seamless content frame-rate matching) now lives in
     // PersistentExoWindow, which owns the SurfaceView whose Surface the
@@ -606,7 +572,7 @@ fun PlayerScreen(
     // tvOS-style). See BackHandler below for the three-press TV flow.
     // Declared HERE (above BackHandler) so the BackHandler closure
     // can read + mutate it.
-    var chromeVisible by remember { mutableStateOf(!isTvForm) }
+    var chromeVisible by remember { mutableStateOf(false) }
     // (chromeFromFlip removed in task #148: flips no longer raise the
     // bottom chrome at all - only the top program card via the
     // launch-hint window - so the latch had nothing left to track.)
@@ -715,14 +681,14 @@ fun PlayerScreen(
             // LIVE affordance. The native session revoke runs in onDispose.
             PlayerDoubleBack.clear()
             closeCatchupReplay(exoHolder, exoWindowState, miniPlayerVm, context, onClose)
-        } else if (sidebarInterface && chromeVisible) {
+        } else if (chromeVisible) {
             // Sidebar style (user directive 2026-10-25): with the controls up,
             // Back only hides them and the player stays full screen. The
             // minimize / double-Back close below applies once they are hidden.
             PlayerDoubleBack.clear()
             chromeReason = "back"
             chromeVisible = false
-        } else if (isTvForm) {
+        } else {
             // #10 back model (Archie 2026-07-02): a SINGLE Back minimizes the
             // fullscreen player straight to the corner mini. OK/Select is now
             // what raises the media controls (the tap-target toggles
@@ -761,20 +727,6 @@ fun PlayerScreen(
                     onClose()
                 }
             }
-        } else {
-            // Phone Back (Logan 2026-09-14, TV parity): minimize to the
-            // floating in-app mini window (PhoneMiniPlayer.kt) instead of the
-            // old audio-only chip. The persistent PlayerView only moves into
-            // the corner, so the stream keeps playing with its video, and the
-            // AerioMediaPlaybackService keeps the notification alive. The
-            // top-strip swipe-down dispatches this same Back.
-            miniPlayerVm.showMiniPlayer()
-            currentChannel?.let { _ ->
-                exoWindowState.requestMini()
-                com.aeriotv.android.core.playback.AerioMediaPlaybackService
-                    .startBackground(context)
-            }
-            onClose()
         }
     }
 
@@ -813,18 +765,13 @@ fun PlayerScreen(
             launchHintActive = false
             return@LaunchedEffect
         }
-        if (!isTvForm && currentChannel != null) {
-            if (!chromeVisible) chromeReason = "channel change"
-            chromeVisible = true
-            lastInteractionAt = android.os.SystemClock.uptimeMillis()
-        }
         launchHintActive = true
         kotlinx.coroutines.delay(LAUNCH_HINT_MS)
         launchHintActive = false
     }
     // TV keeps the card-only tune-in hint (D-pad flips need the chrome hidden);
     // phones/tablets show the card only with the chrome.
-    val pillVisible = if (isTvForm) chromeVisible || launchHintActive else chromeVisible
+    val pillVisible = chromeVisible || launchHintActive
     // The user-facing Audio Only toggle was removed (Radio Mode replaces
     // it, 2026-10-13); the in-player picture is always on.
     val audioOnly = false
@@ -1116,19 +1063,11 @@ fun PlayerScreen(
     // persistent View at root). Kept as a local val inside the chrome
     // Box below for parity with the old factory-captured reference.
 
-    // Publish playback state for the activity's leave-the-app handling: video
-    // (not audio-only) auto-enters PiP; audio-only instead keeps a background
-    // media notification (no PiP). Cleared when the player leaves composition.
-    DisposableEffect(audioOnly, currentChannel?.id, nowProgramme?.title) {
+    // Publish the now-playing labels for the background media notification.
+    SideEffect {
         PipState.nowPlayingTitle = currentChannel?.name ?: "AerioTV"
         PipState.nowPlayingSubtitle = nowProgramme?.title.orEmpty()
         PipState.nowPlayingLogo = currentChannel?.tvgLogo?.takeIf { it.isNotBlank() }
-        PipState.videoPlaybackActive.value = !audioOnly
-        PipState.audioPlaybackActive.value = audioOnly
-        onDispose {
-            PipState.videoPlaybackActive.value = false
-            PipState.audioPlaybackActive.value = false
-        }
     }
 
     val streamUrl = currentChannel?.url.orEmpty()
@@ -1496,7 +1435,7 @@ fun PlayerScreen(
                 // gating this on chromeVisible meant the press that REVEALED
                 // the chrome did not seed the countdown.
                 reportInteraction()
-                if (isTvForm && event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
+                if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
                     event.nativeKeyEvent.repeatCount == 0
                 ) {
                     when (event.nativeKeyEvent.keyCode) {
@@ -1512,7 +1451,7 @@ fun PlayerScreen(
                 // pending) belong to channel-number entry on TV. Checked
                 // first so no mapping below can steal a digit; every other
                 // key falls through untouched.
-                if (isTvForm && !isCatchupMode && channelNumberEntry.onKeyEvent(event)) {
+                if (!isCatchupMode && channelNumberEntry.onKeyEvent(event)) {
                     return@onPreviewKeyEvent true
                 }
                 // Chrome hidden + rewind buffering: LEFT/RIGHT scrubs the
@@ -1528,7 +1467,7 @@ fun PlayerScreen(
                 // threshold instead; with okLong unmapped (the default map)
                 // this whole branch is skipped and the plain clickable
                 // handles OK exactly as before.
-                if (isTvForm && !chromeVisible && !recentsOverlayVisible && !channelListVisible &&
+                if (!chromeVisible && !recentsOverlayVisible && !channelListVisible &&
                     (native.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
                         native.keyCode == android.view.KeyEvent.KEYCODE_ENTER)
                 ) {
@@ -1572,7 +1511,7 @@ fun PlayerScreen(
                 //    info. Was two blocks; the scrub branch's early returns
                 //    (false on DOWN, consume on UP) starved the split of
                 //    every event whenever the live-rewind buffer was warm.
-                if (isTvForm && !chromeVisible && !recentsOverlayVisible && !channelListVisible &&
+                if (!chromeVisible && !recentsOverlayVisible && !channelListVisible &&
                     (native.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT ||
                         native.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
                 ) {
@@ -1697,41 +1636,8 @@ fun PlayerScreen(
                         },
                         onVerticalDrag = { _, dy -> totalDy += dy },
                     )
-                }
-                // Vertical slide in a narrow band at one screen edge adjusts
-                // brightness, the other volume (touch only, both off by
-                // default). Narrow band + a top/bottom exclusion keep it clear
-                // of the channel flip above and the minimize swipe below.
-                .playerEdgeSlideGestures(
-                    enabled = !isTvForm,
-                    brightnessEnabled = playerBrightnessGesture,
-                    volumeEnabled = playerVolumeGesture,
-                    brightnessEdge = playerBrightnessEdge,
-                )
-                // Pinch to switch Fit <-> Fill on touch devices (no-op on TV).
-                // Lives in the SAME chain as the tap / drag handlers: a sibling
-                // overlay Box would win hit testing and swallow every tap.
-                // Tablets (iPad parity): a pinch in below 0.85 also minimizes
-                // to the corner mini, through the same Back path as the
-                // top-strip swipe. This screen is never shown while minimized.
-                .videoScalePinch(
-                    settingsVm,
-                    enabled = !isTvForm,
-                    onPinchIn = tabletPinchMinimize(enabled = !isTvForm && !isCatchupMode),
-                )
-                // Swipe down from the top strip = Back = minimize (live only;
-                // catch-up cannot minimize yet, so it gets no gesture); cancels
-                // the channel-flip swipe above when it starts there. Must stay
-                // LAST in this chain (PhoneMiniPlayer.kt).
-                .playerTopSwipeDown(enabled = !isTvForm && !isCatchupMode, drivesWindow = true),
+                },
         )
-
-        // Transient "Fit" / "Fill" label for the pinch gesture above (no-op on
-        // TV). Non-interactive: the pinch detector itself is a modifier on the
-        // tap layer, since an overlay Box would swallow its taps. All of the
-        // state lives in VideoScale.kt: this composable is register-pressure
-        // sensitive.
-        VideoScaleLabelOverlay(enabled = !isTvForm)
 
 
         // Dead-upstream net: the holder's no-data watchdog reconnected once and
@@ -1745,7 +1651,7 @@ fun PlayerScreen(
         // status. One line here: this composable is register-pressure sensitive,
         // so the whole feature lives in LoadingDetailLine.kt.
         LiveFailoverStatusOverlay(
-            exoHolder, isTvForm, channels,
+            exoHolder, channels,
             onLoadChannelStreams, onSwitchChannelStream, onLoadCurrentStreamId,
         )
         if (streamUnavailable && isCatchupMode) {
@@ -1756,7 +1662,6 @@ fun PlayerScreen(
         } else if (streamUnavailable) {
             StreamUnavailableCard(
                 exoHolder = exoHolder,
-                isTvForm = isTvForm,
                 unavailableRetrySerialState = unavailableRetrySerialState,
             )
         }
@@ -1780,7 +1685,6 @@ fun PlayerScreen(
             appleTVChannelFlip = appleTVChannelFlip,
             liveRewindEnabled = liveRewindEnabled,
             videoScaleMode = videoScaleMode,
-            isTvForm = isTvForm,
             isCatchupMode = isCatchupMode,
             catchupTitle = catchupTitle,
             catchupDurationMs = catchupDurationMs,
@@ -1854,12 +1758,10 @@ fun PlayerScreen(
         }
         // GH #71: channel-number readout (TV only; the state never fills
         // on touch devices because digits are only fed on the TV form).
-        if (isTvForm) {
-            com.aeriotv.android.feature.livetv.ChannelNumberEntryOverlay(
-                state = channelNumberEntry,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
-            )
-        }
+        com.aeriotv.android.feature.livetv.ChannelNumberEntryOverlay(
+            state = channelNumberEntry,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+        )
     }
 
     // Auto-hide chrome after AUTO_HIDE_MS of inactivity. Phase 172:
@@ -1929,7 +1831,7 @@ fun PlayerScreen(
     // Auto-summon the controls on TV when the stream drops so the focusable
     // Retry pill is immediately reachable (and re-summon on each retry cycle).
     LaunchedEffect(streamUnavailable, unavailableRetrySerial) {
-        if (streamUnavailable && isTvForm) chromeVisible = true
+        if (streamUnavailable) chromeVisible = true
     }
 
 
@@ -1945,7 +1847,7 @@ fun PlayerScreen(
     // Task #148 milestone B: no channel flips during a catch-up replay
     // (tvOS parity: the catch-up tile gates channel-flip off entirely).
     val flipEnabled by rememberUpdatedState(
-        isTvForm && appleTVChannelFlip && channels.size >= 2 && !isCatchupMode,
+        appleTVChannelFlip && channels.size >= 2 && !isCatchupMode,
     )
     val flipLocked by rememberUpdatedState(interactionLocked)
     val flipIndex by rememberUpdatedState(currentIndex)
@@ -2099,8 +2001,8 @@ fun PlayerScreen(
     // On TV, when the chrome hides (fullscreen video), pull D-pad focus to the
     // playback surface so the remote's up/down reaches the channel-flip handler
     // instead of being swallowed by a stale focus target.
-    LaunchedEffect(chromeVisible, isTvForm) {
-        if (isTvForm && !chromeVisible) {
+    LaunchedEffect(chromeVisible) {
+        if (!chromeVisible) {
             delay(100)
             runCatching { playbackFocus.requestFocus() }
         }
@@ -2495,7 +2397,6 @@ private fun LiveRewindChromeSection(
     appleTVChannelFlip: Boolean,
     liveRewindEnabled: Boolean,
     videoScaleMode: String,
-    isTvForm: Boolean,
     isCatchupMode: Boolean,
     catchupTitle: String,
     catchupDurationMs: Long,
@@ -2684,7 +2585,7 @@ private fun LiveRewindChromeSection(
     // channel; catch-up, a stream outage (Retry lives in the standard
     // controls) and the full Options menu keep the standard chrome, which
     // also keeps its hidden-chrome HUDs (info card, scrub).
-    val sidebarChrome = isTvForm && !isCatchupMode && !streamUnavailable && !chromeMenuOpen
+    val sidebarChrome = !isCatchupMode && !streamUnavailable && !chromeMenuOpen
     PlayerChromeOverlay(
         channel = currentChannel,
         nowProgramme = nowProgramme,
@@ -2724,7 +2625,6 @@ private fun LiveRewindChromeSection(
         },
         chromeVisible = chromeVisible && !sidebarChrome,
         pillVisible = pillVisible && !(sidebarChrome && chromeVisible),
-        isTv = isTvForm,
         // Focusable Retry in the standard controls while the stream is
         // unavailable (the center card's button can't take remote focus).
         connectionIssue = streamUnavailable,
@@ -2739,9 +2639,9 @@ private fun LiveRewindChromeSection(
         // TV: always. Tablets (sw >= 600 dp) in both orientations and phones
         // in landscape (fullscreen) show the same readout, as the iPad and
         // iPhone landscape chrome do; portrait phones stay as they were.
-        formatBadge = if (isTvForm || showTouchFormatBadge) formatBadge else null,
-        pipelineLabel = if (isTvForm || showTouchFormatBadge) pipelineLabel else null,
-        hintPairs = if (isTvForm && showRemoteHints) {
+        formatBadge = formatBadge,
+        pipelineLabel = pipelineLabel,
+        hintPairs = if (showRemoteHints) {
             com.aeriotv.android.core.remote.RemoteControlHints.livePlayerStripHints(
                 map = remoteMap,
                 catchupMode = isCatchupMode,
@@ -3014,7 +2914,6 @@ private fun CatchupUnavailableCard(
 @Composable
 private fun StreamUnavailableCard(
     exoHolder: com.aeriotv.android.core.playback.AerioExoPlayerHolder,
-    isTvForm: Boolean,
     unavailableRetrySerialState: MutableIntState,
 ) {
     var unavailableRetrySerial by unavailableRetrySerialState
@@ -3068,21 +2967,8 @@ private fun StreamUnavailableCard(
         // Phone/tablet: tappable Retry on the card itself. On TV the
         // Retry lives in the standard controls (focusable via the
         // remote) - the card stays informational there.
-        if (!isTvForm) {
-            Button(onClick = {
-                reconnecting = true
-                unavailableRetrySerial += 1
-                exoHolder.retryUnavailable()
-            }) {
-                Text("Retry Now")
-            }
-        }
         Text(
-            text = if (isTvForm) {
-                "Retry is highlighted below - press Select. Back to exit, or D-pad up/down to change channels."
-            } else {
-                "Press Back to exit, or use the D-pad up/down to change channels."
-            },
+            text = "Retry is highlighted below - press Select. Back to exit, or D-pad up/down to change channels.",
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.6f),
             textAlign = TextAlign.Center,

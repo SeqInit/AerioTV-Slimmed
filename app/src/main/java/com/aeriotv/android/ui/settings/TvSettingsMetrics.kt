@@ -134,4 +134,4 @@ private fun androidx.compose.ui.text.TextStyle.tvSized(
     size: androidx.compose.ui.unit.TextUnit,
     line: androidx.compose.ui.unit.TextUnit,
 ): androidx.compose.ui.text.TextStyle =
-    if (rememberIsTvDevice()) copy(fontSize = size, lineHeight = line) else this
+    copy(fontSize = size, lineHeight = line)

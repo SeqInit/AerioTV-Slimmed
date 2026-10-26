@@ -1,17 +1,14 @@
 package com.aeriotv.android.feature.onboarding
 
-import com.aeriotv.android.ui.theme.decorSecondary
 import com.aeriotv.android.ui.scale.subtext
 import com.aeriotv.android.ui.theme.textAccent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -22,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,7 +27,6 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.Hub
-import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,14 +68,11 @@ fun WelcomeScreen(
     onSyncViaDispatcharr: (() -> Unit)? = null,
 ) {
     val config = LocalConfiguration.current
-    val isTv = com.aeriotv.android.feature.livetv.rememberLiveTvFormFactor().isTv
     // Two-column when the viewport is meaningfully wider than tall (tablet
     // landscape, foldable unfolded). TV is excluded: it uses the centered
     // single column to mirror the tvOS welcome layout.
-    val twoColumn = !isTv && config.screenWidthDp >= 720 && config.screenHeightDp < 720
 
-    if (twoColumn) WelcomeTwoColumn(onConnectServer, onSkip, onSyncViaDispatcharr)
-    else WelcomeSingleColumn(onConnectServer, onSkip, onSyncViaDispatcharr)
+    WelcomeSingleColumn(onConnectServer, onSkip, onSyncViaDispatcharr)
 }
 
 @Composable
@@ -116,70 +108,6 @@ private fun WelcomeSingleColumn(
             Spacer(Modifier.height(22.dp))
             SupportedTypesGroup(alignStart = false)
             Spacer(Modifier.height(22.dp))
-            if (onSyncViaDispatcharr != null) {
-                DispatcharrSyncCard(onClick = onSyncViaDispatcharr)
-                Spacer(Modifier.height(12.dp))
-            }
-            ConnectServerRow(onClick = onConnectServer)
-            Spacer(Modifier.height(4.dp))
-            SkipRow(onSkip = onSkip)
-        }
-    }
-}
-
-@Composable
-private fun WelcomeTwoColumn(
-    onConnectServer: () -> Unit,
-    onSkip: () -> Unit,
-    onSyncViaDispatcharr: (() -> Unit)?,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        WelcomeAmbientOrbs(modifier = Modifier.fillMaxSize())
-        WelcomeTwoColumnRow(onConnectServer, onSkip, onSyncViaDispatcharr)
-    }
-}
-
-@Composable
-private fun WelcomeTwoColumnRow(
-    onConnectServer: () -> Unit,
-    onSkip: () -> Unit,
-    onSyncViaDispatcharr: (() -> Unit)?,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 24.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(40.dp),
-    ) {
-        // Left column: brand + supported source types. Centered vertically.
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.Start,
-        ) {
-            BrandBlock(alignStart = true)
-            Spacer(Modifier.height(20.dp))
-            SupportedTypesGroup(alignStart = true)
-        }
-        // Right column: info cards + CTAs. The Connect button sits in the
-        // viewport center on TV so the focus ring lands on it at cold start,
-        // which is what a remote-driven flow wants.
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .widthIn(max = 540.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.Center,
-        ) {
             if (onSyncViaDispatcharr != null) {
                 DispatcharrSyncCard(onClick = onSyncViaDispatcharr)
                 Spacer(Modifier.height(12.dp))

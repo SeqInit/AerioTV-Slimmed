@@ -1,23 +1,16 @@
 package com.aeriotv.android.feature.livetv
 
 import com.aeriotv.android.ui.scale.subtext
-import com.aeriotv.android.ui.theme.textAccent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -93,63 +86,10 @@ fun GuideJumpSheet(
         return c.timeInMillis
     }
 
-    val isTv = com.aeriotv.android.ui.settings.rememberIsTvDevice()
     val clockMode = com.aeriotv.android.core.ui.rememberClockMode()
-    if (isTv) {
-        // Phone-less path kept for callers that still want the modal on TV.
-        FormFactorModal(onDismiss = onDismiss, tvWidthFraction = 0.62f, sheetMaxWidth = 600.dp) {
-            GuideJumpTvContent(daysBack, daysAhead, onJump, onBackToNow, onDismiss)
-        }
-        return
-    }
-    FormFactorModal(onDismiss = onDismiss, tvWidthFraction = 0.6f, sheetMaxWidth = 560.dp) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
-            Text("Jump To", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(14.dp))
-            Text("Day", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.textAccent)
-            Spacer(Modifier.height(6.dp))
-            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                dayOffsets.forEach { offset ->
-                    FilterChip(
-                        selected = dayOffset == offset,
-                        onClick = { dayOffset = offset },
-                        label = { Text(dayLabel(offset)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                    )
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            Text("Time", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.textAccent)
-            Spacer(Modifier.height(6.dp))
-            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                slots.forEach { (label, hour) ->
-                    val text = when (hour) {
-                        -1 -> label
-                        else -> "$label " + java.text.SimpleDateFormat("h a", Locale.getDefault())
-                            .format((today.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, hour) }.time)
-                    }
-                    FilterChip(
-                        selected = slotHour == hour,
-                        onClick = { slotHour = hour },
-                        label = { Text(text) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                    )
-                }
-            }
-            Spacer(Modifier.height(18.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                OutlinedButton(onClick = { onBackToNow(); onDismiss() }) { Text("Back to Now") }
-                Spacer(Modifier.width(10.dp))
-                Button(onClick = { onJump(target()); onDismiss() }) { Text("Go") }
-            }
-            Spacer(Modifier.height(8.dp))
-        }
+    // Phone-less path kept for callers that still want the modal on TV.
+    FormFactorModal(onDismiss = onDismiss, tvWidthFraction = 0.62f, sheetMaxWidth = 600.dp) {
+        GuideJumpTvContent(daysBack, daysAhead, onJump, onBackToNow, onDismiss)
     }
 }
 

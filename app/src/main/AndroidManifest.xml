@@ -2,9 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- TV-only: Android TV / Google TV. Touch is not required (remotes). -->
     <uses-feature
         android:name="android.software.leanback"
-        android:required="false" />
+        android:required="true" />
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
@@ -68,7 +69,6 @@
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|density"
             android:resizeableActivity="true"
-            android:supportsPictureInPicture="true"
             android:theme="@style/Theme.AerioTV">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

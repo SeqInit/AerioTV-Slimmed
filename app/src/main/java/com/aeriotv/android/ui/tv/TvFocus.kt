@@ -193,12 +193,6 @@ val LocalTvKeyboardGate =
 @Composable
 fun TvKeyboardOnOkHost(content: @Composable () -> Unit) {
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val isTv = (configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) ==
-        android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    if (!isTv) {
-        content()
-        return
-    }
     val gate = androidx.compose.runtime.remember { TvKeyboardGateState() }
     androidx.compose.ui.platform.InterceptPlatformTextInput(
         // ONE stable interceptor that reads gate.armed live via snapshotFlow.

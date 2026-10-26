@@ -5,26 +5,18 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,13 +30,9 @@ import com.aeriotv.android.ui.settings.SettingsSection
 import com.aeriotv.android.ui.settings.SettingsSubPageHost
 import com.aeriotv.android.ui.settings.SettingsToggleRow
 import com.aeriotv.android.ui.settings.SettingsRowContainer
-import com.aeriotv.android.ui.settings.SettingsSliderRow
 import com.aeriotv.android.ui.settings.settingsRowTitleStyle
 import com.aeriotv.android.ui.settings.settingsRowValueStyle
-import com.aeriotv.android.ui.settings.dpadFocusRing
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsFormWidth
-import com.aeriotv.android.ui.settings.settingsRowCard
 import com.aeriotv.android.ui.theme.textAccent
 
 /**
@@ -60,7 +48,6 @@ fun GeneralSettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    val isTv = rememberIsTvDevice()
     // Apple branches Startup and Auto-Rotate copy on the iPad idiom. The
     // physical diagonal is the closest Android analog: it does not flip with
     // orientation the way width classes do.
@@ -110,7 +97,7 @@ fun GeneralSettingsScreen(
                     // page and keeps two short paragraphs in the section.
                     footer = when {
                         // tvOS: the explanation lives in the picker sheet.
-                        isTv -> null
+                        true -> null
                         isTablet ->
                             "Skipping the loading screen may cause brief UI stutter while data loads. " +
                                 "Resume picks up the last channel you watched in the corner mini-player; " +
@@ -140,8 +127,8 @@ fun GeneralSettingsScreen(
                     SettingsToggleRow(
                         title = "Skip Loading Screen",
                         // Apple TV leads this row with a tiled glyph.
-                        leadingIcon = if (isTv) androidx.compose.material.icons.Icons.Filled.Bolt else null,
-                        tiledIcon = isTv,
+                        leadingIcon = androidx.compose.material.icons.Icons.Filled.Bolt,
+                        tiledIcon = true,
                         subtitle = "Land on Live TV instantly; data hydrates in the background",
                         checked = skipLoadingScreen,
                         onCheckedChange = viewModel::setSkipLoadingScreen,
@@ -149,8 +136,8 @@ fun GeneralSettingsScreen(
                     SettingsToggleRow(
                         title = "Resume Last Channel",
                         // Apple TV leads this row with a tiled glyph.
-                        leadingIcon = if (isTv) androidx.compose.material.icons.Icons.Filled.LiveTv else null,
-                        tiledIcon = isTv,
+                        leadingIcon = androidx.compose.material.icons.Icons.Filled.LiveTv,
+                        tiledIcon = true,
                         subtitle = "Auto-start the last-played channel in the corner mini-player on launch",
                         checked = autoResumeLastChannel,
                         onCheckedChange = viewModel::setAutoResumeLastChannel,
@@ -158,19 +145,6 @@ fun GeneralSettingsScreen(
                     // Auto-Rotate (Logan 2026-08-07, iOS twin): phones/tablets
                     // only - TVs have no rotation. Default ON; when off
                     // MainActivity locks the activity to its current orientation.
-                    if (!isTv) {
-                        val autoRotate by viewModel.autoRotate
-                            .collectAsStateWithLifecycle(initialValue = true)
-                        SettingsToggleRow(
-                            title = "Auto-Rotate",
-                            // Apple wording, word for word. Off freezes whatever
-                            // orientation the screen is in (owner decision
-                            // 2026-10-02, every idiom on both platforms).
-                            subtitle = "Follow the device orientation. When off, AerioTV stays in its current orientation",
-                            checked = autoRotate,
-                            onCheckedChange = viewModel::setAutoRotate,
-                        )
-                    }
                 }
 
                 // MARK: Refresh
@@ -263,34 +237,20 @@ fun GeneralSettingsScreen(
                 // (5/10/15/30/60 seconds), not a slider: cleaner with a remote.
                 SettingsSection(
                     header = "Network",
-                    footer = if (isTv) null else "Adjust timeouts if you have a slow or unstable connection.",
+                    footer = null,
                 ) {
-                    if (isTv) {
-                        // tvOS: one choice row (Apple's timeoutOptions); an
-                        // off-list stored value reads as the nearest choice.
-                        val choice = TV_TIMEOUT_CHOICES
-                            .minByOrNull { kotlin.math.abs(it - timeoutSecs.toInt()) } ?: 15
-                        SettingsPickerRow(
-                            title = "Request Timeout",
-                            options = TV_TIMEOUT_CHOICES.map { SettingsPickerOption(it, "$it Seconds") },
-                            selected = choice,
-                            onSelect = { viewModel.setNetworkTimeoutSecs(it.toDouble()) },
-                            footer = "Raise the timeout if you have a slow connection.",
-                            tvChoiceSheet = true,
-                        )
-                    } else {
-                        // Apple iOS: a 5-60 s slider in 5 s steps reading "15s".
-                        val timeoutIdx = TIMEOUT_STOPS.indices
-                            .minByOrNull { kotlin.math.abs(TIMEOUT_STOPS[it] - timeoutSecs.toInt()) } ?: 0
-                        SettingsSliderRow(
-                            label = "Request Timeout",
-                            valueText = "${TIMEOUT_STOPS[timeoutIdx]}s",
-                            index = timeoutIdx,
-                            lastIndex = TIMEOUT_STOPS.lastIndex,
-                            onIndexChange = { viewModel.setNetworkTimeoutSecs(TIMEOUT_STOPS[it].toDouble()) },
-                            dimValue = true,
-                        )
-                    }
+                    // tvOS: one choice row (Apple's timeoutOptions); an
+                    // off-list stored value reads as the nearest choice.
+                    val choice = TV_TIMEOUT_CHOICES
+                        .minByOrNull { kotlin.math.abs(it - timeoutSecs.toInt()) } ?: 15
+                    SettingsPickerRow(
+                        title = "Request Timeout",
+                        options = TV_TIMEOUT_CHOICES.map { SettingsPickerOption(it, "$it Seconds") },
+                        selected = choice,
+                        onSelect = { viewModel.setNetworkTimeoutSecs(it.toDouble()) },
+                        footer = "Raise the timeout if you have a slow connection.",
+                        tvChoiceSheet = true,
+                    )
                 }
 
                 // Max Retries stays a stepper (no tvOS equivalent), on a resting card.
@@ -298,52 +258,14 @@ fun GeneralSettingsScreen(
                     header = "",
                     footer = "Per-request retry budget (0-10).",
                 ) {
-                    if (isTv) {
-                        // Same minus / value / plus stepper as Text Size on
-                        // Appearance (D-pad Left / Right on one row).
-                        com.aeriotv.android.ui.settings.SettingsIntStepperRow(
-                            title = "Max Retries",
-                            options = (0..10).toList(),
-                            value = maxRetries,
-                            onValueChange = { viewModel.setMaxRetries(it) },
-                        )
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .settingsRowCard(focused = false)
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "Max Retries",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(
-                                onClick = { if (maxRetries > 0) viewModel.setMaxRetries(maxRetries - 1) },
-                                enabled = maxRetries > 0,
-                                modifier = Modifier.dpadFocusRing(CircleShape),
-                            ) {
-                                Icon(Icons.Filled.Remove, contentDescription = "Decrease")
-                            }
-                            Text(
-                                text = maxRetries.toString(),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.textAccent,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            IconButton(
-                                onClick = { if (maxRetries < 10) viewModel.setMaxRetries(maxRetries + 1) },
-                                enabled = maxRetries < 10,
-                                modifier = Modifier.dpadFocusRing(CircleShape),
-                            ) {
-                                Icon(Icons.Filled.Add, contentDescription = "Increase")
-                            }
-                        }
-                    }
+                    // Same minus / value / plus stepper as Text Size on
+                    // Appearance (D-pad Left / Right on one row).
+                    com.aeriotv.android.ui.settings.SettingsIntStepperRow(
+                        title = "Max Retries",
+                        options = (0..10).toList(),
+                        value = maxRetries,
+                        onValueChange = { viewModel.setMaxRetries(it) },
+                    )
                 }
             }
         }
@@ -353,9 +275,6 @@ fun GeneralSettingsScreen(
 
 /** Apple's tvOS Request Timeout choices (GeneralSettingsView.timeoutOptions). */
 private val TV_TIMEOUT_CHOICES: List<Int> = listOf(5, 10, 15, 30, 60)
-
-/** Apple's Request Timeout slider stops: 5 to 60 seconds in 5 s steps. */
-private val TIMEOUT_STOPS: List<Int> = (5..60 step 5).toList()
 
 /** Apple's timeLabel: "8:00 AM" style (the Apple app formats en_US). */
 private fun timeLabel(hour: Int, minute: Int): String {

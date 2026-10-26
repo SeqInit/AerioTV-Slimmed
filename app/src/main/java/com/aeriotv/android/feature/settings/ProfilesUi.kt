@@ -21,8 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,7 +66,6 @@ import com.aeriotv.android.ui.settings.SettingsCard
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
 import com.aeriotv.android.ui.settings.SettingsSectionFooter
 import com.aeriotv.android.ui.settings.SettingsSectionHeader
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsRowCard
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -424,7 +421,6 @@ fun ProfilesSection(playlistId: String) {
         isAdmin = vm.isAdmin(playlistId)
         canChannelProfiles = vm.canAssignChannelProfiles(playlistId)
     }
-    val isTv = rememberIsTvDevice()
     val role by vm.activeRole.collectAsStateWithLifecycle()
     // Phase 2b: a Child has no Profiles section (Manage Profiles at the
     // bottom of Settings is its only way out).
@@ -492,21 +488,7 @@ fun ProfilesSection(playlistId: String) {
                         else doSwitch(p)
                     },
                     onLongClick = { if (!busy) actionsFor = p },
-                    trailing = if (isTv) null else {
-                        {
-                            Spacer(Modifier.size(4.dp))
-                            Icon(
-                                Icons.Outlined.Edit,
-                                contentDescription = "Profile options",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .clickable { actionsFor = p }
-                                    .padding(6.dp)
-                                    .size(18.dp),
-                            )
-                        }
-                    },
+                    trailing = null,
                 )
             }
             if (isAdmin) {

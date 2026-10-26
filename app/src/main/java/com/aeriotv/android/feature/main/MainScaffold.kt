@@ -1,59 +1,26 @@
 package com.aeriotv.android.feature.main
 
-import com.aeriotv.android.core.data.db.entity.canSwitchStream
-import com.aeriotv.android.ui.theme.textAccent
 import kotlinx.coroutines.launch
 import com.aeriotv.android.core.data.db.entity.dispatcharrCanViewDvr
 import com.aeriotv.android.core.data.db.entity.dispatcharrCanViewVod
 import com.aeriotv.android.core.data.db.entity.dispatcharrCanViewSeries
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.togetherWith
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FiberSmartRecord
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Cast
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -65,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -74,25 +40,14 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import com.aeriotv.android.core.pip.findActivity
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -103,15 +58,11 @@ import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import com.aeriotv.android.core.data.M3UChannel
-import com.aeriotv.android.core.data.guideMatchKey
 import com.aeriotv.android.core.playback.AerioExoPlayerHolder
-import com.aeriotv.android.feature.dvr.DvrTabContent
 import com.aeriotv.android.feature.dvr.DvrViewModel
 import com.aeriotv.android.feature.favorites.FavoritesTabContent
 import com.aeriotv.android.feature.favorites.FavoritesViewModel
 import com.aeriotv.android.feature.livetv.LiveTVTabContent
-import com.aeriotv.android.feature.livetv.rememberLiveTvFormFactor
-import com.aeriotv.android.feature.miniplayer.MiniPlayerRow
 import com.aeriotv.android.feature.miniplayer.MiniPlayerSession
 import com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel
 import com.aeriotv.android.feature.onboarding.ChooseSourceTypeScreen
@@ -119,7 +70,6 @@ import com.aeriotv.android.feature.onboarding.ConfigureSourceScreen
 import com.aeriotv.android.feature.ondemand.OnDemandTabContent
 import com.aeriotv.android.feature.ondemand.OnDemandViewModel
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
-import com.aeriotv.android.feature.playlist.nowPlaying
 import com.aeriotv.android.feature.settings.AddMoreCategoriesScreen
 import com.aeriotv.android.feature.settings.AddPlaylistWizardStep
 import com.aeriotv.android.feature.settings.AppearanceSettingsScreen
@@ -134,14 +84,10 @@ import com.aeriotv.android.feature.settings.DefaultSettingsPaneSelection
 import com.aeriotv.android.feature.settings.SettingsRoute
 import com.aeriotv.android.feature.settings.SettingsScreen
 import com.aeriotv.android.feature.settings.SettingsSection
-import com.aeriotv.android.feature.settings.SettingsSubScreenPlaceholder
 import com.aeriotv.android.feature.settings.SettingsViewModel
-import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 import com.aeriotv.android.ui.adaptive.rememberViewport
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.feature.settings.SettingsTvRailHost
 import com.aeriotv.android.feature.settings.SettingsPaneSplit
-import com.aeriotv.android.feature.settings.SettingsTwoPaneHost
 import com.aeriotv.android.feature.settings.rememberSettingsNavState
 import com.aeriotv.android.feature.settings.rememberSettingsPaneSelection
 import com.aeriotv.android.feature.settings.isPaneBaseline
@@ -149,7 +95,6 @@ import com.aeriotv.android.feature.settings.settingsDeepLinkPageNeedsPlaylist
 import com.aeriotv.android.feature.settings.settingsRouteForDeepLinkPage
 import com.aeriotv.android.feature.settings.visibleSettingsSections
 import com.aeriotv.android.feature.settings.allowedFor
-import com.aeriotv.android.ui.tv.tvFocusScale
 
 /** True while the TV side menu or Settings panel is open. Tab content reads
  *  it so a launch-focus grab never yanks focus out of the menu while the user
@@ -351,7 +296,6 @@ fun MainScaffold(
     // Media center (phone/tablet): Movies and TV Shows tabs, each shown while
     // its library has content or is still loading. TV keeps On Demand.
     // Every form factor now (Android TV joined 2026-09-10 with TvMediaPage).
-    val isTvShell = rememberLiveTvFormFactor().isTv
     val splitVod = true
     // Same three-state gate as DVR: Denied retires the tab even once shown,
     // Unknown (including the null playlist on the first frames) keeps it.
@@ -545,12 +489,8 @@ fun MainScaffold(
     // than as a tab of its own.
     var settingsPanelOpen by remember { mutableStateOf(false) }
     // TV: Back from a tab root opens the side menu.
-    androidx.activity.compose.BackHandler(enabled = isTvShell && selectedTab != homeTab && !sideMenuOpen) {
+    androidx.activity.compose.BackHandler(enabled = selectedTab != homeTab && !sideMenuOpen) {
         sideMenuOpen = true
-    }
-    androidx.activity.compose.BackHandler(enabled = !isTvShell && selectedTab != homeTab) {
-        selectedTab = homeTab
-        initialTabApplied = true
     }
 
     // Background-activity flag. ORs the content-fetch flags so the activity
@@ -581,7 +521,6 @@ fun MainScaffold(
     val prewarmBusyNow = androidx.compose.runtime.rememberUpdatedState(
         state.isLoading || state.isEpgLoading,
     )
-    val prewarmIsTv = rememberLiveTvFormFactor().isTv
     // Memory gate: a laid-out hidden page is worth about 100 MB across the
     // three media tabs plus Settings (Streamer, 4 GB). That is fine there and
     // NOT on a 2 GB Onn or a 3 GB Shield, so low-RAM and sub-3 GB boxes skip
@@ -616,8 +555,8 @@ fun MainScaffold(
         context.registerComponentCallbacks(cb)
         onDispose { context.unregisterComponentCallbacks(cb) }
     }
-    LaunchedEffect(prewarmIsTv, prewarmAllowed) {
-        if (!prewarmIsTv || !prewarmAllowed) return@LaunchedEffect
+    LaunchedEffect(prewarmAllowed) {
+        if (!prewarmAllowed) return@LaunchedEffect
         androidx.compose.runtime.withFrameNanos { }
         kotlinx.coroutines.delay(2_000L)
         // Cheapest first (measured cold key-to-frame: Settings and Favorites
@@ -686,278 +625,85 @@ fun MainScaffold(
     // Android TV / Google TV: the sidebar shell. TvSideMenu is the tab
     // navigation, Settings opens as a right-hand panel, and the tab content
     // fills the screen. Phone / tablet / fold keep the bottom nav below.
-    if (isTvShell) {
-        // "Go to the nav" (Back out of a TV page's content) opens the menu.
-        val requestCurrentTabPill: () -> Boolean = remember {
-            {
-                sideMenuOpen = true
-                true
-            }
+    // "Go to the nav" (Back out of a TV page's content) opens the menu.
+    val requestCurrentTabPill: () -> Boolean = remember {
+        {
+            sideMenuOpen = true
+            true
         }
-        val fullScreenOverlay = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
-        // The menu pushes the content instead of covering it.
-        val sideMenuShift = androidx.compose.animation.core.animateDpAsState(
-            targetValue = if (sideMenuOpen) TvSideMenuWidth else 0.dp,
-            label = "tvSideMenuShift",
-        )
-        val topNavHasFocusState: androidx.compose.runtime.MutableState<Boolean> = remember { mutableStateOf(false) }
-        val tabEntryFocus: androidx.compose.runtime.MutableState<FocusRequester?> = remember { mutableStateOf(null) }
-        // Side menu close: give focus back to the content. Same tab = the
-        // restorer's last-focused node; a new tab = its entry target (it may
-        // need a frame or two to compose).
-        val sidebarContentFocus = remember { FocusRequester() }
-        // The open menu stands in for a nav bar in LocalTvTopNavHasFocus: the
-        // guide's refocus loops (launch, sidebar close, tab entry) back off
-        // while the nav holds focus, and without this they pulled focus
-        // straight back to the grid the moment the menu opened.
-        // Keyed, not a SideEffect: nothing in this scope reads sideMenuOpen
-        // during composition, so a SideEffect never re-ran on open.
-        androidx.compose.runtime.LaunchedEffect(sideMenuOpen, settingsPanelOpen) {
-            topNavHasFocusState.value = sideMenuOpen || settingsPanelOpen
+    }
+    val fullScreenOverlay = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
+    // The menu pushes the content instead of covering it.
+    val sideMenuShift = androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (sideMenuOpen) TvSideMenuWidth else 0.dp,
+        label = "tvSideMenuShift",
+    )
+    val topNavHasFocusState: androidx.compose.runtime.MutableState<Boolean> = remember { mutableStateOf(false) }
+    val tabEntryFocus: androidx.compose.runtime.MutableState<FocusRequester?> = remember { mutableStateOf(null) }
+    // Side menu close: give focus back to the content. Same tab = the
+    // restorer's last-focused node; a new tab = its entry target (it may
+    // need a frame or two to compose).
+    val sidebarContentFocus = remember { FocusRequester() }
+    // The open menu stands in for a nav bar in LocalTvTopNavHasFocus: the
+    // guide's refocus loops (launch, sidebar close, tab entry) back off
+    // while the nav holds focus, and without this they pulled focus
+    // straight back to the grid the moment the menu opened.
+    // Keyed, not a SideEffect: nothing in this scope reads sideMenuOpen
+    // during composition, so a SideEffect never re-ran on open.
+    androidx.compose.runtime.LaunchedEffect(sideMenuOpen, settingsPanelOpen) {
+        topNavHasFocusState.value = sideMenuOpen || settingsPanelOpen
+    }
+    val sideMenuScope = androidx.compose.runtime.rememberCoroutineScope()
+    val closeSideMenu: (Boolean) -> Unit = { switched ->
+        sideMenuOpen = false
+        sideMenuScope.launch {
+            androidx.compose.runtime.withFrameNanos { }
+            androidx.compose.runtime.withFrameNanos { }
+            val restored = !switched && runCatching { sidebarContentFocus.requestFocus() }.getOrDefault(false)
+            val landed = restored ||
+                runCatching { tabEntryFocus.value?.requestFocus() }.getOrNull() == true ||
+                runCatching { sidebarContentFocus.requestFocus() }.getOrDefault(false)
+            com.aeriotv.android.ui.tv.TvFocusTrace.guide("tv-side-menu close switched=$switched landed=$landed")
         }
-        val sideMenuScope = androidx.compose.runtime.rememberCoroutineScope()
-        val closeSideMenu: (Boolean) -> Unit = { switched ->
-            sideMenuOpen = false
-            sideMenuScope.launch {
-                androidx.compose.runtime.withFrameNanos { }
-                androidx.compose.runtime.withFrameNanos { }
-                val restored = !switched && runCatching { sidebarContentFocus.requestFocus() }.getOrDefault(false)
-                val landed = restored ||
-                    runCatching { tabEntryFocus.value?.requestFocus() }.getOrNull() == true ||
-                    runCatching { sidebarContentFocus.requestFocus() }.getOrDefault(false)
-                com.aeriotv.android.ui.tv.TvFocusTrace.guide("tv-side-menu close switched=$switched landed=$landed")
-            }
+    }
+    CompositionLocalProvider(
+        LocalTvTopNavHasFocus provides topNavHasFocusState,
+        LocalTvTabEntryFocus provides tabEntryFocus,
+        LocalTvRequestCurrentTabPill provides requestCurrentTabPill,
+        LocalTvFullScreenOverlay provides fullScreenOverlay,
+        LocalTvSideMenuWidth provides sideMenuShift,
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+        // The corner mini player is mounted at the ACTIVITY root, outside
+        // this composition. With no bar, an undocked corner mini (a tab
+        // without the guide header) sits 16 dp from the top.
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            com.aeriotv.android.feature.player.MiniPlayerChrome.topInsetDp.value = 16f
         }
-        CompositionLocalProvider(
-            LocalTvTopNavHasFocus provides topNavHasFocusState,
-            LocalTvTabEntryFocus provides tabEntryFocus,
-            LocalTvRequestCurrentTabPill provides requestCurrentTabPill,
-            LocalTvFullScreenOverlay provides fullScreenOverlay,
-            LocalTvSideMenuWidth provides sideMenuShift,
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-            // The corner mini player is mounted at the ACTIVITY root, outside
-            // this composition. With no bar, an undocked corner mini (a tab
-            // without the guide header) sits 16 dp from the top.
-            androidx.compose.runtime.LaunchedEffect(Unit) {
-                com.aeriotv.android.feature.player.MiniPlayerChrome.topInsetDp.value = 16f
-            }
-            // Stash the corner mini while Settings is the selected tab;
-            // cleared when the scaffold leaves composition so a player /
-            // search route never inherits a stashed mini.
-            // The Settings panel sits on the right, over the corner mini (an
-            // undocked one); the docked preview on the left stays clear of it.
-            // The side menu pushes the docked preview along with the guide,
-            // so only the Settings panel can cover the mini.
-            val dockRect by com.aeriotv.android.feature.player.MiniPlayerChrome
-                .dockRectPx.collectAsStateWithLifecycle()
-            val menuCoversMini = settingsPanelOpen && dockRect.width <= 0f
-            androidx.compose.runtime.LaunchedEffect(selectedTab, menuCoversMini) {
+        // Stash the corner mini while Settings is the selected tab;
+        // cleared when the scaffold leaves composition so a player /
+        // search route never inherits a stashed mini.
+        // The Settings panel sits on the right, over the corner mini (an
+        // undocked one); the docked preview on the left stays clear of it.
+        // The side menu pushes the docked preview along with the guide,
+        // so only the Settings panel can cover the mini.
+        val dockRect by com.aeriotv.android.feature.player.MiniPlayerChrome
+            .dockRectPx.collectAsStateWithLifecycle()
+        val menuCoversMini = settingsPanelOpen && dockRect.width <= 0f
+        androidx.compose.runtime.LaunchedEffect(selectedTab, menuCoversMini) {
+            com.aeriotv.android.feature.player.MiniPlayerChrome
+                .settingsStashed.value = selectedTab == AppTab.Settings || menuCoversMini
+        }
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            onDispose {
                 com.aeriotv.android.feature.player.MiniPlayerChrome
-                    .settingsStashed.value = selectedTab == AppTab.Settings || menuCoversMini
-            }
-            androidx.compose.runtime.DisposableEffect(Unit) {
-                onDispose {
-                    com.aeriotv.android.feature.player.MiniPlayerChrome
-                        .settingsStashed.value = false
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background),
-            ) {
-                androidx.compose.runtime.CompositionLocalProvider(
-                    com.aeriotv.android.feature.livetv.LocalRetainedChannelIds provides retainedIds,
-                ) {
-                MainTabContent(
-                    selectedTab = selectedTab,
-                    tabs = tabs,
-                    onChannelClick = onChannelClick,
-                    onMovieClick = onMovieClick,
-                    onSeriesClick = onSeriesClick,
-                    onEpisodeResume = onEpisodeResume,
-                    onResumeMovie = onResumeMovie,
-                    onPlayMovie = onPlayMovie,
-                    onPlayMovieFromStart = onPlayMovieFromStart,
-                    onEpisodeResumeFromStart = onEpisodeResumeFromStart,
-                    onPlayRecording = onPlayRecording,
-                    onPlayCatchup = onPlayCatchup,
-                    onWatchLive = onWatchLive,
-                    onWatchFromBeginning = onWatchFromBeginning,
-                    onOpenSearch = onOpenSearch,
-                    onSelectTab = { selectedTab = it; initialTabApplied = true },
-                    viewModel = viewModel,
-                    visited = visitedTabs,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .offset { androidx.compose.ui.unit.IntOffset(sideMenuShift.value.roundToPx(), 0) }
-                        // The menu reseats focus here on close, and the
-                        // restorer puts it back on whatever had it.
-                        .focusRequester(sidebarContentFocus)
-                        .focusRestorer()
-                        .focusGroup(),
-                )
-                }
-            }
-                        fullScreenOverlay.value?.invoke()
-                if (sideMenuOpen) {
-                    val menuActivity = androidx.compose.ui.platform.LocalContext.current
-                    TvSideMenu(
-                        tabs = tabs,
-                        selected = selectedTab,
-                        onSelect = { tab ->
-                            if (tab == AppTab.Settings) {
-                                // Settings is a panel over the current tab,
-                                // not a tab switch.
-                                sideMenuOpen = false
-                                settingsPanelOpen = true
-                            } else {
-                                val switched = tab != selectedTab
-                                selectedTab = tab
-                                initialTabApplied = true
-                                closeSideMenu(switched)
-                            }
-                        },
-                        onRefresh = { viewModel.refreshPlaylist() },
-                        retainedCount = retainedList.size,
-                        onRetainedClick = { closeSideMenu(false); showRetainedDialog = true },
-                        onDismiss = { closeSideMenu(false) },
-                        // Back from the main menu is the way out.
-                        onBack = {
-                            (menuActivity.findActivity() as? com.aeriotv.android.MainActivity)
-                                ?.requestExitPrompt("tv-side-menu")
-                        },
-                    )
-                }
-                if (settingsPanelOpen) {
-                    // Back on the category list closes the panel. Registered
-                    // before the panel's own content, so the page / push
-                    // handlers inside it (registered later) win while enabled.
-                    androidx.activity.compose.BackHandler {
-                        settingsPanelOpen = false
-                        closeSideMenu(false)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .zIndex(3f)
-                            .background(Color.Black.copy(alpha = 0.6f)),
-                    ) {
-                        CompositionLocalProvider(LocalTabIsActive provides true) {
-                            SettingsTabContent(playlistViewModel = viewModel, sidebarPanel = true)
-                        }
-                    }
-                }
+                    .settingsStashed.value = false
             }
         }
-        return
-    }
-
-    // GH #20: auto-hide the floating tab pill while scrolling down, reveal on
-    // scroll up. A NestedScrollConnection on the content host sees every
-    // tab's Lazy*/ScrollView deltas without hoisting any per-tab scroll
-    // state; it only OBSERVES (returns Offset.Zero) so list scrolling is
-    // untouched, and only reads vertical deltas so the guide's horizontal
-    // timeline can't toggle the bar. Hide needs a deliberate ~48dp downward
-    // pull; reveal is eager (~12dp up) plus any tab switch. Only the pill
-    // slides away -- the floating MiniPlayerRow card above it stays put,
-    // since hiding an actively playing stream's controls would orphan it.
-    var bottomBarVisible by remember { mutableStateOf(true) }
-    val density = LocalDensity.current
-    // Tablets (sw >= 600 dp) keep a static bottom pill like the iPad: no
-    // collapse into the mini pill on scroll. Phones keep collapsing.
-    val staticTabletBar = androidx.compose.ui.platform.LocalConfiguration.current
-        .smallestScreenWidthDp >= 600
-    LaunchedEffect(staticTabletBar) { if (staticTabletBar) bottomBarVisible = true }
-    // Tablets: stash the corner mini at the trailing edge while Settings is
-    // selected (iPad parity, HomeView.swift MiniPlayerSettingsStash). Every
-    // tab change drops a sliver peek, as the iPad resets settingsMiniPeek.
-    // Cleared on dispose so a player / search route never inherits it.
-    LaunchedEffect(selectedTab, staticTabletBar) {
-        com.aeriotv.android.feature.player.PhoneMiniChrome.settingsPeek.value = false
-        com.aeriotv.android.feature.player.MiniPlayerChrome
-            .settingsStashed.value = staticTabletBar && selectedTab == AppTab.Settings
-    }
-    androidx.compose.runtime.DisposableEffect(Unit) {
-        onDispose {
-            com.aeriotv.android.feature.player.MiniPlayerChrome.settingsStashed.value = false
-            com.aeriotv.android.feature.player.PhoneMiniChrome.settingsPeek.value = false
-        }
-    }
-    val bottomBarScrollConnection = remember(density, staticTabletBar) {
-        val hidePx = with(density) { 48.dp.toPx() }
-        val showPx = with(density) { 12.dp.toPx() }
-        object : NestedScrollConnection {
-            // Distance accumulated in the current direction; direction flips
-            // reset the opposite counter so slow jittery drags near a
-            // threshold can't oscillate the bar.
-            private var downDistance = 0f
-            private var upDistance = 0f
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val dy = available.y
-                if (staticTabletBar) return Offset.Zero
-                if (dy < -0.5f) {
-                    downDistance += -dy
-                    upDistance = 0f
-                    if (downDistance > hidePx) bottomBarVisible = false
-                } else if (dy > 0.5f) {
-                    upDistance += dy
-                    downDistance = 0f
-                    if (upDistance > showPx) bottomBarVisible = true
-                }
-                return Offset.Zero
-            }
-        }
-    }
-    // Switching tabs must always reveal the bar: the new tab may be short
-    // enough that no upward scroll is possible to bring it back.
-    LaunchedEffect(selectedTab) { bottomBarVisible = true }
-
-    // Every non-TV form factor (phone, tablet, foldable, either orientation)
-    // uses the floating bottom bar below (Logan 2026-10-04, iPad parity with
-    // Apple da4904e). Tablets keep their two-pane Settings and grid columns;
-    // only the bar placement is shared with the phone.
-
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        contentColor = MaterialTheme.colorScheme.onBackground,
-        // Each tab owns its own TopAppBar with its own status-bar inset. Without
-        // overriding here, Scaffold would also add a status-bar top inset to the
-        // content padding, producing a ~30dp empty gap above every TopAppBar.
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        // iOS 26 parity: no Scaffold bottomBar. The tab bar is a floating pill
-        // OVERLAYING the content (below), so every tab keeps the full screen
-        // height and content scrolls behind the pill, exactly like the iPhone
-        // app's Liquid-Glass bar. Tab screens already reserve ~104dp of bottom
-        // content padding, so their last rows scroll clear of the pill.
-    ) { padding ->
-      // The floating pill lays itself out ABOVE the system navigation inset
-      // (navigationBarsPadding + 10dp below), so a flat 96dp reserve left the
-      // last rows of a scrolling screen sitting under the pill on phones with
-      // a gesture bar or 3-button nav. Add that same system inset here so the
-      // reserve matches where the pill actually is.
-      val navBarInset = WindowInsets.navigationBars.asPaddingValues()
-          .calculateBottomPadding()
-      // Height of the whole bottom overlay (cast card, Kept Live row, mini
-      // row, tab pill, system inset), measured below. While a card or the
-      // Kept Live row shows it outgrows the flat reserve, and the reserve
-      // follows it so every tab's last row scrolls clear (Logan 2026-10-05,
-      // iPad parity). Bar alone stays at the flat reserve.
-      var bottomOverlayHeightPx by remember { mutableStateOf(0) }
-      val bottomOverlayHeight = with(LocalDensity.current) { bottomOverlayHeightPx.toDp() }
-      androidx.compose.runtime.CompositionLocalProvider(
-          LocalTabBarBottomInset provides maxOf(96.dp + navBarInset, bottomOverlayHeight + 12.dp),
-      ) {
-      androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(padding)
-                // GH #20: observe every tab's scroll for the bottom-bar hide.
-                .nestedScroll(bottomBarScrollConnection),
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
         ) {
             androidx.compose.runtime.CompositionLocalProvider(
                 com.aeriotv.android.feature.livetv.LocalRetainedChannelIds provides retainedIds,
@@ -981,204 +727,67 @@ fun MainScaffold(
                 onSelectTab = { selectedTab = it; initialTabApplied = true },
                 viewModel = viewModel,
                 visited = visitedTabs,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset { androidx.compose.ui.unit.IntOffset(sideMenuShift.value.roundToPx(), 0) }
+                    // The menu reseats focus here on close, and the
+                    // restorer puts it back on whatever had it.
+                    .focusRequester(sidebarContentFocus)
+                    .focusRestorer()
+                    .focusGroup(),
             )
             }
-            // No "Syncing" pill on phone: it sat on top of the Live TV
-            // header's sidebar button, and the tab already shows a spinner.
-            // Bottom overlay: floating mini-player card above the floating tab
-            // pill. The mini stays put while the pill slides away on scroll
-            // (GH #20) so an active stream's controls are never hidden.
-            // Phone floating mini (PhoneMiniPlayer.kt) is mounted at the
-            // activity root, so publish this overlay's measured top: the mini's
-            // bottom corners rest above the dock cards and tab bar.
-            androidx.compose.runtime.DisposableEffect(Unit) {
-                onDispose {
-                    com.aeriotv.android.feature.player.PhoneMiniChrome
-                        .bottomChromeTopPx.floatValue = 0f
-                }
+        }
+                    fullScreenOverlay.value?.invoke()
+            if (sideMenuOpen) {
+                val menuActivity = androidx.compose.ui.platform.LocalContext.current
+                TvSideMenu(
+                    tabs = tabs,
+                    selected = selectedTab,
+                    onSelect = { tab ->
+                        if (tab == AppTab.Settings) {
+                            // Settings is a panel over the current tab,
+                            // not a tab switch.
+                            sideMenuOpen = false
+                            settingsPanelOpen = true
+                        } else {
+                            val switched = tab != selectedTab
+                            selectedTab = tab
+                            initialTabApplied = true
+                            closeSideMenu(switched)
+                        }
+                    },
+                    onRefresh = { viewModel.refreshPlaylist() },
+                    retainedCount = retainedList.size,
+                    onRetainedClick = { closeSideMenu(false); showRetainedDialog = true },
+                    onDismiss = { closeSideMenu(false) },
+                    // Back from the main menu is the way out.
+                    onBack = {
+                        (menuActivity.findActivity() as? com.aeriotv.android.MainActivity)
+                            ?.requestExitPrompt("tv-side-menu")
+                    },
+                )
             }
-            androidx.compose.foundation.layout.Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onGloballyPositioned {
-                        com.aeriotv.android.feature.player.PhoneMiniChrome
-                            .bottomChromeTopPx.floatValue = it.boundsInRoot().top
-                        if (it.size.height != bottomOverlayHeightPx) {
-                            bottomOverlayHeightPx = it.size.height
-                        }
-                    }
-                    .navigationBarsPadding()
-                    .padding(bottom = 10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                // Tablets (sw >= 600 dp) and the measured width of the
-                // tablet's wrap-content tab capsule (set by the pill below).
-                val tabletNav = androidx.compose.ui.platform.LocalConfiguration.current
-                    .smallestScreenWidthDp >= 600
-                var navBarWidthPx by remember { mutableStateOf(0) }
-                // Every card above the nav bar takes exactly the bar's measured
-                // frame (Logan 2026-10-05, all platforms). Tablets: the floating
-                // pill's measured width, centered (screen width minus 32 dp, at
-                // most 620 dp, only until the pill has been measured).
-                val tabletCardWidth = if (tabletNav) {
-                    if (navBarWidthPx > 0) {
-                        with(LocalDensity.current) { navBarWidthPx.toDp() }
-                    } else {
-                        val screenW = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
-                        minOf(620.dp, (screenW - 32.dp).coerceAtLeast(0.dp))
-                    }
-                } else null
-                // Keep Recent Channels Live pill (Apple parity, Logan
-                // 2026-10-04): one compact line above the tab bar. Two or more
-                // kept: tapping the text opens the Kept Live list (the same
-                // dialog the TV circle uses). This scaffold is not composed
-                // under the fullscreen player; there the Options menu carries
-                // the Kept Live rows instead.
-                val showKept = retainedList.isNotEmpty()
-                val cardRowFrame = if (tabletCardWidth != null) {
-                    Modifier.width(tabletCardWidth)
-                } else {
-                    Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 20.dp)
+            if (settingsPanelOpen) {
+                // Back on the category list closes the panel. Registered
+                // before the panel's own content, so the page / push
+                // handlers inside it (registered later) win while enabled.
+                androidx.activity.compose.BackHandler {
+                    settingsPanelOpen = false
+                    closeSideMenu(false)
                 }
-                val dockGap = if (tabletNav) 12.dp else 8.dp
-                @Composable
-                fun DockKept() {
-                    if (showKept) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Row(cardRowFrame, verticalAlignment = Alignment.CenterVertically) {
-                                com.aeriotv.android.feature.livetv.RetainedChannelsPill(
-                                    retained = retainedList,
-                                    onTune = tuneRetained,
-                                    onOpenList = { showRetainedDialog = true },
-                                    onStop = retainedVm::stop,
-                                    onStopAll = retainedVm::stopAll,
-                                    capsule = tabletNav,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(dockGap))
-                    }
-                }
-                DockKept()
-                val miniState = miniPlayerState
-                // Phase 139 / audit #22: on TV the mini-player is a top-right
-                // video window (TvMiniPlayerOverlay, mounted at NavHost root).
-                // Suppress the phone-style card so we don't double-render the
-                // same session. The row is now only the fallback for an Active session whose
-                // video window is NOT the floating mini (phone Back and the
-                // top-strip swipe minimize into that window instead).
-                if (miniState is MiniPlayerSession.State.Active &&
-                    exoWindowMode != com.aeriotv.android.feature.player.ExoWindowState.Mode.Mini
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(3f)
+                        .background(Color.Black.copy(alpha = 0.6f)),
                 ) {
-                    val channel = miniState.channel
-                    val nowProgramme = state.epgByChannel[channel.guideMatchKey]?.nowPlaying()
-                    // The nav bar's frame, like every card above it.
-                    Box(
-                        modifier = (if (tabletCardWidth != null) Modifier.width(tabletCardWidth)
-                            else Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(horizontal = 20.dp))
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(
-                                1.dp,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                                RoundedCornerShape(20.dp),
-                            ),
-                    ) {
-                        MiniPlayerRow(
-                            channel = channel,
-                            nowProgramme = nowProgramme,
-                            isPaused = miniPaused,
-                            onResume = {
-                                val resumed = miniPlayerVm.resumeChannel()
-                                if (resumed != null) onChannelResume(resumed)
-                            },
-                            onTogglePause = {
-                                exoHolder.setPaused(!exoHolder.isPaused())
-                                miniPaused = exoHolder.isPaused()
-                            },
-                            onDismiss = {
-                                miniPlayerVm.dismiss()
-                                exoHolder.destroy()
-                                com.aeriotv.android.core.playback.AerioMediaPlaybackService
-                                    .stop(context)
-                            },
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-                run {
-                    // iOS 26 parity (Logan 2026-09-09): scrolling down does not
-                    // hide the bar, it MINIMIZES it to a small pill in the
-                    // bottom-left corner showing the active tab's icon. Tapping
-                    // the pill or scrolling up brings the full bar back.
-                    // Right-to-left collapse INTO the mini pill (Logan
-                    // 2026-09-09, both platforms): the bar scales toward the
-                    // pill's centre and fades over the last stretch while the
-                    // pill grows in; restore plays it back.
-                    val collapse by animateFloatAsState(
-                        targetValue = if (bottomBarVisible) 0f else 1f,
-                        // A touch slower than the iPhone's 320 ms so the
-                        // collapse reads (Logan 2026-09-09).
-                        animationSpec = tween(420),
-                        label = "tabBarCollapse",
-                    )
-                    val density = LocalDensity.current
-                    var barSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-                    Box(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                        if (collapse < 0.999f) {
-                            val pillW = with(density) { 64.dp.toPx() }
-                            val pillH = with(density) { 52.dp.toPx() }
-                            // The bar's left edge sits 20 dp in; the pill's centre
-                            // is 32 dp further along.
-                            val pivotX = with(density) { 32.dp.toPx() } / barSize.width.coerceAtLeast(1)
-                            FloatingTabBar(
-                                tabs = tabs,
-                                selected = selectedTab,
-                                // Re-tap of the selected tab (see TabReselect):
-                                // pop to that tab's root, else scroll it to the
-                                // top. Either way the bar comes back out of its
-                                // scroll-collapsed state, so the gesture never
-                                // leaves the user looking at a hidden bar.
-                                onSelect = {
-                                    if (it == selectedTab) {
-                                        bottomBarVisible = true
-                                        TabReselect.emit(it)
-                                    } else {
-                                        selectedTab = it
-                                        initialTabApplied = true
-                                    }
-                                },
-                                tablet = tabletNav,
-                                modifier = Modifier
-                                    .onSizeChanged { barSize = it; navBarWidthPx = it.width }
-                                    .graphicsLayer {
-                                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(pivotX.coerceIn(0f, 1f), 0.5f)
-                                        val sx = 1f - collapse * (1f - pillW / barSize.width.coerceAtLeast(1))
-                                        val sy = 1f - collapse * (1f - pillH / barSize.height.coerceAtLeast(1))
-                                        scaleX = sx; scaleY = sy
-                                        alpha = 1f - ((collapse - 0.5f) / 0.45f).coerceIn(0f, 1f)
-                                    },
-                            )
-                        }
-                        if (collapse > 0.001f) {
-                            val reveal = ((collapse - 0.35f) / 0.65f).coerceIn(0f, 1f)
-                            MinimizedTabPill(
-                                tab = selectedTab,
-                                onClick = { bottomBarVisible = true },
-                                modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .padding(start = 20.dp)
-                                    .graphicsLayer { alpha = reveal; scaleX = 0.6f + 0.4f * reveal; scaleY = 0.6f + 0.4f * reveal },
-                            )
-                        }
+                    CompositionLocalProvider(LocalTabIsActive provides true) {
+                        SettingsTabContent(playlistViewModel = viewModel, sidebarPanel = true)
                     }
                 }
             }
         }
-      }
-      }
     }
 }
 
@@ -1210,160 +819,6 @@ internal fun Modifier.floatingNavChrome(shape: androidx.compose.ui.graphics.Shap
  * NavigationBar. Wrap-content width, surface fill with the shared accent
  * hairline, selected tab gets a soft accent capsule behind icon + label.
  */
-
-@Composable
-private fun FloatingTabBar(
-    tabs: List<AppTab>,
-    selected: AppTab,
-    onSelect: (AppTab) -> Unit,
-    modifier: Modifier = Modifier,
-    tablet: Boolean = false,
-) {
-    if (tablet) {
-        TabletTabBar(tabs, selected, onSelect, modifier)
-        return
-    }
-    // 2026-07-12 (user report: mistapping channels behind the pill when
-    // changing tabs): sized up to the iPhone bar's proportions - the pill
-    // now spans the width minus side margins with evenly distributed,
-    // taller tab targets instead of a compact wrap-content cluster.
-    // Phone-sized pill on every window: on a foldable's inner display or a
-    // landscape phone it centres at 600 dp instead of spanning the width
-    // (Logan 2026-09-08: "WAY too big").
-    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-    Row(
-        modifier = modifier
-            .widthIn(max = 600.dp)
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .floatingNavChrome(RoundedCornerShape(36.dp))
-            // iPhone bar height (~53 pt): the Android pill measured ~69 dp
-            // (Logan 2026-09-09). Outer 6 + item 5 + icon 22 + label 12 + 5 + 6.
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        tabs.forEach { tab ->
-            val isSel = tab == selected
-            androidx.compose.foundation.layout.Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                        else Color.Transparent,
-                    )
-                    .clickable { onSelect(tab) }
-                    .padding(vertical = 5.dp),
-            ) {
-                Icon(
-                    imageVector = if (isSel) tab.iconSelected else tab.iconUnselected,
-                    contentDescription = tab.label,
-                    tint = if (isSel) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
-                Text(
-                    text = tab.label,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    // One line at every Text Size: the bar grows taller with
-                    // the text, a long label ellipsizes instead of wrapping.
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isSel) MaterialTheme.colorScheme.textAccent
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-    }
-}
-
-/** Tablet tab bar, iPad parity (Logan 2026-10-04): a centered wrap-content
- *  capsule 56 dp tall, each tab laid out icon then title, 28 dp between tab
- *  contents and 24 dp from the capsule edges. The selected tab gets its own
- *  accent capsule (22 percent) with accent icon and title; the rest use the
- *  primary text color. Same floating chrome as the phone bar. */
-@Composable
-private fun TabletTabBar(
-    tabs: List<AppTab>,
-    selected: AppTab,
-    onSelect: (AppTab) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val cs = MaterialTheme.colorScheme
-    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Row(
-            modifier = modifier
-                .height(56.dp)
-                .floatingNavChrome(RoundedCornerShape(28.dp))
-                // 10 dp outer + 14 dp item padding = 24 dp to the edge;
-                // 14 + 14 between neighbours = 28 dp between tab contents.
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            tabs.forEach { tab ->
-                val isSel = tab == selected
-                val tint = if (isSel) cs.primary else cs.onSurface
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(if (isSel) cs.primary.copy(alpha = 0.22f) else Color.Transparent)
-                        .clickable { onSelect(tab) }
-                        .padding(horizontal = 14.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isSel) tab.iconSelected else tab.iconUnselected,
-                        contentDescription = null,
-                        tint = tint,
-                        modifier = Modifier.size(22.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = tab.label,
-                        fontSize = 17.sp,
-                        maxLines = 1,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isSel) cs.textAccent else cs.onSurface,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** The minimized tab bar: one capsule in the bottom-left corner carrying the
- *  active tab's icon, the way the iOS 26 bar collapses when the content
- *  scrolls down. Same height as the full pill so nothing shifts. */
-@Composable
-private fun MinimizedTabPill(
-    tab: AppTab,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth()) {
-        androidx.compose.foundation.layout.Box(
-            contentAlignment = Alignment.Center,
-            modifier = modifier
-                .size(width = 64.dp, height = 52.dp)
-                .floatingNavChrome(RoundedCornerShape(26.dp))
-                .clickable(onClick = onClick),
-        ) {
-            Icon(
-                imageVector = tab.iconSelected,
-                contentDescription = "Show tab bar, ${tab.label}",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-    }
-}
-
 
 /**
  * Shared body for both the phone (bottom-nav Scaffold) and TV (top-tab) shells.
@@ -1575,7 +1030,6 @@ private fun SettingsTabContent(
     // Phase B3: the tablet list-detail host. Expanded width alone is not the
     // gate -- a landscape phone is "expanded" but far too short -- and TV keeps
     // the stacked layout until B4 lands the rail with its focus contract.
-    val isTvDevice = rememberIsTvDevice()
     val viewport = rememberViewport()
     // Settings phase 2: the gate is MEDIUM width and up, so an unfolded
     // foldable gets the sidebar. `settingsTwoPane` is Settings' own flag; the
@@ -1584,9 +1038,8 @@ private fun SettingsTabContent(
     val paneEligible = viewport.settingsTwoPane
     // Same eligibility, two hosts: touch tablets get the tap sidebar (B3), TV
     // gets the 10-foot rail with its focus contract (B4).
-    val tabletTwoPane = paneEligible && !isTvDevice
-    val tvRail = paneEligible && isTvDevice
-    val twoPane = tabletTwoPane || tvRail
+    val tvRail = paneEligible
+    val twoPane = tvRail
     var selection by rememberSettingsPaneSelection(nav = nav, twoPane = twoPane, initial = if (tvRail) SettingsRoute.Root else DefaultSettingsPaneSelection)
     // True for the route the pane is BASELINED on; pushes above it render as
     // ordinary screens and keep their own back affordance.
@@ -1669,12 +1122,9 @@ private fun SettingsTabContent(
             }
         }
     }
-    val traceBackTv = rememberLiveTvFormFactor().isTv
     androidx.activity.compose.BackHandler(enabled = nav.canPop) {
         val cur = nav.current
-        if (traceBackTv) {
-            com.aeriotv.android.ui.tv.TvFocusTrace.settingsBack("settings-nav pop ${cur?.let { com.aeriotv.android.feature.settings.encodeSettingsRoute(it) }}")
-        }
+        com.aeriotv.android.ui.tv.TvFocusTrace.settingsBack("settings-nav pop ${cur?.let { com.aeriotv.android.feature.settings.encodeSettingsRoute(it) }}")
         // The wizard's stages advance IN PLACE rather than nesting, so Back
         // from Configure returns to ChooseType instead of leaving the flow.
         if (cur is SettingsRoute.AddPlaylist && cur.step is AddPlaylistWizardStep.Configure) {
@@ -1942,7 +1392,6 @@ private fun SettingsTabContent(
                 },
                 pushed = route,
                 sections = visibleSettingsSections(
-                    isTv = true,
                     updaterEnabled = updaterEnabled,
                     role = activeRole,
                 ),
@@ -1960,7 +1409,6 @@ private fun SettingsTabContent(
                 },
                 pushed = route,
                 sections = visibleSettingsSections(
-                    isTv = true,
                     updaterEnabled = updaterEnabled,
                     role = activeRole,
                 ),
@@ -1969,37 +1417,6 @@ private fun SettingsTabContent(
                 // Plan B2: the TV takeover set. These keep the whole screen so
                 // their keyboard / IME plumbing is untouched.
                 takeover = ::isSettingsTakeover,
-                detail = { renderRoute(it) },
-            )
-        } else if (tabletTwoPane) {
-            // Rev 2: sidebar browsing mutates `selection` and never pushes, so
-            // Back can only unwind real pushes.
-            SettingsTwoPaneHost(
-                selection = selection,
-                onSelect = { picked ->
-                    // Leaving a pane abandons anything pushed above it; the new
-                    // pane starts at its own baseline (Apple rail behavior).
-                    nav.popToRoot()
-                    selection = picked
-                },
-                pushed = route,
-                sections = visibleSettingsSections(
-                    isTv = isTvDevice,
-                    updaterEnabled = updaterEnabled,
-                    role = activeRole,
-                ),
-                activePlaylistName = playlistState.playlist?.name,
-                syncEnabled = syncEnabled,
-                // Log lines and license texts want the whole width, and the
-                // Add Playlist wizard is a modal flow of its own; everything
-                // else (playlist detail, Edit Playlist, Add More Categories,
-                // section sub-pages) renders in the pane with the sidebar up.
-                takeover = {
-                    it is SettingsRoute.LogViewer ||
-                        it is SettingsRoute.Licenses ||
-                        it is SettingsRoute.AddPlaylist
-                },
-                split = settingsSplit,
                 detail = { renderRoute(it) },
             )
         } else {

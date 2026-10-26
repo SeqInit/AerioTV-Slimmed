@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,7 +55,6 @@ import com.aeriotv.android.ui.settings.SettingsDetailTopBar
 import com.aeriotv.android.ui.settings.SettingsNavRow
 import com.aeriotv.android.ui.settings.SettingsSectionFooter
 import com.aeriotv.android.ui.settings.SettingsToggleRow
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import kotlinx.coroutines.launch
 
 /**
@@ -186,7 +184,6 @@ fun ManageProfilesPage(onBack: () -> Unit) {
 /** Settings > Playlists > (Dispatcharr playlist): Admin only, Android TV only. */
 @Composable
 fun AskAtLaunchRow(playlistId: String) {
-    if (!rememberIsTvDevice()) return
     val vm: ProfilesViewModel = hiltViewModel()
     val activeId by vm.activeProfileId(playlistId).collectAsStateWithLifecycle(initialValue = null)
     if (activeId == null || !vm.isRoleAdmin(playlistId)) return

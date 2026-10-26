@@ -103,12 +103,11 @@ class RoleRulesTest {
     }
 
     @Test fun launchPicker() {
-        assertTrue(RoleRules.showLaunchPicker(true, true, true, 2, A))
-        assertTrue(RoleRules.showLaunchPicker(true, true, true, 3, null))
-        assertFalse(RoleRules.showLaunchPicker(false, true, true, 2, A))
-        assertFalse(RoleRules.showLaunchPicker(true, false, true, 2, A))
-        assertFalse(RoleRules.showLaunchPicker(true, true, false, 2, A))
-        assertFalse(RoleRules.showLaunchPicker(true, true, true, 1, A))
-        assertFalse(RoleRules.showLaunchPicker(true, true, true, 2, C))
+        assertTrue(RoleRules.showLaunchPicker(true, true, 2, A))
+        assertTrue(RoleRules.showLaunchPicker(true, true, 3, null))
+        assertFalse(RoleRules.showLaunchPicker(false, true, 2, A))
+        assertFalse(RoleRules.showLaunchPicker(true, false, 2, A))
+        assertFalse(RoleRules.showLaunchPicker(true, true, 1, A))
+        assertFalse(RoleRules.showLaunchPicker(true, true, 2, C))
     }
 }

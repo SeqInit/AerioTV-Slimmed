@@ -48,7 +48,6 @@ import com.aeriotv.android.feature.livetv.RecordProgramSheet
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.feature.playlist.nowPlaying
 import com.aeriotv.android.feature.settings.SettingsViewModel
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
@@ -80,7 +79,6 @@ fun FavoritesTabContent(
     )
     val showChannelLogos by settingsVm.showChannelLogos.collectAsStateWithLifecycle(initialValue = true)
     val showChannelNumbers by settingsVm.showChannelNumbers.collectAsStateWithLifecycle(initialValue = true)
-    val isTv = rememberIsTvDevice()
     val favoriteIds by remember(favorites) {
         derivedStateOf { favorites.asSequence().map { it.channelId }.toHashSet() }
     }
@@ -131,7 +129,7 @@ fun FavoritesTabContent(
     // TV: Favorites is the GUIDE filtered to the starred channels, not a
     // list (Logan 2026-09-02: "should definitely be addressed"). The phone
     // keeps the reorderable list below.
-    if (isTv && channels.isNotEmpty()) {
+    if (channels.isNotEmpty()) {
         com.aeriotv.android.feature.livetv.grid.GuideScreen(
             onChannelClick = onChannelClick,
             viewMode = com.aeriotv.android.feature.livetv.LiveTVViewMode.Guide,
@@ -256,7 +254,6 @@ fun FavoritesTabContent(
         AddToCollectionFlow(
             channelId = chId,
             channelName = chName,
-            isTv = isTv,
             collections = collections,
             onToggleMember = collectionsVm::toggleMember,
             onCreate = collectionsVm::create,

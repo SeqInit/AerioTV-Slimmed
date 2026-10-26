@@ -5,14 +5,11 @@ import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,37 +18,25 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Schedule
 import com.aeriotv.android.ui.scale.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import com.aeriotv.android.ui.scale.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,16 +45,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -78,21 +60,12 @@ import coil3.compose.AsyncImage
 import com.aeriotv.android.core.data.ProgramInfoTarget
 import com.aeriotv.android.core.data.RecordingFacts
 import com.aeriotv.android.feature.livetv.ProgramInfoSheet
-import com.aeriotv.android.feature.livetv.rememberLiveTvFormFactor
-import com.aeriotv.android.feature.movies.AlphabetRail
-import com.aeriotv.android.feature.movies.PhoneCardDeck
-import com.aeriotv.android.feature.movies.PageSectionTitle
-import com.aeriotv.android.feature.movies.PageRow
-import com.aeriotv.android.feature.movies.PageDeck
-import com.aeriotv.android.feature.movies.MediaPageScaffold
-import com.aeriotv.android.feature.movies.nearestAvailable
 import com.aeriotv.android.feature.movies.railLetters
 import com.aeriotv.android.feature.movies.stripQualityPrefix
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.feature.settings.SettingsViewModel
 import com.aeriotv.android.feature.watchprogress.WatchProgressViewModel
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.text.Normalizer
@@ -209,7 +182,7 @@ fun DvrMediaTabContent(
     val playlistState by playlistVm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val compact = rememberLiveTvFormFactor().widthClass == WindowWidthSizeClass.Compact
+
     val sortWire by settingsVm.dvrSortOrder.collectAsStateWithLifecycle(initialValue = "title")
     val sortOrder = DvrSortOrder.fromWire(sortWire)
     val recent by watchVm.observeRecent(80).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -294,8 +267,7 @@ fun DvrMediaTabContent(
     // Delete from Server. Local rows are this device's own files and are
     // never gated (Logan 2026-09-15).
     val canManageDvr = com.aeriotv.android.ui.LocalDvrAccess.current == "manage"
-    var showSort by remember { mutableStateOf(false) }
-    val gridState = if (com.aeriotv.android.ui.settings.rememberIsTvDevice()) com.aeriotv.android.ui.tv.rememberTvMediaGridState() else rememberLazyGridState()
+    val gridState = com.aeriotv.android.ui.tv.rememberTvMediaGridState()
     // Re-tap of the DVR tab you are already on: back to the top of the list
     // (nothing is pushed inside this tab; recordings open as their own route,
     // which hides the bar). Phone and tablet only -- TV never emits.
@@ -428,103 +400,34 @@ fun DvrMediaTabContent(
                 menu = { close -> menuItems(rec, close) })
         }
         val kindPills = DvrKind.entries.filter { it in kindsPresent }
-        if (rememberLiveTvFormFactor().isTv) {
-            TvDvrPage(
-                gridState = gridState, now = now,
-                continueWatching = continueWatching, recordingNow = recordingNow, scheduled = scheduled,
-                recentRecordings = recentRecordings, filteredLibrary = filteredLibrary, available = available,
-                channelName = channelName, channelLogo = channelLogo, progressOf = progressOf,
-                kindPills = kindPills, selectedKind = selectedKind, onKind = { selectedKind = it },
-                sortOrder = sortOrder, onSort = { settingsVm.setDvrSortOrder(it.wire) },
-                searchActive = searchActive, query = query, isSearching = isSearching,
-                onQueryChange = { query = it },
-                onSearchToggle = { searchActive = !searchActive; if (!searchActive) query = "" },
-                // tvOS clearSearch() clears the text AND closes the field
-                // (DVRView.swift:161-164).
-                onClearSearch = { query = ""; searchActive = false },
-                onFilter = { showManageChannels = true }, filterActive = hiddenChannels.isNotEmpty(),
-                filterOpen = showManageChannels,
-                menuActions = ::menuActions,
-                onPlay = ::play, onPlayFromStart = ::playFromStart, onJumpToLive = ::jumpToLive,
-                onStop = { rec -> scope.launch { viewModel.stopRecording(rec) } }, onInfo = ::showInfo,
-                isLoading = state.isLoading,
-                canManageDvr = canManageDvr,
-            )
-        } else
-        MediaPageScaffold(
-            gridState = gridState,
-            compact = compact,
-            decks = listOf(
-                PageDeck(
-                    if (continueWatching.isNotEmpty() && continueWatching.all { it.effectiveStatus(now) == DvrViewModel.Recording.Status.Recording }) "Recording Now" else "Continue Watching",
-                    continueWatching, { it.id }, heroCard,
-                ),
-                PageDeck("Recently Recorded", if (recentRecordings.size > 1) recentRecordings else emptyList(), { it.id }, recentCard),
-            ),
-            rows = if (scheduled.isEmpty()) emptyList() else listOf(PageRow("scheduled") {
-                Column {
-                    PageSectionTitle("Scheduled")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(scheduled.size, key = { scheduled[it].id }) { i ->
-                            val rec = scheduled[i]
-                            Box(modifier = Modifier.width(150.dp)) {
-                                DvrPosterCard(rec, channelLogo(rec), 0f, now, onClick = { showInfo(rec) }, menu = { close -> menuItems(rec, close) })
-                            }
-                        }
-                    }
-                }
-            }),
-            headerTitle = if (isSearching) "Results" else "All Recordings",
-            headerCount = filteredLibrary.size,
-            sortMenu = {
-                DropdownMenu(expanded = showSort, onDismissRequest = { showSort = false }) {
-                    DvrSortOrder.entries.forEach { o ->
-                        DropdownMenuItem(
-                            text = { Text(o.label) },
-                            trailingIcon = { if (o == sortOrder) Icon(Icons.Filled.Check, contentDescription = null) },
-                            onClick = { showSort = false; settingsVm.setDvrSortOrder(o.wire) },
-                        )
-                    }
-                }
-            },
-            onSort = { showSort = true },
-            onFilter = { showManageChannels = true },
-            searchEnabled = true,
-            searchActive = searchActive,
-            query = query,
+        TvDvrPage(
+            gridState = gridState, now = now,
+            continueWatching = continueWatching, recordingNow = recordingNow, scheduled = scheduled,
+            recentRecordings = recentRecordings, filteredLibrary = filteredLibrary, available = available,
+            channelName = channelName, channelLogo = channelLogo, progressOf = progressOf,
+            kindPills = kindPills, selectedKind = selectedKind, onKind = { selectedKind = it },
+            sortOrder = sortOrder, onSort = { settingsVm.setDvrSortOrder(it.wire) },
+            searchActive = searchActive, query = query, isSearching = isSearching,
             onQueryChange = { query = it },
             onSearchToggle = { searchActive = !searchActive; if (!searchActive) query = "" },
-            searchPlaceholder = "Search recordings",
-            isSearching = isSearching,
-            pills = if (kindPills.size > 1) kindPills.map { it.label } else emptyList(),
-            selectedPill = selectedKind?.label,
-            onPill = { label -> selectedKind = kindPills.firstOrNull { it.label == label } },
-            gridItems = filteredLibrary,
-            gridKey = { it.id },
-            cell = { rec -> DvrPosterCard(rec, channelLogo(rec), progressOf(rec), now, onClick = { play(rec) }, menu = { close -> menuItems(rec, close) }) },
-            emptyContent = {
-                if (state.isLoading) CircularProgressIndicator()
-                else Text("No Recordings", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            },
-            railLetters = available,
-            railIndexOf = { letter -> filteredLibrary.indexOfFirst { bucket(it.title) == letter } },
-            isRefreshing = state.isLoading && recordings.isNotEmpty(),
-            onRefresh = { viewModel.refresh() },
+            // tvOS clearSearch() clears the text AND closes the field
+            // (DVRView.swift:161-164).
+            onClearSearch = { query = ""; searchActive = false },
+            onFilter = { showManageChannels = true }, filterActive = hiddenChannels.isNotEmpty(),
+            filterOpen = showManageChannels,
+            menuActions = ::menuActions,
+            onPlay = ::play, onPlayFromStart = ::playFromStart, onJumpToLive = ::jumpToLive,
+            onStop = { rec -> scope.launch { viewModel.stopRecording(rec) } }, onInfo = ::showInfo,
+            isLoading = state.isLoading,
+            canManageDvr = canManageDvr,
         )
     }
 
     if (showManageChannels) {
-        if (rememberLiveTvFormFactor().isTv) {
-            com.aeriotv.android.ui.tv.TvFilterPage(
-                groups = channelNames,
-                hiddenGroups = hiddenChannels,
-                onChange = { settingsVm.setHiddenDvrChannels(it) },
-                onDismiss = { showManageChannels = false },
-            )
-        } else com.aeriotv.android.feature.livetv.ManageGroupsSheet(
-            allGroups = channelNames,
+        com.aeriotv.android.ui.tv.TvFilterPage(
+            groups = channelNames,
             hiddenGroups = hiddenChannels,
-            onSave = { settingsVm.setHiddenDvrChannels(it) },
+            onChange = { settingsVm.setHiddenDvrChannels(it) },
             onDismiss = { showManageChannels = false },
         )
     }
@@ -588,51 +491,6 @@ private fun metaLine(rec: Rec, now: Long): String {
     }
     val se = if ((rec.season ?: 0) > 0) "S${rec.season} E${rec.episode ?: 0}" else null
     return listOfNotNull(day, second, se).joinToString(" · ")
-}
-
-/** 2:3 poster (Apple parity: DVRPosterCard): art or channel logo, REC badge, progress bar, two-line title, meta line. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun DvrPosterCard(
-    rec: Rec, channelLogo: String?, progress: Float, now: Long,
-    onClick: () -> Unit,
-    menu: @Composable (close: () -> Unit) -> Unit,
-) {
-    var menuOpen by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = { menuOpen = true }),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface)) {
-            when {
-                !rec.posterUrl.isNullOrBlank() -> AsyncImage(model = rec.posterUrl, contentDescription = rec.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                !channelLogo.isNullOrBlank() -> AsyncImage(model = channelLogo, contentDescription = rec.title, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(18.dp))
-                else -> Text(rec.title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 4, modifier = Modifier.align(Alignment.Center).padding(8.dp))
-            }
-            if (rec.effectiveStatus(now) == DvrViewModel.Recording.Status.Recording) {
-                Row(
-                    modifier = Modifier.align(Alignment.TopStart).padding(5.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.7f)).padding(horizontal = 5.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(Color(0xFFFF4757)))
-                    Text("REC", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color(0xFFFF4757))
-                }
-            }
-            if (progress > 0f) {
-                Box(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.45f))) {
-                    Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).background(MaterialTheme.colorScheme.primary))
-                }
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) { menu { menuOpen = false } }
-        }
-        // Centered under the poster (Logan 2026-09-10, all platforms).
-        Text(rec.title, fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 14.sp,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            // Two 14sp lines (+2dp): sp-derived so the grid stays aligned at every Text Size.
-            modifier = Modifier.fillMaxWidth().height(with(androidx.compose.ui.platform.LocalDensity.current) { 28.sp.toDp() } + 2.dp))
-        Text(metaLine(rec, now), fontSize = 10.sp.subtext(), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp))
-    }
 }
 
 /** Hero card (Apple parity: DVRHero on iPhone, inDeck). Tap on the card opens Program Info. */
@@ -710,7 +568,6 @@ private fun HeroRound(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
         contentAlignment = Alignment.Center,
     ) { Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(18.dp)) }
 }
-
 
 /**
  * DVR on Android TV: the shared [com.aeriotv.android.feature.movies.tv.TvMediaPage]

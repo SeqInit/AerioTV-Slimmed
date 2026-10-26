@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,7 +29,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
@@ -53,7 +50,6 @@ import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -85,11 +81,8 @@ import com.aeriotv.android.core.tv.TvQrLink
 import com.aeriotv.android.core.tv.TvQrLinkDialog
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.ui.settings.SettingsNavRow
-import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsShowsBackArrow
 import com.aeriotv.android.ui.settings.settingsFormWidth
-import com.aeriotv.android.ui.settings.settingsEyebrowStyle
 import com.aeriotv.android.ui.settings.settingsFootnoteStyle
 import com.aeriotv.android.ui.settings.settingsRowTitleStyle
 import com.aeriotv.android.ui.settings.settingsRowValueStyle
@@ -197,12 +190,11 @@ fun SettingsScreen(
 
     // TV: external links surface as a QR dialog (no browser on Android TV);
     // phones keep the ACTION_VIEW intent in openUrl.
-    val isTv = rememberIsTvDevice()
     var qrLink by remember { mutableStateOf<TvQrLink?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Apple TV draws no page title above the first section.
-        if (isTv && com.aeriotv.android.ui.settings.LocalSettingsInPane.current) {
+        if (com.aeriotv.android.ui.settings.LocalSettingsInPane.current) {
             Spacer(Modifier.height(12.dp))
         } else
         CenterAlignedTopAppBar(
@@ -256,7 +248,7 @@ fun SettingsScreen(
                 // TV: keep the last row above the ~5% bottom overscan band.
                 // Phones reserve the floating tab pill / cast controls the same
                 // way every other scrolling surface does.
-                bottom = if (rememberIsTvDevice()) 28.dp else LocalTabBarBottomInset.current,
+                bottom = 28.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(com.aeriotv.android.ui.settings.SettingsCardMetrics.sectionSpacing),
         ) {
@@ -267,7 +259,7 @@ fun SettingsScreen(
                     activeId = activeId,
                     // In a pane the top bar already reads "Playlists".
                     showHeader = fullRoot,
-                    paneHost = content == SettingsRootContent.PlaylistsOnly || isTv,
+                    paneHost = true,
                     // Phase 3, item 5: selecting a playlist row opens its
                     // DETAIL on every form factor, phone included. Rev 2 had
                     // already done this for the rail/sidebar hosts because
@@ -293,7 +285,7 @@ fun SettingsScreen(
             // hosts cannot drift from this list (plan B7: frozen canon).
             if (fullRoot) {
                 items(
-                    items = visibleSettingsSections(isTv = isTv, updaterEnabled = updaterEnabled, role = activeRole),
+                    items = visibleSettingsSections(updaterEnabled = updaterEnabled, role = activeRole),
                     key = { it.key },
                 ) { group ->
                     SettingsSectionGroup(
@@ -346,28 +338,20 @@ fun SettingsScreen(
                     },
                     onOpenWebsite = {
                         val url = "https://github.com/jonzey231/AerioTV-Android"
-                        if (isTv) {
-                            qrLink = TvQrLink(
-                                title = "Developer Website",
-                                caption = "Scan with your phone to open this page.",
-                                url = url,
-                            )
-                        } else {
-                            openUrl(context, url)
-                        }
+                        qrLink = TvQrLink(
+                            title = "Developer Website",
+                            caption = "Scan with your phone to open this page.",
+                            url = url,
+                        )
                     },
                     onOpenLicenses = onOpenLicenses,
                     onReportIssue = {
                         val url = "https://github.com/jonzey231/AerioTV-Android/issues/new"
-                        if (isTv) {
-                            qrLink = TvQrLink(
-                                title = "Report an Issue",
-                                caption = "Scan with your phone to open this page.",
-                                url = url,
-                            )
-                        } else {
-                            openUrl(context, url)
-                        }
+                        qrLink = TvQrLink(
+                            title = "Report an Issue",
+                            caption = "Scan with your phone to open this page.",
+                            url = url,
+                        )
                     },
                 )
             }
@@ -401,7 +385,6 @@ private fun PlaylistsSection(
     onEdit: (PlaylistEntity) -> Unit,
     onDelete: (PlaylistEntity) -> Unit,
 ) {
-    val isTv = rememberIsTvDevice()
     // Apple's row context menu (long press): on tvOS "Use This Playlist"
     // (only with 2+ playlists), Edit, Delete; on iPhone/iPad Edit, Delete,
     // because the radio already activates there.
@@ -439,7 +422,7 @@ private fun PlaylistsSection(
                             menuFor = pl
                             tvGuard.arm()
                         },
-                        onActivate = if (isTv) null else onActivate?.let { act -> { act(pl) } },
+                        onActivate = null,
                     )
                 }
                 RowDivider()
@@ -456,28 +439,19 @@ private fun PlaylistsSection(
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (isTv) {
-                    // Apple TV: a tinted tile holding a filled circle-plus.
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AddCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp),
-                        )
-                    }
-                } else {
+                // Apple TV: a tinted tile holding a filled circle-plus.
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
-                        imageVector = Icons.Filled.Add,
+                        imageVector = Icons.Filled.AddCircle,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                 }
                 Spacer(Modifier.size(10.dp))
@@ -494,32 +468,8 @@ private fun PlaylistsSection(
         if (playlists.isNotEmpty()) {
             // Apple's playlistFooterHint, verbatim per platform: the TV row
             // is one focus stop with no circle, so tvOS points at Actions.
-            if (isTv) {
-                // tvOS pane: plain sentence, no glyph (Apple Phase 3 item 10).
-                SectionFooter("Select a playlist to open it; Set Active is in its Actions")
-            } else {
-                // iPhone/iPad: Label with the list.bullet glyph. Apple's second
-                // line ("Tap Edit to reorder") is NOT mirrored: Apple removed
-                // reordering on 2026-09-18 and the hint now names a control
-                // that does not exist on either platform.
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.List,
-                        contentDescription = null,
-                        tint = com.aeriotv.android.ui.settings.settingsDimTint(),
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(Modifier.size(6.dp))
-                    Text(
-                        text = "Tap a playlist to open it, or its circle to make it active.",
-                        style = MaterialTheme.typography.labelSmall.subtext(),
-                        color = com.aeriotv.android.ui.settings.settingsDimTint(),
-                    )
-                }
-            }
+            // tvOS pane: plain sentence, no glyph (Apple Phase 3 item 10).
+            SectionFooter("Select a playlist to open it; Set Active is in its Actions")
         }
     }
 
@@ -528,7 +478,7 @@ private fun PlaylistsSection(
         com.aeriotv.android.core.tv.TvActionMenuDialog(
             title = pl.name,
             actions = buildList {
-                if (isTv && playlists.size > 1) {
+                if (playlists.size > 1) {
                     // Apple disables this item on the active row and relabels
                     // it; a disabled entry has no Android menu equivalent, so
                     // the active row simply omits it.
@@ -596,7 +546,6 @@ private fun PlaylistRow(
     /** Non-null on touch: the radio becomes its own 44dp control. */
     onActivate: (() -> Unit)? = null,
 ) {
-    val isTv = rememberIsTvDevice()
     var focused by remember { mutableStateOf(false) }
     Box {
         Row(
@@ -625,27 +574,7 @@ private fun PlaylistRow(
                     modifier = Modifier.size(20.dp),
                 )
             }
-            if (!isTv && onActivate != null && !isActive) {
-                // 44dp target without changing the drawn size: requiredSize
-                // overflows the row's own 14dp vertical padding box.
-                Box(
-                    modifier = Modifier.size(20.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .requiredSize(44.dp)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = onActivate,
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) { glyph() }
-                }
-            } else {
-                glyph()
-            }
+            glyph()
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 // Logan 2026-09-18, one row on both platforms: name, then
@@ -680,7 +609,7 @@ private fun PlaylistRow(
             Box(
                 modifier = Modifier
                     .padding(horizontal = 8.dp)
-                    .size(if (isTv) 12.dp else 8.dp)
+                    .size(12.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
                     .background(
                         if (playlist.channelCount > 0) MaterialTheme.colorScheme.primary
@@ -784,7 +713,6 @@ private fun AboutSection(
     onReportIssue: () -> Unit,
     onOpenLicenses: () -> Unit,
 ) {
-    val isTv = rememberIsTvDevice()
     Column {
         if (showHeader) {
             SectionHeader("About")
@@ -808,17 +736,6 @@ private fun AboutSection(
             // Copy to Clipboard, Open Source Licenses, Developer Website,
             // Report an Issue; tvOS has no Copy (no clipboard to paste into)
             // and ends with Open Source Licenses.
-            if (!isTv) {
-                AboutActionRow("Copy to Clipboard", Icons.Filled.ContentCopy, onClick = onCopy)
-                RowDivider()
-                AboutActionRow(
-                    "Open Source Licenses",
-                    Icons.Outlined.Description,
-                    onClick = onOpenLicenses,
-                    chevron = true,
-                )
-                RowDivider()
-            }
             AboutActionRow(
                 "Developer Website",
                 Icons.Outlined.Link,
@@ -833,15 +750,13 @@ private fun AboutSection(
                 onClick = onReportIssue,
                 external = true,
             )
-            if (isTv) {
-                RowDivider()
-                AboutActionRow(
-                    "Open Source Licenses",
-                    Icons.Outlined.Description,
-                    onClick = onOpenLicenses,
-                    chevron = true,
-                )
-            }
+            RowDivider()
+            AboutActionRow(
+                "Open Source Licenses",
+                Icons.Outlined.Description,
+                onClick = onOpenLicenses,
+                chevron = true,
+            )
         }
         Spacer(Modifier.height(16.dp))
         Text(
@@ -904,23 +819,12 @@ private fun AboutActionRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val isTv = rememberIsTvDevice()
         // Apple TV: no leading glyph on these rows.
-        if (!isTv) {
-            // Apple draws these link rows in textSecondary, not the accent.
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.size(10.dp))
-        }
         Text(
             text = label,
             style = settingsRowValueStyle().subtext(),
             // Apple TV: Open Source Licenses reads in the primary text color.
-            color = if (isTv && chevron) MaterialTheme.colorScheme.onBackground
+            color = if (chevron) MaterialTheme.colorScheme.onBackground
             else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
@@ -932,7 +836,7 @@ private fun AboutActionRow(
                 modifier = Modifier.size(16.dp),
             )
         }
-        if (external && isTv) {
+        if (external) {
             // Apple TV: a QR glyph on the trailing edge (the row opens a QR
             // code to scan with a phone).
             Icon(
@@ -967,8 +871,7 @@ private fun SectionFooter(text: String) {
         // TV takes the tvOS footnote (20pt halved); PHONES keep labelSmall
         // verbatim - the shared helper falls back to bodySmall, which would
         // have quietly enlarged frozen phone canon.
-        style = (if (rememberIsTvDevice()) settingsFootnoteStyle()
-        else MaterialTheme.typography.labelSmall).subtext(),
+        style = (settingsFootnoteStyle()).subtext(),
         color = com.aeriotv.android.ui.settings.settingsDimTint(),
         modifier = Modifier.padding(horizontal = 16.dp),
     )

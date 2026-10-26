@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -58,9 +57,9 @@ fun LiveTVTabContent(
     val formFactor = rememberLiveTvFormFactor()
     val stored by settingsVm.defaultLiveTVView.collectAsStateWithLifecycle(initialValue = "")
     val scale by settingsVm.displayScaleLiveTV.collectAsStateWithLifecycle(initialValue = 1.0f)
-    // Per-device-type EPG badge visibility, provided to the guide / list / info
+    // EPG badge visibility, provided to the guide / list / info
     // sheet below so they hide the badges when the user turns them off.
-    val showEpgBadges by settingsVm.showEpgBadges(formFactor.isTv)
+    val showEpgBadges by settingsVm.showEpgBadges
         .collectAsStateWithLifecycle(initialValue = true)
     val showProgramSubtitles by settingsVm.showProgramSubtitles.collectAsStateWithLifecycle(initialValue = true)
     val showChannelLogos by settingsVm.showChannelLogos.collectAsStateWithLifecycle(initialValue = true)

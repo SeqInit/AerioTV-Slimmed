@@ -47,7 +47,6 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.aeriotv.android.core.playback.AerioExoPlayerHolder
-import com.aeriotv.android.core.pip.isTelevision
 import com.aeriotv.android.feature.settings.SettingsViewModel
 
 /**
@@ -98,15 +97,13 @@ fun BoxScope.PersistentExoWindow(
     val videoScaleMode by settingsVm.videoScaleMode.collectAsStateWithLifecycle(
         initialValue = VIDEO_SCALE_FIT,
     )
-    val inPip by com.aeriotv.android.core.pip.PipState.inPictureInPicture
     // Phones and tablets get the floating PiP-style mini (PhoneMiniPlayer.kt);
     // everything below that reads MiniPlayerChrome is the TV geometry.
-    val isPhone = remember(context) { !context.isTelevision() }
     val miniSession = hiltViewModel<com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel>().session
     // Phone on-demand mini (PhoneVodMini.kt): while a movie / episode /
     // recording / catch-up is minimized, this PlayerView shows THAT screen's
     // ExoPlayer instead of the live holder's. Never read on TV.
-    val vodMiniPlayer = if (isPhone) PhoneVodMini.session.collectAsStateWithLifecycle().value?.player else null
+    val vodMiniPlayer = null
     val bindTarget = vodMiniPlayer ?: boundPlayer
 
     // Minimize / expand is ONE spring on size AND position (tvOS
@@ -259,12 +256,11 @@ fun BoxScope.PersistentExoWindow(
 
     // Hidden is an instant teardown (no surface to animate); Fullscreen keeps
     // the mini frame only for as long as the expand spring is still running.
-    val drawMiniFrame = !isPhone && (
+    val drawMiniFrame = (
         miniTarget ||
             (mode == ExoWindowState.Mode.Fullscreen && miniWidth < screenW)
         )
-    val phoneFrame = if (isPhone) phoneMiniFrameModifier(mode, inPip) else null
-    if (isPhone) PhoneVodMiniHost(state = state, mode = mode)
+    val phoneFrame = null
 
     // See PersistentMpvWindow for the long form of the z-index rationale.
     // tl;dr: NavHost paints over PersistentExoWindow by declaration order;
@@ -575,7 +571,7 @@ fun BoxScope.PersistentExoWindow(
             update = { view ->
                 // Video Scale (Fit / Fill / Stretch); PiP always stays Fit.
                 // See VideoScale.kt.
-                view.resizeMode = videoScaleResizeMode(videoScaleMode, inPip)
+                view.resizeMode = videoScaleResizeMode(videoScaleMode, false)
                 // Rebind when the holder recreated the player (post-X-close
                 // re-create, media-service acquire, passthrough rebuild).
                 // The factory's one-time setPlayer covered only the original
@@ -642,7 +638,7 @@ fun BoxScope.PersistentExoWindow(
             AudioOnlyArtwork(
                 logoUrl = holder.currentArtworkUri?.toString().orEmpty(),
                 name = holder.currentTitle.orEmpty(),
-                compact = mode == ExoWindowState.Mode.Mini || inPip,
+                compact = mode == ExoWindowState.Mode.Mini,
             )
         }
         if (stashFadeCover > 0f) {
@@ -652,23 +648,6 @@ fun BoxScope.PersistentExoWindow(
                     .graphicsLayer { alpha = stashFadeCover }
                     .background(Color.Black),
             )
-        }
-        if (isPhone && mode == ExoWindowState.Mode.Mini && !inPip) {
-            PhoneMiniControls(holder = holder, state = state, session = miniSession)
-        }
-        if (isPhone && mode == ExoWindowState.Mode.Mini && !inPip) {
-            // Limit refusal / Stream ended: PlayerScreen's overlay is gone
-            // while minimized, so the mini shows the compact card itself.
-            // Drawn after the controls so its Retry button takes the tap.
-            val miniNotice by holder.connectionLimit.collectAsStateWithLifecycle()
-            miniNotice?.let { notice ->
-                ConnectionLimitCard(
-                    notice = notice,
-                    isTv = false,
-                    compact = true,
-                    onRetry = { holder.retryConnectionLimit() },
-                )
-            }
         }
     }
 }
@@ -698,8 +677,7 @@ private fun chainFramePacing(
 private const val TAG = "PersistentExoWindow"
 
 private fun isTvUiMode(ctx: android.content.Context): Boolean =
-    (ctx.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) ==
-        android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    true
 
 /** Whether the player has rendered a frame since the last surface recreate. */
 private class SurfaceRecreateGate {

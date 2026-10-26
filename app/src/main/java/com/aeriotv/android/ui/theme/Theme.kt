@@ -1,7 +1,6 @@
 package com.aeriotv.android.ui.theme
 
 import android.app.Activity
-import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -12,7 +11,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -74,8 +72,6 @@ fun AerioTVTheme(
     // Android TV needs a 10-foot type scale + slightly brighter dim text. iOS
     // keeps a separate ~1.5x tvOS Typography and pushes secondary text opacity
     // to 0.75 (vs 0.65 on phone) for legibility at distance (Colors.swift).
-    val isTv = (LocalConfiguration.current.uiMode and Configuration.UI_MODE_TYPE_MASK) ==
-        Configuration.UI_MODE_TYPE_TELEVISION
     // Mirrors iOS Colors.swift textSecondary = accent.opacity(0.65 phone / 0.75
     // tvOS). Every secondary copy (subtitles, card descriptions, info-banner
     // body, hint text) renders accent-tinted instead of plain white, which is
@@ -88,7 +84,7 @@ fun AerioTVTheme(
     // AND raise the alpha to earn real contrast (the accent is already the
     // darkened light-mode accent here).
     val baseTextSecondary = if (isDark) {
-        effectivePrimary.copy(alpha = if (isTv) 0.75f else 0.65f)
+        effectivePrimary.copy(alpha = 0.75f)
     } else {
         lerp(effectivePrimary, textPrimary, 0.20f).copy(alpha = 0.90f)
     }
@@ -98,7 +94,7 @@ fun AerioTVTheme(
     // title/description hierarchy. Carried on Material3's otherwise-unused
     // `tertiary` slot; reach it via `MaterialTheme.colorScheme.tertiary`.
     val baseTextTertiary = if (isDark) {
-        effectivePrimary.copy(alpha = if (isTv) 0.45f else 0.28f)
+        effectivePrimary.copy(alpha = 0.45f)
     } else {
         lerp(effectivePrimary, textPrimary, 0.15f).copy(alpha = 0.65f)
     }
@@ -179,7 +175,7 @@ fun AerioTVTheme(
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = aerioTypography(isTv),
+            typography = TvTypography,
             content = content,
         )
     }

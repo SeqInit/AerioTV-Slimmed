@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -25,8 +24,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,8 +53,6 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
-import com.aeriotv.android.ui.settings.dpadFocusRing
 import androidx.compose.ui.unit.dp
 import com.aeriotv.android.ui.scale.Dialog
 import sh.calvin.reorderable.ReorderableItem
@@ -188,13 +183,11 @@ fun ManageGroupsSheet(
         // never moves with the content (the 45483dd5 bounce).
         sheetExpandable = true,
     ) {
-        val expandable = !rememberIsTvDevice()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
-                    if (expandable) Modifier.fillMaxHeight()
-                    else Modifier.heightIn(min = 320.dp, max = 600.dp),
+                    Modifier.heightIn(min = 320.dp, max = 600.dp),
                 )
                 .padding(bottom = 8.dp),
         ) {

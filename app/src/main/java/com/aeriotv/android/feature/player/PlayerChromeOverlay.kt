@@ -4,7 +4,6 @@ import com.aeriotv.android.ui.theme.decorSecondary
 import com.aeriotv.android.ui.theme.forText
 import com.aeriotv.android.ui.scale.subtext
 import com.aeriotv.android.ui.theme.textAccent
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,17 +38,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PictureInPicture
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
@@ -57,9 +50,7 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.GraphicEq
-import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.SwapHoriz
 import com.aeriotv.android.ui.scale.DropdownMenu
@@ -67,23 +58,19 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import com.aeriotv.android.ui.scale.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -98,7 +85,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -112,18 +98,11 @@ import com.aeriotv.android.core.data.EPGProgramme
 import com.aeriotv.android.core.data.M3UChannel
 import com.aeriotv.android.core.data.ProgramInfoTarget
 import com.aeriotv.android.core.data.toInfoTarget
-import com.aeriotv.android.core.pip.PipState
-import com.aeriotv.android.core.pip.enterPip16x9
-import com.aeriotv.android.core.pip.findActivity
-import com.aeriotv.android.core.pip.supportsPip
 import com.aeriotv.android.feature.livetv.RecordProgramSheet
 import com.aeriotv.android.ui.LocalIsDispatcharrAdmin
-import com.aeriotv.android.ui.settings.dpadFocusRing
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.theme.LocalAppTheme
 import com.aeriotv.android.ui.theme.TextPrimary
 import com.aeriotv.android.ui.tv.tvFocusScale
-import java.text.DateFormat
 import java.util.Date
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -153,7 +132,6 @@ fun PlayerChromeOverlay(
     nowProgramme: EPGProgramme?,
     chromeVisible: Boolean,
     pillVisible: Boolean = chromeVisible,
-    isTv: Boolean = false,
     /** Remote hint strip pairs, resolved from the effective remote map and
      *  the player's current mode by the caller (RemoteControlHints
      *  .livePlayerStripHints). Empty = the strip is off or nothing applies;
@@ -228,21 +206,7 @@ fun PlayerChromeOverlay(
     var moreOpen by remember { mutableStateOf(false) }
     var sleepOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val inPip by PipState.inPictureInPicture
-    val pipAvailable = remember { context.supportsPip() }
 
-    // GH #7 follow-up (iOS PlayerView parity): manual fullscreen toggle on the
-    // phone control row. Tapping forces landscape and pins it even under a
-    // portrait rotation-lock; tapping again releases back to the device's own
-    // orientation. The implicit auto bar-hiding (PlayerScreen) already handles
-    // the system chrome; this adds the explicit user control iOS has via its
-    // force-landscape button. Released on dispose so leaving the player restores
-    // the user's orientation. TV is always landscape with no rotation, so it's
-    // only wired into the phone branch below.
-    var forcedLandscape by remember { mutableStateOf(false) }
-    if (!isTv) {
-        RestoreOrientationOnExit(context.findActivity())
-    }
 
     // Tell the host the chrome is "busy" (Options menu or Sleep sheet open) so
     // its auto-hide timer pauses while the user is interacting. tvOS keeps the
@@ -269,9 +233,8 @@ fun PlayerChromeOverlay(
             // on the buffer sent every reveal with Live Rewind off to Options.
             runCatching {
                 when {
-                    connectionIssue && isTv -> retryFocus.requestFocus()
-                    isTv -> pauseFocus.requestFocus()
-                    else -> closeFocus.requestFocus()
+                    connectionIssue -> retryFocus.requestFocus()
+                    else-> pauseFocus.requestFocus()
                 }
             }
         }
@@ -309,7 +272,7 @@ fun PlayerChromeOverlay(
     // chrome's top button row).
     Box(modifier = Modifier.fillMaxSize()) {
     AnimatedVisibility(
-        visible = chromeVisible && !inPip,
+        visible = chromeVisible,
         enter = fadeIn(),
         exit = fadeOut(),
     ) {
@@ -331,485 +294,264 @@ fun PlayerChromeOverlay(
                     ),
             )
 
-            if (isTv) {
-            // Android TV (tvOS parity): a centered row of action pills at the
-            // bottom -- Record | Rewind | Pause | Forward | Options.
-            // With Live Rewind
-            // buffering, a read-only timeline rides above the row and the
-            // transport joins the SAME focus row as pills (identical focus
-            // visuals; Options keeps initial focus, LEFT reaches transport).
-            val tvRewind = timeshiftState?.buffering == true && !catchupMode
-            // Task #148 milestone B: catch-up shares the rewind transport row.
-            val tvTransport = tvRewind || catchupMode
-            // Anchor skips on wall-clock "now" when live: the head in the
-            // composed state can lag several seconds (or worse if a
-            // recomposition was starved), and System.currentTimeMillis()
-            // tracks the true live edge by definition while the tee runs.
-            val tvCurrentWall = if (timeshiftState?.timeshifting == true) {
-                timeshiftPositionWallMs
+        // Android TV (tvOS parity): a centered row of action pills at the
+        // bottom -- Record | Rewind | Pause | Forward | Options.
+        // With Live Rewind
+        // buffering, a read-only timeline rides above the row and the
+        // transport joins the SAME focus row as pills (identical focus
+        // visuals; Options keeps initial focus, LEFT reaches transport).
+        val tvRewind = timeshiftState?.buffering == true && !catchupMode
+        // Task #148 milestone B: catch-up shares the rewind transport row.
+        val tvTransport = tvRewind || catchupMode
+        // Anchor skips on wall-clock "now" when live: the head in the
+        // composed state can lag several seconds (or worse if a
+        // recomposition was starved), and System.currentTimeMillis()
+        // tracks the true live edge by definition while the tee runs.
+        val tvCurrentWall = if (timeshiftState?.timeshifting == true) {
+            timeshiftPositionWallMs
+        } else {
+            System.currentTimeMillis()
+        }
+        // ONE continuous band behind the ENTIRE bottom control block:
+        // timeline / scrubber row, the remaining-time and LIVE labels, the
+        // control pill row and the hint strip. Flush with the bottom edge,
+        // starting 12 dp above the topmost element, fading with the chrome
+        // (it is inside this AnimatedVisibility).
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(PLAYER_CHROME_BAND)
+                .navigationBarsPadding()
+                .padding(top = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+        if (tvTransport) {
+            if (catchupMode) {
+                TvCatchupTimeline(
+                    positionMs = catchupPositionMs,
+                    durationMs = catchupDurationMs,
+                    title = catchupTitle.ifBlank { nowProgramme?.title.orEmpty() },
+                    previewMs = scrubPreviewWallMs,
+                    focusable = true,
+                    onScrubStep = onScrubStep,
+                    onScrubCommit = onScrubCommit,
+                )
             } else {
-                System.currentTimeMillis()
-            }
-            // ONE continuous band behind the ENTIRE bottom control block:
-            // timeline / scrubber row, the remaining-time and LIVE labels, the
-            // control pill row and the hint strip. Flush with the bottom edge,
-            // starting 12 dp above the topmost element, fading with the chrome
-            // (it is inside this AnimatedVisibility).
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(PLAYER_CHROME_BAND)
-                    .navigationBarsPadding()
-                    .padding(top = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-            if (tvTransport) {
-                if (catchupMode) {
-                    TvCatchupTimeline(
-                        positionMs = catchupPositionMs,
-                        durationMs = catchupDurationMs,
-                        title = catchupTitle.ifBlank { nowProgramme?.title.orEmpty() },
-                        previewMs = scrubPreviewWallMs,
+                timeshiftState?.let { ts ->
+                    TvRewindTimeline(
+                        state = ts,
+                        positionWallMs = timeshiftPositionWallMs,
+                        programme = nowProgramme,
+                        previewWallMs = scrubPreviewWallMs,
                         focusable = true,
                         onScrubStep = onScrubStep,
                         onScrubCommit = onScrubCommit,
                     )
-                } else {
-                    timeshiftState?.let { ts ->
-                        TvRewindTimeline(
-                            state = ts,
-                            positionWallMs = timeshiftPositionWallMs,
-                            programme = nowProgramme,
-                            previewWallMs = scrubPreviewWallMs,
-                            focusable = true,
-                            onScrubStep = onScrubStep,
-                            onScrubCommit = onScrubCommit,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-            }
-            // tvOS modern player chrome (Logan 2026-09-11): each control is an
-            // icon-only frosted circle and only the FOCUSED one names itself,
-            // in a fixed-height caption slot under the row so nothing jumps as
-            // focus moves. Order is Record, Rewind, Pause, Forward, Options
-            // with Pause anchored on the SCREEN center, so the center
-            // never shifts when a side control's presence changes (Record is
-            // hidden on non-Dispatcharr playlists and during a catch-up
-            // replay, Go Live only exists while the buffer is scrubbed back).
-            // Slots are placed left to right, so geometric D-pad traversal
-            // still walks them in reading order.
-            // Rewind / Forward need a rolling buffer (or a catch-up replay).
-            // Without one they stay in the row, greyed and inert, and say why
-            // when focused, rather than vanishing and reflowing the row.
-            val seekEnabled = tvTransport
-            val seekDisabledCaption = "Enable Live Rewind in Settings"
-            val centerPill: @Composable () -> Unit = {
-                PlayerControlCircle(
-                    icon = if (isPlayerPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                    title = if (isPlayerPaused) "Play" else "Pause",
-                    onClick = onRewindTogglePause,
-                    modifier = Modifier.focusRequester(pauseFocus),
-                    onInteraction = onInteraction,
-                )
-            }
-            val leftPills: @Composable () -> Unit = {
-                // Connection-issue Retry leads the row and auto-focuses (see
-                // the focus LaunchedEffect) so the remote has a reachable
-                // re-tune while "Channel Unavailable" is showing.
-                if (connectionIssue) {
-                    PlayerControlCircle(
-                        icon = Icons.Filled.Refresh,
-                        title = "Retry",
-                        onClick = onRetry,
-                            modifier = Modifier.focusRequester(retryFocus),
-                        onInteraction = onInteraction,
-                    )
-                }
-                // Task #148 milestone B: an archive replay can't be recorded
-                // (tvOS parity: catch-up gates it).
-                if (canRecord && !catchupMode) {
-                    PlayerControlCircle(
-                        icon = Icons.Filled.FiberManualRecord,
-                        title = "Record",
-                        iconTint = Color(0xFFFF4757),
-                        onClick = { recordCurrent() },
-                        onInteraction = onInteraction,
-                        )
-                }
-                // Skip Intervals setting (read live so a change re-renders).
-                val backSeconds = rememberSkipBackSeconds()
-                PlayerControlCircle(
-                    icon = SkipIntervals.backIcon(backSeconds),
-                    title = "Rewind",
-                    contentDescription = SkipIntervals.backLabel(backSeconds),
-                    enabled = seekEnabled,
-                    disabledCaption = seekDisabledCaption,
-                    onClick = {
-                        if (catchupMode) onCatchupSeekTo(catchupPositionMs - backSeconds * 1_000L)
-                        else onRewindSeekWall(tvCurrentWall - backSeconds * 1_000L)
-                    },
-                    onInteraction = onInteraction,
-                )
-            }
-            val rightPills: @Composable () -> Unit = {
-                val forwardSeconds = rememberSkipForwardSeconds()
-                PlayerControlCircle(
-                    icon = SkipIntervals.forwardIcon(forwardSeconds),
-                    title = "Forward",
-                    contentDescription = SkipIntervals.forwardLabel(forwardSeconds),
-                    enabled = seekEnabled,
-                    disabledCaption = seekDisabledCaption,
-                    onClick = {
-                        if (catchupMode) onCatchupSeekTo(catchupPositionMs + forwardSeconds * 1_000L)
-                        else onRewindSeekWall(tvCurrentWall + forwardSeconds * 1_000L)
-                    },
-                    onInteraction = onInteraction,
-                )
-                if (tvTransport && !catchupMode && timeshiftState?.timeshifting == true) {
-                    PlayerControlCircle(
-                        icon = Icons.Filled.PlayArrow,
-                        title = "Go Live",
-                        onClick = onGoLive,
-                            onInteraction = onInteraction,
-                        )
-                }
-                Box {
-                    PlayerControlCircle(
-                        icon = Icons.Filled.Tune,
-                        title = "Options",
-                        onClick = { moreOpen = true },
-                            modifier = Modifier.focusRequester(optionsFocus),
-                        onInteraction = onInteraction,
-                    )
-                    PlayerMoreMenu(
-                        expanded = moreOpen,
-                        onDismiss = { moreOpen = false },
-                        isTv = true,
-                        canRecord = canRecord,
-                        sleepActive = sleepRemainingMillis != null,
-                        scaleLabel = videoScaleLabel,
-                        onCycleScale = onCycleVideoScale,
-                        onSubtitles = {
-                            moreOpen = false
-                            onShowSubtitles()
-                        },
-                        onAudioTracks = {
-                            moreOpen = false
-                            onShowAudioTracks()
-                        },
-                        onPlaybackSpeed = {
-                            moreOpen = false
-                            onShowPlaybackSpeed()
-                        },
-                        onRecord = {
-                            moreOpen = false
-                            recordCurrent()
-                        },
-                        onSleepTimer = {
-                            moreOpen = false
-                            sleepOpen = true
-                        },
-                        onStreamInfo = {
-                            moreOpen = false
-                            onShowStreamInfo()
-                        },
-                        canSwitchStream = canSwitchStream,
-                        onSwitchStream = {
-                            moreOpen = false
-                            onShowSwitchStream()
-                        },
-                        onRadioMode = onRadioMode?.let { r -> { moreOpen = false; r() } },
-                        keptLive = keptLive,
-                        onKeptTune = { id ->
-                            moreOpen = false
-                            onKeptTune(id)
-                        },
-                        onKeptStop = { id ->
-                            // Close with the last row so the menu never sits
-                            // on an empty section.
-                            if (keptLive.size <= 1) moreOpen = false
-                            onKeptStop(id)
-                        },
-                        onKeptStopAll = {
-                            moreOpen = false
-                            onKeptStopAll()
-                        },
-                    )
                 }
             }
-            Box(modifier = Modifier.fillMaxWidth()) {
-                CenterAnchoredPillRow(
-                    modifier = Modifier.fillMaxWidth().focusGroup(),
-                    gap = 9.dp,
-                    left = leftPills,
-                    center = centerPill,
-                    right = rightPills,
-                )
-                // Resolution / frame rate readout at the RIGHT edge of the
-                // band, vertically centered on the control row. Plain Text in
-                // a frosted capsule: not focusable, and it sits in the row's
-                // own empty right margin so nothing moves.
-                // Pipeline readout at the LEFT edge, mirroring the badge.
-                if (pipelineLabel != null) {
-                    PlayerFormatBadge(
-                        text = pipelineLabel,
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .padding(start = TV_TIMELINE_INSET),
-                    )
-                }
-                if (formatBadge != null) {
-                    PlayerFormatBadge(
-                        text = formatBadge,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            // Right edge flush with the timeline track, which
-                            // TvRewindTimeline / TvCatchupTimeline inset by
-                            // 56 dp (Logan 2026-09-11: a flat 20 dp sat too
-                            // far right).
-                            .padding(end = TV_TIMELINE_INSET),
-                    )
-                }
-            }
-            // Room for the per-control captions, which each circle draws
-            // BELOW itself without taking layout height (see
-            // PlayerControlCircle), so the hint strip never moves.
             Spacer(Modifier.height(16.dp))
-            // Remote hint strip: the LAST row of the block, on the same band.
-            // Plain Text, so it can never take focus, and it adds height under
-            // the controls rather than displacing them.
-            if (hintPairs.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                com.aeriotv.android.ui.tv.TvRemoteHintStrip(
-                    hints = hintPairs,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+        }
+        // tvOS modern player chrome (Logan 2026-09-11): each control is an
+        // icon-only frosted circle and only the FOCUSED one names itself,
+        // in a fixed-height caption slot under the row so nothing jumps as
+        // focus moves. Order is Record, Rewind, Pause, Forward, Options
+        // with Pause anchored on the SCREEN center, so the center
+        // never shifts when a side control's presence changes (Record is
+        // hidden on non-Dispatcharr playlists and during a catch-up
+        // replay, Go Live only exists while the buffer is scrubbed back).
+        // Slots are placed left to right, so geometric D-pad traversal
+        // still walks them in reading order.
+        // Rewind / Forward need a rolling buffer (or a catch-up replay).
+        // Without one they stay in the row, greyed and inert, and say why
+        // when focused, rather than vanishing and reflowing the row.
+        val seekEnabled = tvTransport
+        val seekDisabledCaption = "Enable Live Rewind in Settings"
+        val centerPill: @Composable () -> Unit = {
+            PlayerControlCircle(
+                icon = if (isPlayerPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                title = if (isPlayerPaused) "Play" else "Pause",
+                onClick = onRewindTogglePause,
+                modifier = Modifier.focusRequester(pauseFocus),
+                onInteraction = onInteraction,
+            )
+        }
+        val leftPills: @Composable () -> Unit = {
+            // Connection-issue Retry leads the row and auto-focuses (see
+            // the focus LaunchedEffect) so the remote has a reachable
+            // re-tune while "Channel Unavailable" is showing.
+            if (connectionIssue) {
+                PlayerControlCircle(
+                    icon = Icons.Filled.Refresh,
+                    title = "Retry",
+                    onClick = onRetry,
+                        modifier = Modifier.focusRequester(retryFocus),
+                    onInteraction = onInteraction,
                 )
-                Spacer(Modifier.height(8.dp))
-            } else {
-                Spacer(Modifier.height(24.dp))
             }
+            // Task #148 milestone B: an archive replay can't be recorded
+            // (tvOS parity: catch-up gates it).
+            if (canRecord && !catchupMode) {
+                PlayerControlCircle(
+                    icon = Icons.Filled.FiberManualRecord,
+                    title = "Record",
+                    iconTint = Color(0xFFFF4757),
+                    onClick = { recordCurrent() },
+                    onInteraction = onInteraction,
+                    )
             }
-            } else {
-            // Phone / tablet (iOS PlayerView parity): top bar with Close on the
-            // left, the channel card inline, and More / PiP / Add on the right;
-            // live-progress band along the bottom.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
-                    .padding(horizontal = 12.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircleIconButton(
-                    icon = Icons.Filled.Close,
-                    contentDescription = "Close",
-                    onClick = onClose,
-                    modifier = Modifier.focusRequester(closeFocus),
+            // Skip Intervals setting (read live so a change re-renders).
+            val backSeconds = rememberSkipBackSeconds()
+            PlayerControlCircle(
+                icon = SkipIntervals.backIcon(backSeconds),
+                title = "Rewind",
+                contentDescription = SkipIntervals.backLabel(backSeconds),
+                enabled = seekEnabled,
+                disabledCaption = seekDisabledCaption,
+                onClick = {
+                    if (catchupMode) onCatchupSeekTo(catchupPositionMs - backSeconds * 1_000L)
+                    else onRewindSeekWall(tvCurrentWall - backSeconds * 1_000L)
+                },
+                onInteraction = onInteraction,
+            )
+        }
+        val rightPills: @Composable () -> Unit = {
+            val forwardSeconds = rememberSkipForwardSeconds()
+            PlayerControlCircle(
+                icon = SkipIntervals.forwardIcon(forwardSeconds),
+                title = "Forward",
+                contentDescription = SkipIntervals.forwardLabel(forwardSeconds),
+                enabled = seekEnabled,
+                disabledCaption = seekDisabledCaption,
+                onClick = {
+                    if (catchupMode) onCatchupSeekTo(catchupPositionMs + forwardSeconds * 1_000L)
+                    else onRewindSeekWall(tvCurrentWall + forwardSeconds * 1_000L)
+                },
+                onInteraction = onInteraction,
+            )
+            if (tvTransport && !catchupMode && timeshiftState?.timeshifting == true) {
+                PlayerControlCircle(
+                    icon = Icons.Filled.PlayArrow,
+                    title = "Go Live",
+                    onClick = onGoLive,
+                        onInteraction = onInteraction,
+                    )
+            }
+            Box {
+                PlayerControlCircle(
+                    icon = Icons.Filled.Tune,
+                    title = "Options",
+                    onClick = { moreOpen = true },
+                        modifier = Modifier.focusRequester(optionsFocus),
+                    onInteraction = onInteraction,
                 )
-                // On compact widths (portrait phone / folded Fold cover screen)
-                // the secondary channel InfoCard would consume the row and push
-                // the fixed right-side controls (Cast / PiP / Add) off the edge,
-                // so the user couldn't reach them (GH #33 note #3). Drop the pill
-                // there; it returns in landscape / on tablets / unfolded where the
-                // row has room for both.
-                val compactTopBar = LocalConfiguration.current.screenWidthDp < 500
-                if (!compactTopBar) {
-                    channel?.let { ch ->
-                        Spacer(Modifier.width(12.dp))
-                        InfoCard(
-                            channel = ch,
-                            programme = nowProgramme,
-                            sleepRemainingMillis = sleepRemainingMillis,
-                            infoCardPrefs = infoCardPrefs,
-                        )
-                    }
-                }
-                Spacer(Modifier.weight(1f))
-                CircleIconButton(
-                    icon = if (forcedLandscape) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                    contentDescription = if (forcedLandscape) "Exit fullscreen" else "Fullscreen",
-                    onClick = {
-                        forcedLandscape = !forcedLandscape
-                        context.findActivity()?.requestedOrientation = if (forcedLandscape) {
-                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
-                        } else {
-                            // Auto-Rotate aware release (App Behaviors).
-                            com.aeriotv.android.core.preferences.AutoRotateState.restingOrientation
-                        }
+                PlayerMoreMenu(
+                    expanded = moreOpen,
+                    onDismiss = { moreOpen = false },
+                    canRecord = canRecord,
+                    sleepActive = sleepRemainingMillis != null,
+                    scaleLabel = videoScaleLabel,
+                    onCycleScale = onCycleVideoScale,
+                    onSubtitles = {
+                        moreOpen = false
+                        onShowSubtitles()
+                    },
+                    onAudioTracks = {
+                        moreOpen = false
+                        onShowAudioTracks()
+                    },
+                    onPlaybackSpeed = {
+                        moreOpen = false
+                        onShowPlaybackSpeed()
+                    },
+                    onRecord = {
+                        moreOpen = false
+                        recordCurrent()
+                    },
+                    onSleepTimer = {
+                        moreOpen = false
+                        sleepOpen = true
+                    },
+                    onStreamInfo = {
+                        moreOpen = false
+                        onShowStreamInfo()
+                    },
+                    canSwitchStream = canSwitchStream,
+                    onSwitchStream = {
+                        moreOpen = false
+                        onShowSwitchStream()
+                    },
+                    onRadioMode = onRadioMode?.let { r -> { moreOpen = false; r() } },
+                    keptLive = keptLive,
+                    onKeptTune = { id ->
+                        moreOpen = false
+                        onKeptTune(id)
+                    },
+                    onKeptStop = { id ->
+                        // Close with the last row so the menu never sits
+                        // on an empty section.
+                        if (keptLive.size <= 1) moreOpen = false
+                        onKeptStop(id)
+                    },
+                    onKeptStopAll = {
+                        moreOpen = false
+                        onKeptStopAll()
                     },
                 )
-                Spacer(Modifier.width(8.dp))
-                Box {
-                    CircleIconButton(
-                        icon = Icons.Filled.MoreHoriz,
-                        contentDescription = "More",
-                        onClick = { moreOpen = true },
-                    )
-                    PlayerMoreMenu(
-                        expanded = moreOpen,
-                        onDismiss = { moreOpen = false },
-                        canRecord = canRecord,
-                        sleepActive = sleepRemainingMillis != null,
-                        scaleLabel = videoScaleLabel,
-                        onCycleScale = onCycleVideoScale,
-                        onSubtitles = {
-                            moreOpen = false
-                            onShowSubtitles()
-                        },
-                        onAudioTracks = {
-                            moreOpen = false
-                            onShowAudioTracks()
-                        },
-                        onPlaybackSpeed = {
-                            moreOpen = false
-                            onShowPlaybackSpeed()
-                        },
-                        onRecord = {
-                            moreOpen = false
-                            recordCurrent()
-                        },
-                        onSleepTimer = {
-                            moreOpen = false
-                            sleepOpen = true
-                        },
-                        onStreamInfo = {
-                            moreOpen = false
-                            onShowStreamInfo()
-                        },
-                        canSwitchStream = canSwitchStream,
-                        onSwitchStream = {
-                            moreOpen = false
-                            onShowSwitchStream()
-                        },
-                        onRadioMode = onRadioMode?.let { r -> { moreOpen = false; r() } },
-                        keptLive = keptLive,
-                        onKeptTune = { id ->
-                            moreOpen = false
-                            onKeptTune(id)
-                        },
-                        onKeptStop = { id ->
-                            // Close with the last row so the menu never sits
-                            // on an empty section.
-                            if (keptLive.size <= 1) moreOpen = false
-                            onKeptStop(id)
-                        },
-                        onKeptStopAll = {
-                            moreOpen = false
-                            onKeptStopAll()
-                        },
-                    )
-                }
-                if (pipAvailable) {
-                    Spacer(Modifier.width(8.dp))
-                    CircleIconButton(
-                        icon = Icons.Filled.PictureInPicture,
-                        contentDescription = "Picture in picture",
-                        onClick = { context.findActivity()?.enterPip16x9() },
-                    )
-                }
             }
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(PLAYER_CHROME_BAND)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 18.dp, vertical = 24.dp),
-            ) {
-                // Resolution / frame rate readout (tablets, and phones in
-                // landscape): the TV band's badge, right-aligned above the
-                // progress row and scaled to the touch chrome.
-                if ((formatBadge != null || pipelineLabel != null) && !isTv) {
-                    val tabletBadge = androidx.compose.ui.platform.LocalConfiguration.current
-                        .smallestScreenWidthDp >= 600
-                    // Pipeline label left, format badge right, as the TV band.
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (pipelineLabel != null) {
-                            PlayerFormatBadge(
-                                text = pipelineLabel,
-                                fontSize = if (tabletBadge) 12.sp else 10.sp,
-                            )
-                        } else {
-                            Spacer(Modifier.width(1.dp))
-                        }
-                        if (formatBadge != null) {
-                            PlayerFormatBadge(
-                                text = formatBadge,
-                                fontSize = if (tabletBadge) 12.sp else 10.sp,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-                // The transport must render whenever the buffer rolls,
-                // INCLUDING on channels with no EPG data (bare M3U
-                // playlists): it was nested under nowProgramme?.let, so
-                // EPG-less phones got no pause/rewind/Go Live controls
-                // at all. RewindTransportBar takes a nullable programme.
-                if (timeshiftState?.buffering == true) {
-                    // The channel/programme header at the top already
-                    // names the show; the transport bar carries the
-                    // remaining time inline, so no duplicate footer row.
-                    RewindTransportBar(
-                        state = timeshiftState,
-                        positionWallMs = timeshiftPositionWallMs,
-                        paused = isPlayerPaused,
-                        programme = nowProgramme,
-                        onTogglePause = onRewindTogglePause,
-                        onSeekWall = onRewindSeekWall,
-                        onGoLive = onGoLive,
-                    )
-                } else nowProgramme?.let { prog ->
-                    run {
-                        EpgProgress(programme = prog)
-                        Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = prog.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = formatRemaining(prog),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White.copy(alpha = 0.7f),
-                        )
-                    }
-                    }
-                } ?: run {
-                    Text(
-                        text = channel?.name ?: "AerioTV",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                    )
-                }
-                if (showLiveRewindHint) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "Turn on Live Rewind in Settings to pause & rewind live TV",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.65f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+        }
+        Box(modifier = Modifier.fillMaxWidth()) {
+            CenterAnchoredPillRow(
+                modifier = Modifier.fillMaxWidth().focusGroup(),
+                gap = 9.dp,
+                left = leftPills,
+                center = centerPill,
+                right = rightPills,
+            )
+            // Resolution / frame rate readout at the RIGHT edge of the
+            // band, vertically centered on the control row. Plain Text in
+            // a frosted capsule: not focusable, and it sits in the row's
+            // own empty right margin so nothing moves.
+            // Pipeline readout at the LEFT edge, mirroring the badge.
+            if (pipelineLabel != null) {
+                PlayerFormatBadge(
+                    text = pipelineLabel,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = TV_TIMELINE_INSET),
+                )
             }
+            if (formatBadge != null) {
+                PlayerFormatBadge(
+                    text = formatBadge,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        // Right edge flush with the timeline track, which
+                        // TvRewindTimeline / TvCatchupTimeline inset by
+                        // 56 dp (Logan 2026-09-11: a flat 20 dp sat too
+                        // far right).
+                        .padding(end = TV_TIMELINE_INSET),
+                )
             }
+        }
+        // Room for the per-control captions, which each circle draws
+        // BELOW itself without taking layout height (see
+        // PlayerControlCircle), so the hint strip never moves.
+        Spacer(Modifier.height(16.dp))
+        // Remote hint strip: the LAST row of the block, on the same band.
+        // Plain Text, so it can never take focus, and it adds height under
+        // the controls rather than displacing them.
+        if (hintPairs.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            com.aeriotv.android.ui.tv.TvRemoteHintStrip(
+                hints = hintPairs,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+        } else {
+            Spacer(Modifier.height(24.dp))
+        }
+        }
         }
     }
 
@@ -822,27 +564,16 @@ fun PlayerChromeOverlay(
     // Apple parity and the Settings help text: the card always appears with
     // the player controls, whatever Pop Up Info Card on Channel Change says
     // (device pass cc2c37c7: portrait tap showed controls with no card).
-    val compactCardUnderBar = !isTv && chromeVisible &&
-        LocalConfiguration.current.screenWidthDp < 500
     AnimatedVisibility(
-        visible = if (isTv) (pillVisible && !inPip)
-        else (pillVisible && (!chromeVisible || compactCardUnderBar) && !inPip),
+        visible = (pillVisible),
         enter = fadeIn(),
         exit = fadeOut(),
         modifier = Modifier
             .align(Alignment.TopStart)
             .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
             .padding(
-                top = when {
-                    isTv -> 24.dp
-                    compactCardUnderBar -> 76.dp
-                    else -> 14.dp
-                },
-                start = when {
-                    isTv -> 28.dp
-                    compactCardUnderBar -> 12.dp
-                    else -> 70.dp
-                },
+                top = 24.dp,
+                start = 28.dp,
             ),
     ) {
         channel?.let {
@@ -866,8 +597,7 @@ fun PlayerChromeOverlay(
     // the user watches the preview sweep without the pill row sliding
     // in. Mutually exclusive with the full chrome above.
     AnimatedVisibility(
-        visible = isTv && scrubHudVisible && !chromeVisible && !inPip &&
-            (timeshiftState?.buffering == true || catchupMode),
+        visible = scrubHudVisible && !chromeVisible && (timeshiftState?.buffering == true || catchupMode),
         enter = fadeIn(),
         exit = fadeOut(),
         modifier = Modifier.align(Alignment.BottomCenter),
@@ -925,46 +655,6 @@ fun PlayerChromeOverlay(
         )
     }
 }
-
-@Composable
-private fun CircleIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // D-pad focus must be VISIBLE on TV: track focus state and draw a
-    // white ring + brightened fill (same treatment as the settings
-    // pills' dpadFocusRing, drawn inline here because the button also
-    // needs the fill swap). Focus and click share one target.
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        modifier = modifier
-            .size(44.dp)
-            .onFocusChanged { focused = it.isFocused }
-            .clip(CircleShape)
-            .background(
-                if (focused) Color.White.copy(alpha = 0.28f)
-                else Color.Black.copy(alpha = 0.55f),
-            )
-            .then(
-                if (focused) {
-                    Modifier.border(2.dp, Color.White, CircleShape)
-                } else {
-                    Modifier
-                },
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = Color.White,
-        )
-    }
-}
-
 
 /**
  * tvOS-style action pill: a rounded capsule with a leading icon + label and
@@ -1125,12 +815,10 @@ private fun PlayerControlCircle(
     }
 }
 
-
 @Composable
 private fun PlayerMoreMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
-    isTv: Boolean = false,
     canRecord: Boolean,
     sleepActive: Boolean,
     scaleLabel: String,
@@ -1178,17 +866,15 @@ private fun PlayerMoreMenu(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
-        if (isTv) {
-            // #10 tvOS hint C: the Options panel advertises how to dismiss it.
-            // Non-interactive header (D-pad focus skips it and lands on the first
-            // row); Back closes the dropdown, which the "‹" chevron represents.
-            Text(
-                text = "Press ‹ to close",
-                fontSize = 12.sp.subtext(),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f).forText(),
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-            )
-        }
+        // #10 tvOS hint C: the Options panel advertises how to dismiss it.
+        // Non-interactive header (D-pad focus skips it and lands on the first
+        // row); Back closes the dropdown, which the "‹" chevron represents.
+        Text(
+            text = "Press ‹ to close",
+            fontSize = 12.sp.subtext(),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f).forText(),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+        )
         DropdownMenuItem(
             leadingIcon = {
                 Icon(
@@ -1540,159 +1226,6 @@ private fun InfoCard(
 }
 
 /**
- * Live Rewind transport (task #143): interactive timeline over the local
- * timeshift buffer. The track spans [tail .. live edge] of the rolling
- * buffer; while live-at-edge the thumb rides the right end. Dragging back
- * (or the skip buttons, which are the D-pad path on TV) re-opens playback
- * inside the buffer; Go Live re-tunes the direct stream.
- */
-@Composable
-private fun RewindTransportBar(
-    state: com.aeriotv.android.core.timeshift.TimeshiftController.State,
-    positionWallMs: Long,
-    paused: Boolean,
-    programme: EPGProgramme?,
-    onTogglePause: () -> Unit,
-    onSeekWall: (Long) -> Unit,
-    onGoLive: () -> Unit,
-) {
-    val head = maxOf(state.headWallMs, state.tailWallMs + 1)
-    val tail = state.tailWallMs
-    val span = (head - tail).coerceAtLeast(1)
-    val current = if (state.timeshifting) positionWallMs.coerceIn(tail, head) else head
-    var dragFraction by remember { mutableStateOf<Float?>(null) }
-    val fraction = dragFraction ?: ((current - tail).toFloat() / span.toFloat()).coerceIn(0f, 1f)
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // On TV the timeline is a read-only position display: D-pad
-        // seeking goes through the centered skip buttons (the VOD player
-        // model), so the slider must not be a focus stop the remote can
-        // get trapped in.
-        val isTvDevice = com.aeriotv.android.ui.settings.rememberIsTvDevice()
-        Slider(
-            value = fraction,
-            enabled = !isTvDevice,
-            onValueChange = { dragFraction = it },
-            onValueChangeFinished = {
-                dragFraction?.let { f -> onSeekWall(tail + (span * f).toLong()) }
-                dragFraction = null
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(22.dp),
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = Color.White.copy(alpha = 0.18f),
-                disabledThumbColor = MaterialTheme.colorScheme.primary,
-                disabledActiveTrackColor = MaterialTheme.colorScheme.primary,
-                disabledInactiveTrackColor = Color.White.copy(alpha = 0.18f),
-            ),
-        )
-        // Status line under the timeline: remaining time on the LEFT,
-        // LIVE / behind-live indicator on the RIGHT (under the live edge
-        // of the track). Both are computed against the (possibly
-        // shifted) playback position so they stay truthful while
-        // rewound.
-        val behindMs = head - current
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Keep the status text off the physical display edge
-                // (the timeline track intentionally runs wider).
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            programme?.let { prog ->
-                val remMin = ((prog.endMillis - current).coerceAtLeast(0) / 60_000).toInt()
-                Text(
-                    text = if (remMin >= 60) {
-                        "${remMin / 60} h ${remMin % 60} min remaining"
-                    } else {
-                        "$remMin min remaining"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = if (state.timeshifting && behindMs > 5_000) {
-                    val totalSec = behindMs / 1000
-                    String.format("-%d:%02d", totalSec / 60, totalSec % 60)
-                } else {
-                    "LIVE"
-                },
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (state.timeshifting && behindMs > 5_000) {
-                    Color.White.copy(alpha = 0.8f)
-                } else {
-                    MaterialTheme.colorScheme.textAccent
-                },
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        // Transport buttons centered; the Go Live pill (only while
-        // rewound) anchors to the right edge without disturbing the
-        // centering.
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.align(Alignment.Center),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                val backSeconds = rememberSkipBackSeconds()
-                val forwardSeconds = rememberSkipForwardSeconds()
-                CircleIconButton(
-                    icon = SkipIntervals.backIcon(backSeconds),
-                    contentDescription = SkipIntervals.backLabel(backSeconds),
-                    onClick = { onSeekWall(current - backSeconds * 1_000L) },
-                )
-                CircleIconButton(
-                    icon = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                    contentDescription = if (paused) "Play" else "Pause",
-                    onClick = onTogglePause,
-                )
-                CircleIconButton(
-                    icon = SkipIntervals.forwardIcon(forwardSeconds),
-                    contentDescription = SkipIntervals.forwardLabel(forwardSeconds),
-                    onClick = { onSeekWall(current + forwardSeconds * 1_000L) },
-                )
-            }
-            // Hide the Go Live pill once we're at the live edge (matches the LIVE
-            // label above): a smooth go-live seeks to the buffer head and stays in
-            // timeshift mode, so gate on the same behind-live threshold, not just
-            // state.timeshifting, or the pill would linger when already live (GH #33).
-            if (state.timeshifting && behindMs > 5_000) {
-                var goLiveFocused by remember { mutableStateOf(false) }
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primary,
-                    onClick = onGoLive,
-                    border = if (goLiveFocused) {
-                        androidx.compose.foundation.BorderStroke(2.dp, Color.White)
-                    } else {
-                        null
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .onFocusChanged { goLiveFocused = it.isFocused },
-                ) {
-                    Text(
-                        text = "Go Live",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
  * Android TV Live Rewind timeline. Read-only display by default; when
  * `focusable` (chrome visible) it is a D-pad focus target: UP from the
  * pill row lands here, LEFT/RIGHT step the shared scrub preview
@@ -1949,24 +1482,6 @@ private fun TvRewindTimeline(
             )
         }
     }
-}
-
-@Composable
-private fun EpgProgress(programme: EPGProgramme) {
-    val now = System.currentTimeMillis()
-    val total = (programme.endMillis - programme.startMillis).coerceAtLeast(1L)
-    val elapsed = (now - programme.startMillis).coerceAtLeast(0L).coerceAtMost(total)
-    val progress = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-    LinearProgressIndicator(
-        progress = { progress },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(3.dp)
-            .clip(RoundedCornerShape(2.dp)),
-        color = MaterialTheme.colorScheme.primary,
-        trackColor = Color.White.copy(alpha = 0.18f),
-        drawStopIndicator = {},
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2248,12 +1763,10 @@ fun SwitchStreamSheet(
     // a 340 px fling 0.35 s long) used to hand its leftover to the sheet and
     // dismiss it. Only a tap outside (scrim), Back, or Finish ends it.
     var rowDragging by remember { mutableStateOf(false) }
-    val isTv = com.aeriotv.android.ui.settings.rememberIsTvDevice()
     val canReorderList = canReorder && streams.size > 1
     // Touch Reorder mode (Apple parity: "Reorder", reading "Finish" while on).
     var reordering by remember { mutableStateOf(false) }
     var pendingOrder by remember { mutableStateOf<List<Int>?>(null) }
-    val reorderMode = canReorderList && reordering && !isTv
     // Leaving Reorder mode saves the order ONCE, only when it changed.
     val finishReorder: (String) -> Unit = { reason ->
         val ids = pendingOrder
@@ -2270,7 +1783,7 @@ fun SwitchStreamSheet(
     }
     com.aeriotv.android.ui.FormFactorModal(
         onDismiss = { if (!rowDragging) dismissFrom("outside-or-back") },
-        sheetGesturesEnabled = !reorderMode && !rowDragging,
+        sheetGesturesEnabled = !rowDragging,
     ) {
         // verticalScroll so channels with many streams (users keep 2-20) are all
         // reachable; FormFactorModal caps the modal height, which otherwise just
@@ -2292,20 +1805,6 @@ fun SwitchStreamSheet(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                if (canReorderList && !isTv) {
-                    androidx.compose.material3.TextButton(
-                        enabled = !saving && !rowDragging,
-                        onClick = {
-                            if (reordering) finishReorder("finish")
-                            else {
-                                android.util.Log.i("PlayerScreen", "[SwitchStream] reorder mode on")
-                                reordering = true
-                            }
-                        },
-                    ) {
-                        Text(if (reordering) "Finish" else "Reorder")
-                    }
-                }
             }
             Spacer(Modifier.height(12.dp))
             if (streams.isEmpty()) {
@@ -2326,7 +1825,7 @@ fun SwitchStreamSheet(
                         rowDragging = it
                         android.util.Log.i("PlayerScreen", "[SwitchStream] row drag active=$it")
                     },
-                    touchReordering = reorderMode,
+                    touchReordering = false,
                     onPendingOrder = { pendingOrder = it },
                 )
             } else {
@@ -2339,12 +1838,6 @@ fun SwitchStreamSheet(
                 }
             }
             // Apple SwitchStreamView footer, phones and tablets only.
-            if (streams.isNotEmpty() && !isTv) {
-                com.aeriotv.android.ui.settings.SettingsSectionFooter(
-                    text = (footerText ?: "Switches the active upstream for this channel. The picture follows in a few seconds.") +
-                        if (canReorderList) " Tap Reorder to change the stream priority." else "",
-                )
-            }
             Spacer(Modifier.height(12.dp))
         }
     }
@@ -2545,24 +2038,6 @@ data class StreamInfoSnapshot(
     val cacheLines: List<String>,
     val syncLines: List<String>,
 )
-
-/**
- * Releases any player-forced orientation back to the Auto-Rotate aware resting
- * orientation (UNSPECIFIED when following the sensor, LOCKED when the user
- * disabled rotation in App Behaviors) when the player leaves composition.
- * Keyed only on the activity, so it survives rotation-driven recomposition;
- * never key this on orientation or it releases the fullscreen button's
- * landscape lock as soon as the rotation completes.
- */
-@Composable
-internal fun RestoreOrientationOnExit(activity: android.app.Activity?) {
-    DisposableEffect(activity) {
-        onDispose {
-            activity?.requestedOrientation =
-                com.aeriotv.android.core.preferences.AutoRotateState.restingOrientation
-        }
-    }
-}
 
 /** The in-player info card's own corner radius. The card and the channel logo
  *  inside it both read this, so the two shapes cannot drift. */

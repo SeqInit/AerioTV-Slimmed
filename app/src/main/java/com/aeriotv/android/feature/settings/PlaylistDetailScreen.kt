@@ -15,13 +15,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Delete
@@ -35,7 +32,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,7 +45,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -71,11 +66,8 @@ import com.aeriotv.android.core.preferences.DispatcharrAccountFacts
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.ui.settings.settingsFormWidth
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
-import com.aeriotv.android.ui.settings.SettingsHeaderTextButton
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import java.text.DateFormat
 import java.util.Date
-import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 
 /**
  * Playlist Detail. Mirrors iOS Settings > tap-a-playlist row:
@@ -162,28 +154,10 @@ fun PlaylistDetailScreen(
             navigationIcon = {
                 // No back arrow on Android TV -- the remote BACK pops it (user
                 // request). Phones/tablets keep it.
-                if (!rememberIsTvDevice()) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
             },
             actions = {
                 // TV gets an Edit Playlist row in the ACTIONS section instead;
                 // a corner action sits off the natural D-pad path.
-                if (!rememberIsTvDevice()) {
-                    SettingsHeaderTextButton(
-                        label = "Edit",
-                        // Any playlist, active or not: Edit Playlist saves to
-                        // the row whose id it was opened with.
-                        enabled = playlist != null,
-                        onClick = onEdit,
-                    )
-                }
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -214,7 +188,6 @@ fun PlaylistDetailScreen(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.TopCenter,
         ) {
-        val isTv = rememberIsTvDevice()
         LazyColumn(
             modifier = Modifier.settingsFormWidth(),
             // 104dp bottom clears the MainScaffold NavigationBar on phones;
@@ -223,7 +196,7 @@ fun PlaylistDetailScreen(
                 start = 16.dp,
                 end = 16.dp,
                 top = 16.dp,
-                bottom = if (isTv) 32.dp else LocalTabBarBottomInset.current,
+                bottom = 32.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -252,15 +225,11 @@ fun PlaylistDetailScreen(
                     Column(
                         modifier = Modifier
                             .then(
-                                if (isTv) {
-                                    Modifier
-                                        .onFocusChanged { infoFocused = it.isFocused }
-                                        // The card's own shape and the 2 dp accent ring.
-                                        .settingsRowCard(infoFocused)
-                                        .focusable()
-                                } else {
-                                    Modifier
-                                },
+                                Modifier
+                                    .onFocusChanged { infoFocused = it.isFocused }
+                                    // The card's own shape and the 2 dp accent ring.
+                                    .settingsRowCard(infoFocused)
+                                    .focusable(),
                             )
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                     ) {
@@ -334,15 +303,11 @@ fun PlaylistDetailScreen(
                     Column(
                         modifier = Modifier
                             .then(
-                                if (isTv) {
-                                    Modifier
-                                        .onFocusChanged { permsFocused = it.isFocused }
-                                        // The card's own shape and the 2 dp accent ring.
-                                        .settingsRowCard(permsFocused)
-                                        .focusable()
-                                } else {
-                                    Modifier
-                                },
+                                Modifier
+                                    .onFocusChanged { permsFocused = it.isFocused }
+                                    // The card's own shape and the 2 dp accent ring.
+                                    .settingsRowCard(permsFocused)
+                                    .focusable(),
                             )
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                     ) {
@@ -477,123 +442,61 @@ fun PlaylistDetailScreen(
                     AskAtLaunchRow(playlistId = playlist.id)
                 }
             }
-            if (isTv) {
-            item {
-                Section(header = "Actions", footer = null) {
-                    // Rev 2 canon amendment 1: activation lives here on every
-                    // form factor. The rail and sidebar make selection show the
-                    // detail, so OK-to-activate cannot survive on those roots;
-                    // this row replaces it one move away. Mirrors Apple's
-                    // ServerDetailView.swift:243-253.
-                    ActionRow(
-                        icon = if (isActivePlaylist) Icons.Filled.CheckCircle
-                        else Icons.Outlined.PowerSettingsNew,
-                        label = if (isActivePlaylist) "Active Playlist" else "Set Active",
-                        onClick = { playlist?.id?.let { viewModel.switchToPlaylist(it) } },
-                        enabled = !isActivePlaylist,
-                    )
+        item {
+            Section(header = "Actions", footer = null) {
+                // Rev 2 canon amendment 1: activation lives here on every
+                // form factor. The rail and sidebar make selection show the
+                // detail, so OK-to-activate cannot survive on those roots;
+                // this row replaces it one move away. Mirrors Apple's
+                // ServerDetailView.swift:243-253.
+                ActionRow(
+                    icon = if (isActivePlaylist) Icons.Filled.CheckCircle
+                    else Icons.Outlined.PowerSettingsNew,
+                    label = if (isActivePlaylist) "Active Playlist" else "Set Active",
+                    onClick = { playlist?.id?.let { viewModel.switchToPlaylist(it) } },
+                    enabled = !isActivePlaylist,
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                // Any playlist is editable, active or not (Settings phase 3).
+                ActionRow(
+                    icon = Icons.Outlined.Edit,
+                    label = "Edit Playlist",
+                    onClick = onEdit,
+                )
+                if (isActivePlaylist) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    // Any playlist is editable, active or not (Settings phase 3).
-                    if (isTv) {
-                        ActionRow(
-                            icon = Icons.Outlined.Edit,
-                            label = "Edit Playlist",
-                            onClick = onEdit,
-                        )
-                        if (isActivePlaylist) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                        }
-                    }
-                    if (isActivePlaylist) {
-                    ActionRow(
-                        icon = Icons.Outlined.Public,
-                        label = "Test Connection",
-                        onClick = { viewModel.testConnection() },
-                        running = state.testStatus is PlaylistViewModel.ActionStatus.Running,
-                        status = state.testStatus,
-                    )
+                }
+                if (isActivePlaylist) {
+                ActionRow(
+                    icon = Icons.Outlined.Public,
+                    label = "Test Connection",
+                    onClick = { viewModel.testConnection() },
+                    running = state.testStatus is PlaylistViewModel.ActionStatus.Running,
+                    status = state.testStatus,
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                ActionRow(
+                    icon = Icons.Filled.Refresh,
+                    label = "Refresh Playlist",
+                    onClick = { viewModel.refreshPlaylist() },
+                    running = state.playlistRefreshStatus is PlaylistViewModel.ActionStatus.Running,
+                    status = state.playlistRefreshStatus,
+                )
+                }
+                if (isActivePlaylist && !playlist.lanUrlString.isNullOrBlank()) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                     ActionRow(
-                        icon = Icons.Filled.Refresh,
-                        label = "Refresh Playlist",
-                        onClick = { viewModel.refreshPlaylist() },
-                        running = state.playlistRefreshStatus is PlaylistViewModel.ActionStatus.Running,
-                        status = state.playlistRefreshStatus,
+                        icon = Icons.Outlined.Wifi,
+                        label = "Refresh LAN Detection",
+                        onClick = { viewModel.refreshLanDetection() },
+                        running = state.lanRefreshStatus is PlaylistViewModel.ActionStatus.Running,
+                        status = state.lanRefreshStatus,
                     )
-                    }
-                    if (isActivePlaylist && !playlist.lanUrlString.isNullOrBlank()) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                        ActionRow(
-                            icon = Icons.Outlined.Wifi,
-                            label = "Refresh LAN Detection",
-                            onClick = { viewModel.refreshLanDetection() },
-                            running = state.lanRefreshStatus is PlaylistViewModel.ActionStatus.Running,
-                            status = state.lanRefreshStatus,
-                        )
-                    }
                 }
             }
+        }
 
-                infoSections()
-            } else {
-                infoSections()
-            item {
-                Section(header = "Actions", footer = null) {
-                    // Rev 2 canon amendment 1: activation lives here on every
-                    // form factor. The rail and sidebar make selection show the
-                    // detail, so OK-to-activate cannot survive on those roots;
-                    // this row replaces it one move away. Mirrors Apple's
-                    // ServerDetailView.swift:243-253.
-                    ActionRow(
-                        icon = if (isActivePlaylist) Icons.Filled.CheckCircle
-                        else Icons.Outlined.PowerSettingsNew,
-                        label = if (isActivePlaylist) "Active Playlist" else "Set Active",
-                        onClick = { playlist?.id?.let { viewModel.switchToPlaylist(it) } },
-                        enabled = !isActivePlaylist,
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    // Any playlist is editable, active or not (Settings phase 3).
-                    if (isTv) {
-                        ActionRow(
-                            icon = Icons.Outlined.Edit,
-                            label = "Edit Playlist",
-                            onClick = onEdit,
-                        )
-                        if (isActivePlaylist) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                        }
-                    }
-                    if (isActivePlaylist) {
-                    ActionRow(
-                        icon = Icons.Outlined.Public,
-                        label = "Test Connection",
-                        onClick = { viewModel.testConnection() },
-                        running = state.testStatus is PlaylistViewModel.ActionStatus.Running,
-                        status = state.testStatus,
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    ActionRow(
-                        icon = Icons.Filled.Refresh,
-                        label = "Refresh Playlist",
-                        onClick = { viewModel.refreshPlaylist() },
-                        running = state.playlistRefreshStatus is PlaylistViewModel.ActionStatus.Running,
-                        status = state.playlistRefreshStatus,
-                    )
-                    }
-                    if (isActivePlaylist && !playlist.lanUrlString.isNullOrBlank()) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                        ActionRow(
-                            icon = Icons.Outlined.Wifi,
-                            label = "Refresh LAN Detection",
-                            onClick = { viewModel.refreshLanDetection() },
-                            running = state.lanRefreshStatus is PlaylistViewModel.ActionStatus.Running,
-                            status = state.lanRefreshStatus,
-                        )
-                    }
-                }
-            }
-
-            }
+            infoSections()
 
             if (isActivePlaylist) item {
                 Section(
@@ -743,7 +646,6 @@ private fun DetailRow(
     // Apple infoRow: label left, value pushed to the trailing edge on one line
     // with middle truncation, a hairline between rows on touch (List
     // separators; the tvOS read-only card draws none).
-    val isTv = rememberIsTvDevice()
     Column {
         Row(
             modifier = Modifier
@@ -779,9 +681,6 @@ private fun DetailRow(
                     overflow = androidx.compose.ui.text.style.TextOverflow.MiddleEllipsis,
                 )
             }
-        }
-        if (!isTv) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
         }
     }
 }

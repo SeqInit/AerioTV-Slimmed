@@ -7,8 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,24 +19,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,11 +59,8 @@ import com.aeriotv.android.ui.settings.SettingsDetailTopBar
 import com.aeriotv.android.ui.settings.SettingsSection
 import com.aeriotv.android.ui.settings.SettingsToggleRow
 import com.aeriotv.android.ui.settings.dpadFocusRing
-import com.aeriotv.android.ui.settings.dpadFocusWash
 import com.aeriotv.android.ui.settings.SettingsIntStepperRow
-import com.aeriotv.android.ui.settings.rememberIsTvDevice
 import com.aeriotv.android.ui.settings.settingsRowCard
-import com.aeriotv.android.ui.tv.dpadFocusEscape
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 
 /**
@@ -96,7 +81,6 @@ fun DvrSettingsScreen(
     val customFolderUri by settingsVm.dvrCustomFolderUri.collectAsStateWithLifecycle(initialValue = "")
     val keepAwake by settingsVm.dvrKeepAwakeDuringRecording.collectAsStateWithLifecycle(initialValue = true)
     val context = LocalContext.current
-    val isTv = rememberIsTvDevice()
     val scope = rememberCoroutineScope()
     var customBuffer by remember { mutableStateOf<CustomBuffer?>(null) }
     var showClearConfirmation by remember { mutableStateOf(false) }
@@ -210,45 +194,20 @@ fun DvrSettingsScreen(
                     // because typing a number on a remote is worse than a stop.
                     // Touch: Apple's iOS picker page plus a "Custom…" row under
                     // each picker for off-stop values.
-                    if (isTv) {
-                        SettingsIntStepperRow(
-                            title = "Start Early (Pre-Roll)",
-                            options = ROLL_OPTIONS,
-                            value = preRoll,
-                            onValueChange = settingsVm::setDvrDefaultPreRollMins,
-                            format = ::formatRoll,
-                        )
-                        SettingsIntStepperRow(
-                            title = "End Late (Post-Roll)",
-                            options = ROLL_OPTIONS,
-                            value = postRoll,
-                            onValueChange = settingsVm::setDvrDefaultPostRollMins,
-                            format = ::formatRoll,
-                        )
-                    } else {
-                        SettingsPickerRow(
-                            title = "Start Early (Pre-Roll)",
-                            options = bufferOptions(preRoll),
-                            selected = preRoll,
-                            onSelect = settingsVm::setDvrDefaultPreRollMins,
-                        )
-                        SettingsActionRow(
-                            label = "Custom…",
-                            leadingIcon = Icons.Filled.Tune,
-                            onClick = { customBuffer = CustomBuffer.Pre },
-                        )
-                        SettingsPickerRow(
-                            title = "End Late (Post-Roll)",
-                            options = bufferOptions(postRoll),
-                            selected = postRoll,
-                            onSelect = settingsVm::setDvrDefaultPostRollMins,
-                        )
-                        SettingsActionRow(
-                            label = "Custom…",
-                            leadingIcon = Icons.Filled.Tune,
-                            onClick = { customBuffer = CustomBuffer.Post },
-                        )
-                    }
+                    SettingsIntStepperRow(
+                        title = "Start Early (Pre-Roll)",
+                        options = ROLL_OPTIONS,
+                        value = preRoll,
+                        onValueChange = settingsVm::setDvrDefaultPreRollMins,
+                        format = ::formatRoll,
+                    )
+                    SettingsIntStepperRow(
+                        title = "End Late (Post-Roll)",
+                        options = ROLL_OPTIONS,
+                        value = postRoll,
+                        onValueChange = settingsVm::setDvrDefaultPostRollMins,
+                        format = ::formatRoll,
+                    )
                 }
             }
 
@@ -263,7 +222,7 @@ fun DvrSettingsScreen(
                 SettingsSection(
                     header = "Recording Destination",
                     // Apple TV prints no footer under Default Destination.
-                    footer = if (isTv) null else "Server-side recordings are recommended: they continue even when AerioTV is closed.",
+                    footer = null,
                 ) {
                     SettingsPickerRow(
                         title = "Default Destination",
@@ -283,7 +242,7 @@ fun DvrSettingsScreen(
                 // Apple TV adds a storage disclosure under the card.
                 Card(
                     header = "Local Storage",
-                    footer = if (isTv) "Recordings are stored on this Android TV. If the system runs critically low on space, Android may remove stored app data, including recordings. For must-keep recordings, use a Dispatcharr server destination." else null,
+                    footer = "Recordings are stored on this Android TV. If the system runs critically low on space, Android may remove stored app data, including recordings. For must-keep recordings, use a Dispatcharr server destination.",
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -424,13 +383,13 @@ fun DvrSettingsScreen(
                 // keeps describing what Android actually does.
                 SettingsSection(
                     header = "Behavior",
-                    footer = if (isTv) null else "Holds a CPU wake lock while a local recording is downloading so Doze can't stall it. Server-side recordings are unaffected (they run on Dispatcharr). Leave on unless you're debugging battery drain.",
+                    footer = null,
                 ) {
                     SettingsToggleRow(
-                        title = if (isTv) "Keep Device Awake" else "Keep Device Awake During Recording",
-                        subtitle = if (isTv) "Prevents sleep during local recording" else null,
+                        title = "Keep Device Awake",
+                        subtitle = "Prevents sleep during local recording",
                         // Apple TV: bolt.fill.
-                        leadingIcon = if (isTv) androidx.compose.material.icons.Icons.Filled.Bolt else null,
+                        leadingIcon = androidx.compose.material.icons.Icons.Filled.Bolt,
                         checked = keepAwake,
                         onCheckedChange = settingsVm::setDvrKeepAwakeDuringRecording,
                     )
@@ -440,7 +399,7 @@ fun DvrSettingsScreen(
             item {
                 SettingsSection(
                     header = "Danger Zone",
-                    footer = if (isTv) null else "Deletes every recording saved on this device. Server recordings on Dispatcharr are not affected.",
+                    footer = null,
                 ) {
                     SettingsActionRow(
                         label = "Delete All Local Recordings",
@@ -475,15 +434,6 @@ private fun Card(
 
 /** Apple's compact stepper spelling: the value sits between two keys. */
 private fun formatRoll(mins: Int): String = if (mins == 0) "None" else "$mins min"
-
-/**
- * Apple's picker-page choices: long form ("5 minutes"), with a custom stored
- * value appended so the collapsed row never reads blank for, say, 20 minutes.
- */
-private fun bufferOptions(current: Int): List<SettingsPickerOption<Int>> {
-    val options = ROLL_OPTIONS.map { SettingsPickerOption(it, if (it == 0) "None" else "$it minutes") }
-    return if (current in ROLL_OPTIONS) options else options + SettingsPickerOption(current, "$current minutes")
-}
 
 private enum class CustomBuffer { Pre, Post }
 
