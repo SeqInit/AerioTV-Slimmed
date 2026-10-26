@@ -22,7 +22,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aeriotv.android.feature.main.AppTab
 import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
-import com.aeriotv.android.ui.adaptive.rememberViewport
 import com.aeriotv.android.ui.settings.SettingsDetailTopBar
 import com.aeriotv.android.ui.settings.SettingsPickerOption
 import com.aeriotv.android.ui.settings.SettingsPickerRow
@@ -48,10 +47,6 @@ fun GeneralSettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    // Apple branches Startup and Auto-Rotate copy on the iPad idiom. The
-    // physical diagonal is the closest Android analog: it does not flip with
-    // orientation the way width classes do.
-    val isTablet = rememberViewport().diagonalInches >= 8f
     val defaultTab by viewModel.defaultTab.collectAsStateWithLifecycle(initialValue = "")
     val skipLoadingScreen by viewModel.skipLoadingScreen.collectAsStateWithLifecycle(initialValue = false)
     val autoResumeLastChannel by viewModel.autoResumeLastChannel.collectAsStateWithLifecycle(initialValue = false)
@@ -91,22 +86,8 @@ fun GeneralSettingsScreen(
                 // Auto-rotate are ONE section with one combined footer.
                 SettingsSection(
                     header = "Startup",
-                    // Apple parity (Phase 3): tvOS carries only the picker's
-                    // footer, and the inline TV picker cannot hold one, so it
-                    // lands here. iOS moved that line onto the pushed picker
-                    // page and keeps two short paragraphs in the section.
-                    footer = when {
-                        // tvOS: the explanation lives in the picker sheet.
-                        true -> null
-                        isTablet ->
-                            "Skipping the loading screen may cause brief UI stutter while data loads. " +
-                                "Resume picks up the last channel you watched in the corner mini-player; " +
-                                "press Play/Pause to expand.\n\n" +
-                                "The player's fullscreen button can still rotate into landscape either way."
-                        else ->
-                            "Skipping the loading screen may cause brief UI stutter while data loads.\n\n" +
-                                "The player's fullscreen button can still rotate into landscape either way."
-                    },
+                    // tvOS: the explanation lives in the picker sheet.
+                    footer = null,
                 ) {
                     // Search is a TV-only nav tab and not a sensible launch tab;
                     // on phones it does not exist at all. On Demand and Favorites

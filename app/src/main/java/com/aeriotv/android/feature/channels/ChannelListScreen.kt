@@ -6,22 +6,16 @@ import com.aeriotv.android.core.ui.subtitleIsRedundant
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -32,24 +26,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import com.aeriotv.android.feature.player.MiniPlayerChrome
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -59,32 +43,20 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Replay
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.Tune
 import com.aeriotv.android.ui.scale.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,7 +64,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
@@ -103,13 +74,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aeriotv.android.core.category.CategoryPaletteState
-import com.aeriotv.android.core.data.ChannelCollection
 import com.aeriotv.android.core.data.EPGProgramme
 import com.aeriotv.android.core.data.M3UChannel
 import com.aeriotv.android.core.data.ProgramInfoTarget
 import com.aeriotv.android.core.data.canReplay
 import com.aeriotv.android.core.data.db.entity.reminderKey
-import com.aeriotv.android.core.data.guideMatchKey
 import com.aeriotv.android.core.data.toInfoTarget
 import com.aeriotv.android.core.tv.TvActionMenuDialog
 import com.aeriotv.android.core.tv.TvMenuAction
@@ -119,701 +88,12 @@ import com.aeriotv.android.core.ui.LocalShowProgramSubtitles
 import com.aeriotv.android.core.ui.SeasonEpisodePill
 import com.aeriotv.android.core.ui.epgFlags
 import com.aeriotv.android.core.ui.seasonEpisodeLabel
-import com.aeriotv.android.feature.collections.AddToCollectionFlow
-import com.aeriotv.android.feature.collections.CollectionPill
 import com.aeriotv.android.feature.collections.CollectionsMenuContext
-import com.aeriotv.android.feature.collections.CollectionsViewModel
-import com.aeriotv.android.feature.favorites.FavoritesViewModel
-import com.aeriotv.android.feature.livetv.EmptyGroupNotice
-import com.aeriotv.android.feature.livetv.LiveTVViewMode
-import com.aeriotv.android.feature.livetv.ManageGroupsSheet
 import com.aeriotv.android.feature.livetv.ProgramInfoSheet
 import com.aeriotv.android.feature.livetv.RecordProgramSheet
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
-import com.aeriotv.android.feature.playlist.SortMode
 import com.aeriotv.android.feature.playlist.nowPlaying
 import com.aeriotv.android.feature.reminders.RemindersViewModel
-import com.aeriotv.android.feature.settings.SettingsViewModel
-import kotlinx.coroutines.launch
-import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ChannelListScreen(
-    onChannelClick: (M3UChannel) -> Unit,
-    viewModel: PlaylistViewModel = hiltViewModel(),
-    modifierWrap: Modifier = Modifier,
-    viewMode: LiveTVViewMode = LiveTVViewMode.List,
-    canToggleViewMode: Boolean = false,
-    onToggleViewMode: () -> Unit = {},
-    onOpenSearch: () -> Unit = {},
-    /** Catch-up (task #137): play a resolved timeshift URL in the recording
-     *  player; same shape as GuideScreen's onPlayCatchup. */
-    onPlayCatchup: (
-        channelId: String,
-        playbackUrl: String,
-        title: String,
-        progStartMillis: Long,
-        progEndMillis: Long,
-        panelTz: String,
-        channelUuid: String,
-    ) -> Unit = { _, _, _, _, _, _, _ -> },
-) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val defaultGroupToken by viewModel.defaultGroupToken.collectAsStateWithLifecycle()
-    val favoritesVm: FavoritesViewModel = hiltViewModel()
-    val favoritesOrNull = favoritesVm.all.collectAsStateWithLifecycle().value
-    val favoritesList = favoritesOrNull ?: emptyList()
-    val favoriteIds = remember(favoritesList) { favoritesList.map { it.channelId }.toSet() }
-    val settingsVm: SettingsViewModel = hiltViewModel()
-    val palette by settingsVm.categoryPalette.collectAsStateWithLifecycle(initialValue = CategoryPaletteState.Default)
-    val hiddenGroups by settingsVm.hiddenGroups.collectAsStateWithLifecycle(initialValue = emptySet())
-    // Program Info Button > List View (Apple parity 2026-10-13): the guide
-    // cell's info button on list rows, same mode picker.
-    val pibListOn by settingsVm.programInfoButtonList.collectAsStateWithLifecycle(initialValue = false)
-    val pibMode by settingsVm.guideProgramInfoButton
-        .collectAsStateWithLifecycle(initialValue = com.aeriotv.android.core.preferences.GuideProgramInfoButton.OFF)
-    val listInfoButtonMode = com.aeriotv.android.core.preferences.GuideProgramInfoButton.OFF
-    val showChannelLogos by settingsVm.showChannelLogos.collectAsStateWithLifecycle(initialValue = true)
-    val showChannelNumbers by settingsVm.showChannelNumbers.collectAsStateWithLifecycle(initialValue = true)
-    val groupSortModeRaw by settingsVm.groupSortMode.collectAsStateWithLifecycle(initialValue = "Default")
-    val groupOrder by settingsVm.groupOrder.collectAsStateWithLifecycle(initialValue = emptyList())
-    val groupSortMode = com.aeriotv.android.feature.livetv.GroupSortMode.from(groupSortModeRaw)
-    // Logan 2026-09-14: Recently Watched is a synthetic group, unchecked in
-    // Manage Groups until the user shows it; the pref folds into the hidden
-    // set so the sheet and the filters keep one mechanism.
-    val recentGroupVisible by settingsVm.recentGroupVisible.collectAsStateWithLifecycle()
-    val recentChannelIds by settingsVm.recentChannelIds.collectAsStateWithLifecycle(initialValue = emptyList())
-
-    // Catch-up (task #137): resolve a past programme to its timeshift URL,
-    // then play; failures surface as a toast (same flow as GuideScreen).
-    val listContext = LocalContext.current
-    val onCatchupResolve: (M3UChannel, EPGProgramme) -> Unit = { ch, prog ->
-        viewModel.playCatchup(ch, prog) { result ->
-            result
-                .onSuccess { pb ->
-                    onPlayCatchup(
-                        ch.id, pb.url, prog.title,
-                        prog.startMillis, prog.endMillis, pb.panelTimeZoneId,
-                        pb.channelUuid.orEmpty(),
-                    )
-                }
-                .onFailure { t ->
-                    Toast.makeText(
-                        listContext,
-                        t.message ?: "Catch-up is unavailable for this programme.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-        }
-    }
-    var programInfoTarget by remember { mutableStateOf<ProgramInfoTarget?>(null) }
-    var recordTarget by remember { mutableStateOf<ProgramInfoTarget?>(null) }
-    var manageGroupsOpen by remember { mutableStateOf(false) }
-    // Search is a reveal-on-tap button (parity with Guide view), not an
-    // always-on field, so the channel list gets full height until the user
-    // opts into searching. Closing it clears the query.
-    var searchActive by remember { mutableStateOf(false) }
-    com.aeriotv.android.ui.search.CloseSearchOnLeave(searchActive) {
-        searchActive = false
-        viewModel.onSearchQueryChange("")
-    }
-
-    // Channel Collections (#45): user-named channel groupings as extra filter
-    // pills + row-menu actions. Mirrors the guide's wiring; both screens share
-    // the "collection:<id>" selectedGroup sentinel, so a collection picked in
-    // one view stays active in the other.
-    val collectionsVm: CollectionsViewModel = hiltViewModel()
-    val miniPlayerVm: com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel = hiltViewModel()
-    val miniState by miniPlayerVm.state.collectAsStateWithLifecycle()
-    val miniActive = miniState is com.aeriotv.android.feature.miniplayer.MiniPlayerSession.State.Active
-    val collections by collectionsVm.collections.collectAsStateWithLifecycle()
-    var collectionPickerFor by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val collectionsMenu = remember(collections, state.selectedGroup) {
-        CollectionsMenuContext(
-            collections = collections,
-            activeCollectionId = ChannelCollection.idFromToken(state.selectedGroup),
-            onOpenPicker = { chId, chName, _, _ -> collectionPickerFor = chId to chName },
-            onRemoveMember = collectionsVm::removeMember,
-            onRemoveFromAll = collectionsVm::removeFromAll,
-        )
-    }
-
-    // Preserve the order groups appear in the source channel list. iOS does
-    // this on the parse step (HomeView.swift `fetchM3U` lines 1869-1872), an
-    // empty array seeded with the first-seen groupTitle per channel and
-    // `firstIndex(of:)` mapped onto each ChannelDisplayItem.categoryOrder.
-    // Earlier Android revisions sorted alphabetically, which scrambled
-    // Dispatcharr's curated group ordering. Sequence.distinct() preserves
-    // encounter order so dropping the .sortedBy gets us iOS-matching behavior.
-    val allGroupsRaw by remember(state.channels, groupSortMode, groupOrder, favoriteIds.isNotEmpty()) {
-        derivedStateOf {
-            val sourceOrder = state.channels.asSequence()
-                .map { it.groupTitle }
-                .filter { it.isNotBlank() }
-                .distinct()
-                .toList()
-            // Apply the user's Manage Groups sort preference (Default / A-Z /
-            // Manual) on top of the source order.
-            com.aeriotv.android.feature.livetv.orderGroups(
-                sourceOrder, groupSortMode, groupOrder,
-                hasFavorites = favoriteIds.isNotEmpty(), hasRecent = true,
-            )
-        }
-    }
-
-    val effectiveHidden = remember(hiddenGroups, recentGroupVisible) {
-        if (recentGroupVisible) hiddenGroups
-        else hiddenGroups + PlaylistViewModel.RECENT_GROUP
-    }
-
-    val groups by remember(allGroupsRaw, effectiveHidden) {
-        derivedStateOf {
-            // Drop any provider group literally named "All" -- it collides with
-            // the ALL_GROUPS sentinel and crashes the pill LazyRow on a
-            // duplicate key (#45 review).
-            val visible = allGroupsRaw.filterNot { it in effectiveHidden }
-            com.aeriotv.android.feature.livetv.groupTokens(visible, effectiveHidden)
-        }
-    }
-    // GH #80: All can be hidden; a stranded selection lands on the first pill.
-    // GH #81: hold the reset while the favorites table is still loading, or a
-    // restored Favorites selection is discarded before it can ever be shown.
-    LaunchedEffect(groups, state.selectedGroup, favoritesOrNull == null) {
-        val sel = state.selectedGroup
-        val favoritesPending = sel == PlaylistViewModel.FAVORITES_GROUP && favoritesOrNull == null
-        if (sel !in groups && !sel.startsWith(ChannelCollection.TOKEN_PREFIX) &&
-            !favoritesPending && allGroupsRaw.isNotEmpty()
-        ) {
-            viewModel.onGroupSelected(
-                com.aeriotv.android.feature.livetv.fallbackGroupToken(groups),
-                persist = false,
-            )
-        }
-    }
-
-    // E-1 stage 2 (perf campaign): shared off-main pipeline; see
-    // computeDisplayChannels and the twin call site in GuideScreen.
-    val filtered by androidx.compose.runtime.produceState(
-        initialValue = com.aeriotv.android.feature.livetv.computeDisplayChannels(
-            state.channels, state.selectedGroup, state.searchQuery, state.sortMode,
-            allGroupsRaw, groupSortMode, effectiveHidden, favoriteIds, collections, recentChannelIds,
-        ),
-        state.channels, state.selectedGroup, state.searchQuery, state.sortMode,
-        allGroupsRaw, groupSortMode, effectiveHidden, favoriteIds, collections, recentChannelIds,
-    ) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            com.aeriotv.android.feature.livetv.computeDisplayChannels(
-                state.channels, state.selectedGroup, state.searchQuery, state.sortMode,
-                allGroupsRaw, groupSortMode, effectiveHidden, favoriteIds, collections, recentChannelIds,
-            )
-        }
-    }
-
-    // #45: the Add-to-Collection picker + chained New Collection name dialog,
-    // opened from a channel row's long-press menu. Dialogs render in their own
-    // window, so composing here (outside the Column) is layout-neutral.
-    collectionPickerFor?.let { (chId, chName) ->
-        AddToCollectionFlow(
-            channelId = chId,
-            channelName = chName,
-            collections = collections,
-            onToggleMember = collectionsVm::toggleMember,
-            onCreate = collectionsVm::create,
-            onClose = { collectionPickerFor = null },
-        )
-    }
-
-    // #45: collection pills join the group row -- placement "beginning"
-    // renders before All, "end" after the last group. Hoisted so the TV row,
-    // the phone header strip and the phone drawer all use it.
-    val collectionPillItem: @Composable (ChannelCollection) -> Unit = { c ->
-        val token = ChannelCollection.token(c.id)
-        CollectionPill(
-            collection = c,
-            selected = state.selectedGroup == token,
-            onSelect = { viewModel.onGroupSelected(token) },
-            onSetPlacement = { p -> collectionsVm.setPlacement(c.id, p) },
-            onDelete = {
-                if (state.selectedGroup == token) {
-                    viewModel.onGroupSelected(PlaylistViewModel.ALL_GROUPS)
-                }
-                collectionsVm.delete(c.id)
-            },
-        )
-    }
-    // Phone drawer rows: collections where their pill placement puts them,
-    // around the Favorites / All / group tokens (Apple PhoneGroupDrawer).
-    val drawerTokens = remember(groups, collections) {
-        collections.filter { it.placement == ChannelCollection.PLACEMENT_BEGINNING }.map { ChannelCollection.token(it.id) } +
-            groups +
-            collections.filter { it.placement != ChannelCollection.PLACEMENT_BEGINNING }.map { ChannelCollection.token(it.id) }
-    }
-    val groupLabelFor: (String) -> String = { token ->
-        com.aeriotv.android.feature.livetv.groupDisplayName(token, collections)
-    }
-
-    Box(modifier = modifierWrap.fillMaxSize()) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Phone / tablet: NO title bar (Logan 2026-09-05, Apple parity with
-        // ChannelListView.swift:395, the tab bar already says where we are).
-        // One header row carries the groups control, the pills or the active
-        // group name, Search, Sort and the List / Guide toggle. It takes the
-        // status-bar inset itself so nothing sits under the clock. Android TV
-        // has no bar either: its controls live on the group-pill row below.
-
-        if (searchActive) OutlinedTextField(
-            value = state.searchQuery,
-            onValueChange = viewModel::onSearchQueryChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            singleLine = true,
-            placeholder = { Text("Search channels") },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-            // Trailing X clears the query in one tap. iOS UISearchBar has
-            // this for free; Compose's OutlinedTextField doesn't, so we
-            // surface it conditionally on non-empty input.
-            trailingIcon = if (state.searchQuery.isNotEmpty()) {
-                {
-                    IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Clear search",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            } else null,
-            shape = RoundedCornerShape(14.dp),
-            keyboardOptions = com.aeriotv.android.ui.textfield.aerioTextFieldKeyboardOptions(
-                imeAction = androidx.compose.ui.text.input.ImeAction.Search,
-            ),
-        )
-
-        // Audit task #51 final piece: collapse the chip Row when the user
-        // scrolls past the top of the channel list, restore it when they
-        // scroll back to row 0. Listening on the LazyColumn's
-        // firstVisibleItemIndex via a hoisted state. The
-        // AnimatedVisibility's expand/shrink-vertically gives a smooth
-        // height collapse without snapping. Stays expanded on a
-        // not-yet-scrolled list (initial state).
-        val listState = rememberLazyListState()
-        // Re-tap of the Live TV tab while the list view is showing
-        // (TabReselect): back to the first channel. Phone and tablet only; TV
-        // never emits the event.
-        com.aeriotv.android.feature.main.OnTabReselect(
-            com.aeriotv.android.feature.main.AppTab.LiveTV,
-        ) {
-            // Already at the top of the current group: nothing to animate.
-            if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
-                listState.animateScrollToItem(0)
-            }
-        }
-        // Back with the list scrolled away from the top (the guide's ladder
-        // step, Logan 2026-10-15): the first Back returns to the top channel
-        // and is consumed; the next Back, at the top, falls through to the
-        // Exit AerioTV? confirm. Overlays composed later (search, sheets,
-        // menus) register their own handlers after this one and still win.
-        val listTabActive = com.aeriotv.android.feature.main.LocalTabIsActive.current
-        val listScrolled by remember {
-            derivedStateOf { listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0 }
-        }
-        val listBackScope = rememberCoroutineScope()
-        androidx.activity.compose.BackHandler(enabled = listTabActive && listScrolled) {
-            android.util.Log.i("AerioTV", "[LIST] Back -> top channel")
-            listBackScope.launch { runCatching { listState.animateScrollToItem(0) } }
-        }
-        // GROUP CHANGE SCROLL (parity with Apple 072303d/59461fe): the list
-        // keeps its first visible item by key, so a group picked while
-        // scrolled deep in All could open the new, shorter group at its end.
-        // A group change starts the new group at its top once its rows land.
-        val lastListGroup = remember { arrayOf<String?>(null) }
-        LaunchedEffect(state.selectedGroup) {
-            val group = state.selectedGroup
-            val prev = lastListGroup[0]
-            lastListGroup[0] = group
-            if (prev == null || prev == group) return@LaunchedEffect
-            // filtered is recomputed off main: wait for the new group's rows.
-            kotlinx.coroutines.withTimeoutOrNull(1_000L) {
-                androidx.compose.runtime.snapshotFlow { filtered }.drop(1).first()
-            }
-            val rows = filtered
-            android.util.Log.d(
-                "GuideGroup",
-                "GuideGroup: filter group=$group raw=${state.channels.size} rows=${rows.size} first=${rows.firstOrNull()?.name ?: "none"}",
-            )
-            androidx.compose.runtime.withFrameNanos { }
-            runCatching { listState.scrollToItem(0) }
-        }
-        val chipsVisible by remember {
-            derivedStateOf { listState.firstVisibleItemIndex == 0 }
-        }
-        // Phone pills now live inside the header row above (no collapse on
-        // scroll: the header is fixed, as on iOS). TV keeps its own pill row
-        // because the Sort / Manage Groups circles live in it.
-        AnimatedVisibility(
-            visible = chipsVisible,
-            enter = expandVertically(),
-            exit = shrinkVertically(),
-        ) {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // On Android TV the List has no top app bar, so Sort leads the
-                // pill row. TV guide cleanup (Logan 2026-08-06): the Guide-switch
-                // circle is gone (Settings > Default Live TV View is the switch)
-                // and the channel-search circle too (the nav bar's Search tab is
-                // the one search entry on TV). Sort stays - nothing else covers
-                // Number / Name / Favorites ordering - and the Tune circle below
-                // stays as TV's only Manage Groups entry until hidden groups
-                // sync across devices.
-                item {
-                    SortMenu(
-                        currentMode = state.sortMode,
-                        onSelect = viewModel::onSortModeChange,
-                        circular = true,
-                    )
-                }
-                // Logan 2026-10-10 (explicit decision): Manage Groups sits to
-                // the LEFT of the first group pill.
-                item(key = "__manage__") {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                            .clickable { manageGroupsOpen = true },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Tune,
-                            contentDescription = if (hiddenGroups.isEmpty())
-                                "Manage groups"
-                            else
-                                "Manage groups (${hiddenGroups.size} hidden)",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        // iOS parity: warning dot in the top-right indicates
-                        // the user has at least one group hidden. Without
-                        // this, a user who hid groups months ago has no
-                        // visual cue to remember why the chip list looks
-                        // short. ManageGroupsButton in Aerio/Design/Components
-                        // /ManageGroupsSheet.swift uses the same pattern.
-                        if (hiddenGroups.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(top = 6.dp, end = 6.dp)
-                                    .size(8.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(Color(0xFFFFA502)),
-                            )
-                        }
-                    }
-                }
-                items(
-                    collections.filter { it.placement == ChannelCollection.PLACEMENT_BEGINNING },
-                    key = { "coll_${it.id}" },
-                ) { c -> collectionPillItem(c) }
-                items(groups, key = { "grp_$it" }) { group ->
-                    // Same capsule treatment as the Guide's phone pills (user
-                    // report: the two views' pills didn't match; Material's
-                    // default FilterChip is an 8dp rounded rect).
-                    FilterChip(
-                        selected = state.selectedGroup == group,
-                        onClick = { viewModel.onGroupSelected(group) },
-                        label = { Text(com.aeriotv.android.feature.livetv.groupDisplayName(group), style = MaterialTheme.typography.labelLarge) },
-                        shape = CircleShape,
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color.Transparent,
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = state.selectedGroup == group,
-                        ),
-                    )
-                }
-                items(
-                    collections.filter { it.placement != ChannelCollection.PLACEMENT_BEGINNING },
-                    key = { "coll_${it.id}" },
-                ) { c -> collectionPillItem(c) }
-            }
-        }
-
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            thickness = 0.5.dp,
-        )
-
-        // Radio Mode dock card (Android#127), same placement as the guide:
-        // below the header / pills, above the rows.
-        com.aeriotv.android.feature.player.RadioTvBannerSlot()
-
-        // Audit task #51 (partial): pull-to-refresh on the Live TV list.
-        // Drags the spinner from the top of the LazyColumn and invokes
-        // PlaylistViewModel.refreshPlaylist(), which re-fetches the channel
-        // list and the EPG. The spinner stays visible while state.isLoading
-        // is true. Pull-to-refresh is a TOUCH idiom, so on Android TV it is
-        // skipped entirely (no pull gesture, and the indicator otherwise hangs
-        // stuck mid-screen while loading); TV renders the list bare. Phone /
-        // tablet keep the swipe-to-refresh affordance.
-        // Apple GH #55 (jayegles): swiping left/right on the LIST cycles the
-        // selected group pill (left = next, right = previous, clamped at the
-        // ends). detectHorizontalDragGestures only wins the pointer contest
-        // when the gesture is predominantly horizontal (horizontal touch
-        // slop), so vertical scrolling and pull-to-refresh are untouched.
-        // Touch idiom: phone/tablet only. A collection filter isn't part of
-        // the cycle; the first swipe from one lands on All.
-        val currentGroupForSwipe by rememberUpdatedState(state.selectedGroup)
-        // 2026-07-12: interactive drag - the list follows the finger while a
-        // horizontal group swipe is in flight (rubber-banded when there's no
-        // group on that side), and a committed swipe pages the old list
-        // off-screen before the new group's list slides in from the opposite
-        // edge, so it reads as dragging between pages instead of an instant
-        // filter change. Mirrored on iOS.
-        val groupDragOffset = remember { androidx.compose.animation.core.Animatable(0f) }
-        val groupSwipeScope = rememberCoroutineScope()
-        // The translation lives on the LazyColumn; the gesture detector lives
-        // on the NON-translated PullToRefreshBox ancestor below. Putting both
-        // on the same node broke the drag mid-flight: graphicsLayer shifts the
-        // node's local coordinate space, so each snapTo re-mapped the
-        // stationary finger and corrupted the drag deltas.
-        val groupSwipeModifier = Modifier.fillMaxSize()
-        val groupSwipeGestureModifier = Modifier.fillMaxSize()
-        val channelList: @Composable () -> Unit = {
-            LazyColumn(
-                state = listState,
-                modifier = groupSwipeModifier,
-                // 104dp bottom clears the MainScaffold NavigationBar so the
-                // final channel row stays fully visible above the tab bar.
-                contentPadding = PaddingValues(
-                    start = 12.dp,
-                    end = 12.dp,
-                    top = 8.dp,
-                    bottom = LocalTabBarBottomInset.current,
-                ),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // GH #72: an empty group is a legitimate state (a provider
-                // group nothing has been assigned to yet), not an error, so it
-                // gets a notice with a way out rather than a blank list. The
-                // pill row stays on screen here, so this is comfort rather
-                // than rescue; the guide is where it is load-bearing.
-                if (filtered.isEmpty()) {
-                    item(key = "list.emptyGroup") {
-                        EmptyGroupNotice(
-                            isSearching = state.searchQuery.isNotBlank(),
-                            onShowAllChannels = {
-                                viewModel.onGroupSelected(PlaylistViewModel.ALL_GROUPS)
-                            },
-                        )
-                    }
-                }
-                // Key by url, NOT id: id is "m3u:<tvg-id>", and providers assign
-                // the same tvg-id to multiple distinct channels, so id is not
-                // unique. Compose LazyColumn hard-crashes on a duplicate key. url
-                // is unique per stream (GH #31 follow-up crash fix).
-                items(items = filtered, key = { it.url }) { channel ->
-                    val programmes = state.epgByChannel[channel.guideMatchKey].orEmpty()
-                    val nowProgramme = programmes.nowPlaying()
-                    ChannelRow(
-                        channel = channel,
-                        nowProgramme = nowProgramme,
-                        programmes = programmes,
-                        isFavorite = channel.id in favoriteIds,
-                        onPlay = { onChannelClick(channel) },
-                        onToggleFavorite = { favoritesVm.toggle(channel) },
-                        onRemoveFromRecents = if (channel.id in recentChannelIds) {
-                            { settingsVm.removeRecentChannel(channel.id) }
-                        } else null,
-                        onShowProgramInfo = { programInfoTarget = it },
-                        onShowRecord = { recordTarget = it },
-                        infoButtonMode = listInfoButtonMode,
-                        palette = palette,
-                        showLogo = showChannelLogos,
-                        showNumber = showChannelNumbers,
-                        collectionsMenu = collectionsMenu,
-                        onWatchPast = if (channel.hasCatchup) {
-                            { prog -> onCatchupResolve(channel, prog) }
-                        } else {
-                            null
-                        },
-                    )
-                }
-            }
-        }
-        // Corner mini Active on TV: give it its own slot above the list, the
-        // same rule the guide applies above its timeline (Logan 2026-09-13).
-        // The reserved band's measured bottom is the list's top and the mini's
-        // bottom edge, so channel rows never start under the mini.
-        val reserveMiniSlot = miniActive
-        if (reserveMiniSlot) {
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(MiniPlayerChrome.miniHeight + MiniPlayerChrome.miniGap)
-                    .onGloballyPositioned {
-                        MiniPlayerChrome.timelineTopPx.value = it.boundsInRoot().bottom
-                    },
-            )
-        }
-        DisposableEffect(reserveMiniSlot) {
-            onDispose { if (reserveMiniSlot) MiniPlayerChrome.timelineTopPx.value = 0f }
-        }
-        channelList()
-    }
-    }
-
-    programInfoTarget?.let { target ->
-        ProgramInfoSheet(
-            target = target,
-            onDismiss = { programInfoTarget = null },
-        )
-    }
-    recordTarget?.let { target ->
-        RecordProgramSheet(
-            target = target,
-            onDismiss = { recordTarget = null },
-        )
-    }
-    if (manageGroupsOpen) {
-        ManageGroupsSheet(
-            allGroups = allGroupsRaw,
-            hiddenGroups = effectiveHidden,
-            onSave = { committed ->
-                com.aeriotv.android.feature.livetv.applyManagedGroups(
-                    committed, hiddenGroups, recentGroupVisible,
-                    setHiddenGroups = { settingsVm.setHiddenGroups(it) },
-                    setRecentVisible = { settingsVm.setRecentGroupVisible(it) },
-                )
-            },
-            onDismiss = { manageGroupsOpen = false },
-            reorderEnabled = true,
-            sortMode = groupSortMode,
-            onSortModeChange = { settingsVm.setGroupSortMode(it.name) },
-            onReorder = { settingsVm.setGroupOrder(it) },
-        )
-    }
-}
-
-/** Round 36dp control button used on the Android TV List control row (Guide
- *  toggle / Search / Sort), styled to match the Filter (Manage Groups) circle. */
-@Composable
-private fun ListControlCircle(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    active: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(50))
-            .background(
-                if (active) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = if (active) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
-        )
-    }
-}
-
-/** Shared with GuideScreen's phone app bar, hence not private. The size
- *  params let LiveTvTopBar's shrink-to-fit math drive the button. */
-@Composable
-internal fun SortMenu(
-    currentMode: SortMode,
-    onSelect: (SortMode) -> Unit,
-    circular: Boolean = false,
-    buttonSize: androidx.compose.ui.unit.Dp? = null,
-    iconSize: androidx.compose.ui.unit.Dp? = null,
-    /** Phone header (Apple phoneCircle): the 38dp onBackground-8% circle. */
-    phoneCircle: Boolean = false,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        if (phoneCircle) {
-            com.aeriotv.android.feature.livetv.LiveTvPhoneCircle(
-                icon = Icons.Filled.SwapVert,
-                contentDescription = "Sort channels",
-                onClick = { expanded = true },
-            )
-        } else if (circular) {
-            ListControlCircle(
-                icon = Icons.Filled.SwapVert,
-                contentDescription = "Sort channels",
-                onClick = { expanded = true },
-            )
-        } else {
-            IconButton(
-                onClick = { expanded = true },
-                modifier = if (buttonSize != null) Modifier.size(buttonSize) else Modifier,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.SwapVert,
-                    contentDescription = "Sort channels",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = if (iconSize != null) Modifier.size(iconSize) else Modifier,
-                )
-            }
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            containerColor = MaterialTheme.colorScheme.surface,
-        ) {
-            SortMode.entries.forEach { mode ->
-                DropdownMenuItem(
-                    // Leading checkmark on the active mode mirrors iOS
-                    // SwiftUI Menu's Label("...", systemImage: "checkmark")
-                    // pattern. Without this, the only signal for the active
-                    // mode was the primary-tint label, which was easy to
-                    // miss against the dark menu surface.
-                    leadingIcon = if (mode == currentMode) {
-                        {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    } else null,
-                    text = {
-                        Text(
-                            text = mode.label,
-                            color = if (mode == currentMode)
-                                MaterialTheme.colorScheme.textAccent
-                            else
-                                MaterialTheme.colorScheme.onSurface,
-                            fontWeight = if (mode == currentMode) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    },
-                    onClick = {
-                        onSelect(mode)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
-}
 
 /**
  * Channel row matching iOS Live TV canon: dense [#][logo] title + EPG metadata

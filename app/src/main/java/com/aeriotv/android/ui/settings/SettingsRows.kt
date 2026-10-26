@@ -738,24 +738,6 @@ fun SettingsHeaderTextButton(
 }
 
 /**
- * Self-contained D-pad focus wash for an interactive row that lives INSIDE a
- * shared grouped card (Theme presets, palette rows, profile pickers...).
- * Tracks its own focus state; paints a tinted fill only while focused, so the
- * resting look on every form factor is unchanged. Place AFTER any clip and
- * BEFORE clickable/padding.
- */
-@Composable
-fun Modifier.dpadFocusWash(tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary): Modifier {
-    var focused by remember { mutableStateOf(false) }
-    return this
-        .onFocusChanged { focused = it.isFocused }
-        .background(
-            if (focused) tint.copy(alpha = 0.16f)
-            else androidx.compose.ui.graphics.Color.Transparent,
-        )
-}
-
-/**
  * Self-contained D-pad focus ring (the app-wide accent convention) plus a
  * subtle tinted wash, for pills / segments / swatches / cards that keep their
  * own selection styling. The border is transparent (not absent) at rest so
@@ -876,7 +858,6 @@ val LocalSettingsTracePage = staticCompositionLocalOf<String?> { null }
 /** Whether a Settings top bar should draw a back arrow at this position. */
 @Composable
 fun settingsShowsBackArrow(): Boolean = false
-
 
 /** True inside a TV `SettingsCard(grouped = true)`: rows draw hairlines, not per-row cards. */
 val LocalTvGroupedCard = androidx.compose.runtime.staticCompositionLocalOf { false }

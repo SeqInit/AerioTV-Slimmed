@@ -83,6 +83,5 @@ fun Modifier.settingsPaneWidth(maxWidth: Dp = SettingsPaneMaxWidth): Modifier =
  */
 @Composable
 fun Modifier.settingsFormWidth(): Modifier {
-    val cap = com.aeriotv.android.ui.adaptive.rememberViewport().formMaxWidth
-    return if (cap != Dp.Unspecified) this.widthIn(max = cap).fillMaxWidth() else this.fillMaxWidth()
+    return this.widthIn(max = com.aeriotv.android.ui.adaptive.TvLayout.formMaxWidth).fillMaxWidth()
 }

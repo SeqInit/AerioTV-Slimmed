@@ -26,7 +26,7 @@ import com.aeriotv.android.feature.main.LocalTabIsActive
  *
  * A plain module-level signal rather than an injected singleton: this is
  * transient UI state with exactly one writer path, the same idiom as
- * DisplayModeSwitchSignal and PhoneMiniChrome.
+ * DisplayModeSwitchSignal.
  */
 object SearchDismissSignal {
     var serial by mutableIntStateOf(0)

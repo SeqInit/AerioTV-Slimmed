@@ -8,6 +8,5 @@ val TextPrimary = Color(0xFFE8F4F8)
 val TextPrimaryLight = Color(0xFF0F1B24)
 
 val StatusLive = Color(0xFFFF4757)
-val StatusWarning = Color(0xFFFFA502)
 
 val PlexColor = Color(0xFFE5A00D)

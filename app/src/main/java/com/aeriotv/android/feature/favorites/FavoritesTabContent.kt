@@ -132,9 +132,6 @@ fun FavoritesTabContent(
     if (channels.isNotEmpty()) {
         com.aeriotv.android.feature.livetv.grid.GuideScreen(
             onChannelClick = onChannelClick,
-            viewMode = com.aeriotv.android.feature.livetv.LiveTVViewMode.Guide,
-            canToggleViewMode = false,
-            onToggleViewMode = {},
             favoritesOnly = true,
             onPlayCatchup = onPlayCatchup,
             modifier = modifier.fillMaxSize(),

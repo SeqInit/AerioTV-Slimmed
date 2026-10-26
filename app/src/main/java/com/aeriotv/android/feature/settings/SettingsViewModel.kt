@@ -108,9 +108,6 @@ class SettingsViewModel @Inject constructor(
     /** Appearance > Rounded corners in List view (default ON). */
     val roundedArtwork: StateFlow<Boolean> = prefs.roundedArtwork
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
-    fun setRoundedArtwork(value: Boolean) {
-        viewModelScope.launch { prefs.setRoundedArtwork(value) }
-    }
 
     /** Appearance > Rounded corners in Guide view (default OFF). */
     val roundedArtworkGuide: StateFlow<Boolean> = prefs.roundedArtworkGuide
@@ -286,7 +283,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setHiddenSeriesGroups(groups) }
     }
 
-
     // App Behaviors
     val liveRewindEnabled: Flow<Boolean> = prefs.liveRewindEnabled
     fun setLiveRewindEnabled(value: Boolean) {
@@ -335,12 +331,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setSkipLoadingScreen(value) }
     }
 
-    /** Auto-Rotate (Logan 2026-08-07): follow device orientation, default ON. */
-    val autoRotate: Flow<Boolean> = prefs.autoRotate
-    fun setAutoRotate(value: Boolean) {
-        viewModelScope.launch { prefs.setAutoRotate(value) }
-    }
-
     val appleTVChannelFlip: Flow<Boolean> = prefs.appleTVChannelFlip
 
     /** Remote Control initiative: decoded button map (tolerant of unknown
@@ -357,19 +347,6 @@ class SettingsViewModel @Inject constructor(
 
     /** Settings root / rail Sync subtitle: Off / Dispatcharr. */
     val syncProviderLabel: kotlinx.coroutines.flow.Flow<String> = prefs.syncProvider.map { syncProviderLabel(it) }
-
-    /** Phone / tablet Live TV group selector: "sidebar" (default drawer) or "pills". */
-    val phoneGroupSelector: StateFlow<String> = prefs.phoneGroupSelector
-        .stateIn(viewModelScope, SharingStarted.Eagerly, "sidebar")
-    fun setPhoneGroupSelector(mode: String) {
-        viewModelScope.launch { prefs.setPhoneGroupSelector(mode) }
-    }
-    /** Phone / tablet: swipe in from the start edge opens the group sidebar. */
-    val liveTvEdgeSwipeOpensSidebar: StateFlow<Boolean> = prefs.liveTvEdgeSwipeOpensSidebar
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    fun setLiveTvEdgeSwipeOpensSidebar(enabled: Boolean) {
-        viewModelScope.launch { prefs.setLiveTvEdgeSwipeOpensSidebar(enabled) }
-    }
 
     /** Live TV tune target: false = fullscreen (default), true = corner mini. */
     val guideTuneInMini: StateFlow<Boolean> = prefs.guideTuneInMini
@@ -421,22 +398,6 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setAppleTVChannelFlip(value) }
     }
 
-    /** In-Player Gestures (phone and tablet). All default off. */
-    val playerBrightnessGesture: Flow<Boolean> = prefs.playerBrightnessGesture
-    fun setPlayerBrightnessGesture(value: Boolean) {
-        viewModelScope.launch { prefs.setPlayerBrightnessGesture(value) }
-    }
-
-    val playerVolumeGesture: Flow<Boolean> = prefs.playerVolumeGesture
-    fun setPlayerVolumeGesture(value: Boolean) {
-        viewModelScope.launch { prefs.setPlayerVolumeGesture(value) }
-    }
-
-    val playerBrightnessEdge: Flow<String> = prefs.playerBrightnessEdge
-    fun setPlayerBrightnessEdge(value: String) {
-        viewModelScope.launch { prefs.setPlayerBrightnessEdge(value) }
-    }
-
     // iOS appBehaviorsAutoRecoverFrozenStreams (#37). Default true; device-local.
     /** ANDROID: HDR to SDR tone mapping, "auto" | "always" | "off" (see AppPreferences.hdrToSdr). */
     val hdrToSdr: Flow<String> = prefs.hdrToSdr
@@ -464,17 +425,7 @@ class SettingsViewModel @Inject constructor(
 
     // GH #127: Settings > Live TV > Program Info Button (off/current/all).
     val guideProgramInfoButton: Flow<String> = prefs.guideProgramInfoButton
-    fun setGuideProgramInfoButton(value: String) {
-        viewModelScope.launch { prefs.setGuideProgramInfoButton(value) }
-    }
     val programInfoButtonGuide: Flow<Boolean> = prefs.programInfoButtonGuide
-    fun setProgramInfoButtonGuide(value: Boolean) {
-        viewModelScope.launch { prefs.setProgramInfoButtonGuide(value) }
-    }
-    val programInfoButtonList: Flow<Boolean> = prefs.programInfoButtonList
-    fun setProgramInfoButtonList(value: Boolean) {
-        viewModelScope.launch { prefs.setProgramInfoButtonList(value) }
-    }
 
     val playerCardShowChannelLogo: Flow<Boolean> = prefs.playerCardShowChannelLogo
     fun setPlayerCardShowChannelLogo(value: Boolean) {
@@ -593,15 +544,6 @@ class SettingsViewModel @Inject constructor(
     // rememberSaveable in LiveTVViewMode.kt to DataStore in Phase 8b).
     val defaultLiveTVView: StateFlow<String> = prefs.defaultLiveTVView
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
-    fun setDefaultLiveTVView(value: String) {
-        viewModelScope.launch {
-            // Per-device preference (NOT Drive-synced): the correct default is
-            // form-factor specific, so a synced value would let one device clobber
-            // another (a phone's List overriding a TV's Guide). Matches iOS
-            // @AppStorage. Persists locally only; no Drive push.
-            prefs.setDefaultLiveTVView(value)
-        }
-    }
 
     /** TV Live TV layout (tvOS parity 2026-09-10): "basic" or "preview". Per device. */
 
@@ -694,14 +636,10 @@ class SettingsViewModel @Inject constructor(
     fun setCategoryBucketEnabled(bucket: ProgramCategory, enabled: Boolean) {
         viewModelScope.launch { prefs.setCategoryBucketEnabled(bucket, enabled) }
     }
-    fun resetCategoryPalette() {
-        viewModelScope.launch { prefs.resetCategoryPalette() }
-    }
     fun setCustomCategories(list: List<CustomCategoryEntry>) {
         viewModelScope.launch { prefs.setCustomCategories(list) }
     }
 }
-
 
 /** "off" | "dispatcharr" -> the Sync row subtitle. */
 fun syncProviderLabel(provider: String): String = when (provider) {

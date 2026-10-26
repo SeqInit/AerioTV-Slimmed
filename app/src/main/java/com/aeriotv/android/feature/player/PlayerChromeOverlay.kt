@@ -205,7 +205,6 @@ fun PlayerChromeOverlay(
 ) {
     var moreOpen by remember { mutableStateOf(false) }
     var sleepOpen by remember { mutableStateOf(false) }
-    val context = LocalContext.current
 
 
     // Tell the host the chrome is "busy" (Options menu or Sleep sheet open) so
@@ -219,7 +218,6 @@ fun PlayerChromeOverlay(
     // presses don't traverse to the pills. Fired by the LaunchedEffect
     // below whenever chromeVisible flips to true.
     val optionsFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    val closeFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val retryFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val pauseFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(chromeVisible, connectionIssue) {

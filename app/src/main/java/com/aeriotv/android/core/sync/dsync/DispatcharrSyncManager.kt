@@ -1381,9 +1381,9 @@ class DispatcharrSyncManager @Inject constructor(
         val SETTINGS_OWNED: Set<String> = setOf(
             "selectedTheme", "appearanceMode", "trueBlack", "defaultTab", "timeFormat",
             "textScale", "subtextScale", "textContrast", "guideProgramInfoButton",
-            "programInfoButtonGuide", "programInfoButtonList", "showEpgBadgesTv", "showRemoteHints",
+            "programInfoButtonGuide", "showEpgBadgesTv", "showRemoteHints",
             "guideTuneInMini",
-            "playerInfoCard.showOnChannelChange", "phoneGroupSelector", "liveTvEdgeSwipeOpensSidebar",
+            "playerInfoCard.showOnChannelChange",
             "skipLoadingScreen", "appleTVChannelFlip",
         )
     }

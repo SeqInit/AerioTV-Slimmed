@@ -95,19 +95,16 @@ fun DispatcharrSyncStepScreen(
         return
     }
 
-    val vp = com.aeriotv.android.ui.adaptive.rememberViewport()
     Box(
         modifier = Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = vp.gutter, vertical = 24.dp),
+            .padding(horizontal = com.aeriotv.android.ui.adaptive.TvLayout.gutter, vertical = 24.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(
-            modifier = if (vp.onboardingMaxWidth != androidx.compose.ui.unit.Dp.Unspecified)
-                Modifier.widthIn(max = vp.onboardingMaxWidth).fillMaxWidth()
-            else Modifier.fillMaxWidth(),
+            modifier = Modifier.widthIn(max = com.aeriotv.android.ui.adaptive.TvLayout.onboardingMaxWidth).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

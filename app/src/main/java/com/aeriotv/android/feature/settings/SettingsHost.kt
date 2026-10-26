@@ -18,17 +18,10 @@ package com.aeriotv.android.feature.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,7 +42,6 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
@@ -65,36 +57,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aeriotv.android.ui.settings.LocalSettingsInPane
 import com.aeriotv.android.ui.settings.SettingsNavRow
-import com.aeriotv.android.ui.settings.SettingsSectionHeader
 import com.aeriotv.android.ui.settings.TvSettingsMetrics
-
-/**
- * Fallback touch sidebar width (plan B3) for callers that do not pass one.
- * Live callers hand in `Viewport.settingsSidebarWidth` (280dp on a medium
- * window, 320dp expanded) or, on a foldable, the hinge position.
- */
-private val SidebarWidth = 320.dp
-
-/**
- * How the two-pane host divides its window, decided by the caller from the
- * viewport and the OS-reported folding feature.
- *
- * One value rather than three parameters because the fields only make sense
- * together: they all describe the same boundary.
- */
-data class SettingsPaneSplit(
-    /** Sidebar width. */
-    val sidebarExtent: Dp = SidebarWidth,
-    /** Extent of the crease, left blank between the panes. */
-    val gap: Dp = 0.dp,
-    /** Hairline between the panes; suppressed when the crease takes the space. */
-    val drawDivider: Boolean = true,
-)
 
 /**
  * Pane-swap crossfade (plan B5: "about 150ms crossfade on pane content swaps;
@@ -106,229 +72,14 @@ data class SettingsPaneSplit(
  */
 private const val SettingsPaneCrossfadeMs = 150
 
-/** Where a fresh two-pane host lands. Canon puts Playlists first. */
-val DefaultSettingsPaneSelection: SettingsRoute = SettingsRoute.Playlists
-
 /**
- * The pane selection, kept across process death and mapped across posture
- * changes.
- *
- * [twoPane] is the CURRENT layout. When it flips, the mapping runs once:
- *
- *  - two-pane -> stacked: the selection is inserted UNDER any existing pushes,
- *    so the stacked view shows exactly the page the pane was showing and Back
- *    walks out through it into the root list.
- *  - stacked -> two-pane: if the bottom of the stack is a page a pane can host
- *    (a section, Playlists, or About) it becomes the selection and is removed
- *    from the stack; deeper pushes stay, so a playlist detail opened on a phone
- *    is still open after unfolding.
+ * The rail's pane selection, kept across process death. It starts with
+ * NOTHING selected (Logan 2026-09-03: landing on the Settings pill must not
+ * open Playlists).
  */
 @Composable
-fun rememberSettingsPaneSelection(
-    nav: SettingsNavState,
-    twoPane: Boolean,
-    /** TV rail starts with NOTHING selected (Logan 2026-09-03: landing on the
-     *  Settings pill must not open Playlists); tablets keep the canon default. */
-    initial: SettingsRoute = DefaultSettingsPaneSelection,
-): MutableState<SettingsRoute> {
-    val selection = rememberSaveable(stateSaver = SettingsRouteSaver) {
-        mutableStateOf(initial)
-    }
-    // Tracks the posture the mapping last ran for. Saveable so a process death
-    // in one posture does not replay the mapping on restore. Starts null and is
-    // seeded on first composition WITHOUT mapping: at that point the stack and
-    // the selection were saved together and already agree.
-    var lastTwoPane by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    androidx.compose.runtime.LaunchedEffect(twoPane) {
-        val previous = lastTwoPane
-        lastTwoPane = twoPane
-        if (previous == null || previous == twoPane) return@LaunchedEffect
-        if (twoPane) {
-            val baseline = nav.stack.firstOrNull()
-            if (baseline != null && baseline.isPaneBaseline) {
-                nav.removeBaseline()
-                selection.value = baseline
-            }
-        } else if (selection.value !is SettingsRoute.Playlists && selection.value !is SettingsRoute.Root) {
-            nav.insertAtBaseline(selection.value)
-        }
-        // Playlists is the exception: as a PANE it renders the root's playlist
-        // block, and the stacked root already leads with that same block. Push
-        // nothing, so collapsing shows the user the content they were looking
-        // at instead of the Manage Playlists page, which is a different screen.
-    }
-    return selection
-}
-
-/**
- * Tablet list-detail Settings. [detail] renders the route it is handed; the
- * host decides which route that is (the selected pane, or whatever was pushed
- * above it) and whether it is a pane or a full-screen takeover.
- *
- * [takeover] returning true for a route means it fills the window and the
- * sidebar is hidden. Per plan B3 that is the log viewer only on tablet: its
- * lines want the width.
- */
-@Composable
-fun SettingsTwoPaneHost(
-    selection: SettingsRoute,
-    onSelect: (SettingsRoute) -> Unit,
-    pushed: SettingsRoute?,
-    sections: List<SettingsSectionGroupSpec>,
-    activePlaylistName: String?,
-    /** Drives the Sync row's On / Off subtitle; see settingsSectionSubtitle. */
-    syncEnabled: String,
-    takeover: (SettingsRoute) -> Boolean,
-    /**
-     * How to divide the window. On a foldable the boundary sits ON the crease,
-     * so no pane is bent; otherwise it is the viewport's fixed width for this
-     * size class. See [SettingsPaneSplit].
-     */
-    split: SettingsPaneSplit = SettingsPaneSplit(),
-    detail: @Composable (SettingsRoute) -> Unit,
-) {
-    // See the TV host: a takeover removes this whole subtree, so each pane's
-    // scroll offset has to be retained outside it to survive the round trip.
-    val paneStateHolder = rememberSaveableStateHolder()
-
-    if (pushed != null && takeover(pushed)) {
-        detail(pushed)
-        return
-    }
-    // Declared once and placed by whichever arm runs, so the two postures can
-    // never drift apart in what the detail pane actually shows.
-    val paneBody: @Composable () -> Unit = {
-        if (pushed != null) {
-            // A push keeps its own back affordance: the sidebar is beside or
-            // above it, not replacing it, so system Back is not the only way
-            // out.
-            detail(pushed)
-        } else {
-            // Same crossfade as the TV host; see SettingsPaneCrossfadeMs.
-            Crossfade(
-                targetState = selection,
-                animationSpec = tween(SettingsPaneCrossfadeMs),
-                label = "settingsPane",
-            ) { paneRoute ->
-                paneStateHolder.SaveableStateProvider(encodeSettingsRoute(paneRoute)) {
-                    CompositionLocalProvider(LocalSettingsInPane provides true) {
-                        detail(paneRoute)
-                    }
-                }
-            }
-        }
-    }
-
-    Row(modifier = Modifier.fillMaxSize()) {
-        SettingsSidebar(
-            selection = selection,
-            onSelect = onSelect,
-            sections = sections,
-            activePlaylistName = activePlaylistName,
-            syncEnabled = syncEnabled,
-            modifier = Modifier.width(split.sidebarExtent),
-        )
-        if (split.gap > 0.dp) {
-            Spacer(Modifier.width(split.gap).fillMaxHeight())
-        } else if (split.drawDivider) {
-            VerticalDivider(
-                modifier = Modifier.fillMaxHeight(),
-                thickness = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-            )
-        }
-        Box(modifier = Modifier.weight(1f).fillMaxHeight()) { paneBody() }
-    }
-}
-
-@Composable
-private fun SettingsSidebar(
-    selection: SettingsRoute,
-    onSelect: (SettingsRoute) -> Unit,
-    sections: List<SettingsSectionGroupSpec>,
-    activePlaylistName: String?,
-    syncEnabled: String,
-    modifier: Modifier = Modifier,
-) {
-    val sidebarRole by com.aeriotv.android.core.profiles.ProfileRoles.active.collectAsState()
-    val sidebarChild = sidebarRole == com.aeriotv.android.core.profiles.ProfileRole.Child
-    LazyColumn(
-        modifier = modifier.fillMaxHeight(),
-        // Status bar inset: on the unfolded Fold the "Settings" title sat under
-        // the clock (Logan's emulator 2026-09-09).
-        contentPadding = PaddingValues(
-            start = 12.dp, end = 12.dp,
-            // Tab-pill reserve: the sidebar reached foldables in Settings phase
-            // 2, and those keep the FLOATING bottom pill, which overlays
-            // content. Without this the last rows (Updates, About) sit under
-            // it. On a tablet the pill is at the top and the provided inset is
-            // already small, so this is a no-op there.
-            bottom = 12.dp + com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset.current,
-            top = 12.dp + androidx.compose.foundation.layout.WindowInsets.statusBars.asPaddingValues().calculateTopPadding(),
-        ),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        item("title") {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(start = 6.dp, top = 8.dp, bottom = 10.dp),
-            )
-        }
-        // Canon order: Playlists first, then the section groups (About is the
-        // last row of the closing group). A Child has no Playlists row and
-        // gets Manage Profiles at the bottom instead (phase 2b).
-        if (!sidebarChild) item("playlists") {
-            SettingsNavRow(
-                title = "Playlists",
-                subtitle = activePlaylistName,
-                icon = Icons.AutoMirrored.Filled.List,
-                onClick = { onSelect(SettingsRoute.Playlists) },
-                selected = selection is SettingsRoute.Playlists,
-                trailingChevron = false,
-                flat = true,
-            )
-        }
-        sections.forEach { group ->
-            // A blank header means an unlabeled group (the closing Developer /
-            // About group); keep the spacing, drop the eyebrow.
-            item("header-${group.key}") {
-                Column {
-                    Spacer(Modifier.height(10.dp))
-                    if (group.header.isNotBlank()) SettingsSectionHeader(group.header)
-                }
-            }
-            items(items = group.sections, key = { "row-${it.name}" }) { section ->
-                SettingsNavRow(
-                    title = section.title,
-                    subtitle = settingsSectionSubtitle(section, syncEnabled),
-                    icon = section.icon,
-                    onClick = { onSelect(SettingsRoute.Section(section)) },
-                    selected = selection is SettingsRoute.Section &&
-                        selection.section == section,
-                    trailingChevron = false,
-                    flat = true,
-                )
-            }
-        }
-        if (sidebarChild) item("manage-profiles") {
-            Column {
-                Spacer(Modifier.height(10.dp))
-                SettingsNavRow(
-                    title = "Manage Profiles",
-                    subtitle = null,
-                    icon = androidx.compose.material.icons.Icons.Outlined.ManageAccounts,
-                    onClick = { onSelect(SettingsRoute.ManageProfiles) },
-                    selected = selection is SettingsRoute.ManageProfiles,
-                    trailingChevron = false,
-                    flat = true,
-                )
-            }
-        }
-    }
-}
+fun rememberSettingsPaneSelection(): MutableState<SettingsRoute> =
+    rememberSaveable(stateSaver = SettingsRouteSaver) { mutableStateOf<SettingsRoute>(SettingsRoute.Root) }
 
 // MARK: - TV rail (plan B2/B4)
 

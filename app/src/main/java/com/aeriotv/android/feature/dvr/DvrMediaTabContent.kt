@@ -65,7 +65,6 @@ import com.aeriotv.android.feature.movies.stripQualityPrefix
 import com.aeriotv.android.feature.playlist.PlaylistViewModel
 import com.aeriotv.android.feature.settings.SettingsViewModel
 import com.aeriotv.android.feature.watchprogress.WatchProgressViewModel
-import com.aeriotv.android.ui.adaptive.LocalTabBarBottomInset
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.text.Normalizer
@@ -274,7 +273,6 @@ fun DvrMediaTabContent(
     com.aeriotv.android.feature.main.OnTabReselect(
         com.aeriotv.android.feature.main.AppTab.DVR,
     ) { gridState.animateScrollToItem(0) }
-    val bottomInset = LocalTabBarBottomInset.current
 
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
     fun play(rec: Rec) {

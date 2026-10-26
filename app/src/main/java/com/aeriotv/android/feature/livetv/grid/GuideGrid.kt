@@ -1233,14 +1233,12 @@ private fun GridRow(
                 drawnRight = maxOf(drawnRight, x1)
                 val w = (x1 - x0 - seam).coerceAtLeast(MIN_CELL_PX)
                 val focused = focusedHere && cell.startMillis == focusStart
-                // Category tint first (Apple: tvOS 0.55 focused / 0.35 live /
-                // 0.22, iOS 0.45 live / 0.28), then the idiom's neutral fill:
-                // iOS = accentPrimary 0.25 airing, cardBackground otherwise.
+                // Category tint first (Apple tvOS: 0.55 focused / 0.35 live /
+                // 0.22), then the neutral fill.
                 val catBase = if (cell.isPlaceholder) null else palette?.resolveBaseColor(cell.category)
                 val fill = when {
                     catBase != null -> catBase.copy(alpha = (if (focused) 0.55f else if (airing) 0.35f else 0.22f) * tintScale)
                     focused -> Color.White.copy(alpha = 0.3f)
-                    catBase != null -> catBase.copy(alpha = (if (airing) 0.45f else 0.28f) * tintScale)
                     cell.isPlaceholder -> Color.White.copy(alpha = 0.03f)
                     airing -> Color.White.copy(alpha = 0.12f)
                     else -> Color.White.copy(alpha = 0.05f)

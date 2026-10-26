@@ -3,13 +3,9 @@ package com.aeriotv.android.feature.movies
 import com.aeriotv.android.ui.scale.subtext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,11 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
-import com.aeriotv.android.ui.scale.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,19 +25,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import com.aeriotv.android.feature.ondemand.OnDemandViewModel
 import com.aeriotv.android.feature.settings.SettingsViewModel
 
@@ -541,84 +530,3 @@ internal fun GenrePill(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** 2:3 poster, 8 dp corners, rating badge bottom-end, two-line title, year line. Long press opens [menu]. */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-fun MediaPosterCard(
-    item: MediaItem,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    /** Resolved art: the cached TMDB poster when there is one, the provider's
-     *  otherwise. Passed in as a plain String so the card keeps recomposing on
-     *  its own inputs only. */
-    posterUrl: String? = item.posterUrl,
-    menu: (@Composable (close: () -> Unit) -> Unit)? = null,
-) {
-    var menuOpen by remember { mutableStateOf(false) }
-    Column(
-        modifier = modifier.combinedClickable(onClick = onClick, onLongClick = { if (menu != null) menuOpen = true }),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surface),
-        ) {
-            // Anchored inside the poster Box: as a direct Column child the
-            // zero-size popup anchor still collected a spacedBy gap and nudged
-            // the card down while the menu was open.
-            if (menu != null) {
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) { menu { menuOpen = false } }
-            }
-            // A small spinner where the poster will be while the art is
-            // missing or still loading; the title is under the box (Logan
-            // 2026-09-09, both platforms).
-            var artLoaded by remember(posterUrl) { mutableStateOf(false) }
-            if (!artLoaded) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center).size(22.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                )
-            }
-            if (!posterUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = posterUrl,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    onSuccess = { artLoaded = true },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-            // One decimal like iOS ("5.851" -> "5.9"); blank when not a number.
-            val rating = formatRating(item.rating)
-            if (rating.isNotEmpty()) {
-                Text(
-                    rating, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color.Black.copy(alpha = 0.7f))
-                        .padding(horizontal = 5.dp, vertical = 3.dp),
-                )
-            }
-        }
-        // Centered under the poster (Logan 2026-09-10, all platforms).
-        Text(
-            item.title, fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 14.sp,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            // Two 14sp lines (+2dp): sp-derived so the grid stays aligned at every Text Size.
-            modifier = Modifier.fillMaxWidth().height(with(androidx.compose.ui.platform.LocalDensity.current) { 28.sp.toDp() } + 2.dp),
-        )
-        Text(
-            item.year?.toString() ?: " ", fontSize = 10.sp.subtext(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-        )
-    }
-}

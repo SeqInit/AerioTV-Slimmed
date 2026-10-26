@@ -342,7 +342,6 @@ fun VODPlayerScreen(
     val settingsVm: SettingsViewModel = hiltViewModel()
     val audioPassthrough by settingsVm.audioPassthroughEnabled
         .collectAsStateWithLifecycle(initialValue = false)
-    val streamBufferSize by settingsVm.streamBufferSize.collectAsStateWithLifecycle(initialValue = "default")
     val videoScaleMode by settingsVm.videoScaleMode.collectAsStateWithLifecycle(
         initialValue = VIDEO_SCALE_FIT,
     )
@@ -380,22 +379,6 @@ fun VODPlayerScreen(
     // layer); this is the residue that nothing can decode, and without a
     // notice it looks like a black-screen bug.
     var videoUnsupported by remember { mutableStateOf(false) }
-
-    // Register this screen's per-screen player for the phone on-demand mini's
-    // Back-to-minimize handoff (PhoneVodMini.currentPlayerProvider).
-    DisposableEffect(Unit) {
-        val provider = { exoPlayer }
-        PhoneVodMini.currentPlayerProvider = provider
-        onDispose {
-            // Identity check: on A->B navigation between two VOD/recording items
-            // the NavHost keeps A composed through the transition, so B registers
-            // FIRST and A's dispose runs after -- an unconditional null here would
-            // clobber B's registration.
-            if (PhoneVodMini.currentPlayerProvider === provider) {
-                PhoneVodMini.currentPlayerProvider = null
-            }
-        }
-    }
 
     // Player progress, polled every 500ms while the player is mounted. Backs
     // the scrubber + position/duration row. positionMs is the canonical
@@ -441,7 +424,7 @@ fun VODPlayerScreen(
     // seek re-mint replaces it (new session_id); revoke-on-close and the
     // re-mint's base-host derivation both read this, never the original
     // streamUrl param.
-    var currentPlaybackUrl by remember { mutableStateOf(PhoneVodMini.restoreUrl(streamUrl)) }
+    var currentPlaybackUrl by remember { mutableStateOf(streamUrl) }
     // Task #149: native re-mints are serialized. While one mint is in
     // flight, later seek targets coalesce here and only the LATEST runs
     // when it lands (rapid +/-30s presses used to race out of order and
@@ -457,7 +440,7 @@ fun VODPlayerScreen(
     var errorReconnecting by remember { mutableStateOf(false) }
     // Programme-relative start of the currently tuned timeshift window (0 on
     // first tune; the seek target after each re-tune).
-    var catchupOffsetMs by remember { mutableLongStateOf(PhoneVodMini.restoreCatchupOffset(streamUrl)) }
+    var catchupOffsetMs by remember { mutableLongStateOf(0L) }
 
     // ── TV transport (task #44) ──────────────────────────────────────────
     // D-pad / media-key scrub preview. Non-null while the user is stepping
@@ -476,8 +459,8 @@ fun VODPlayerScreen(
     // the completed /file/ item - the live-edge clamps and growing-
     // window duration logic must stop applying to what is now a fixed
     // file. One-shot migration; the end prompt is one-shot per session.
-    var dvrActive by remember { mutableStateOf(PhoneVodMini.restoreDvrActive(streamUrl, isDvr)) }
-    var dvrMigrated by remember { mutableStateOf(PhoneVodMini.restoreDvrMigrated(streamUrl)) }
+    var dvrActive by remember { mutableStateOf(isDvr) }
+    var dvrMigrated by remember { mutableStateOf(false) }
     var dvrEndPromptVisible by remember { mutableStateOf(false) }
     // Apple #93 parity: position a /file/ migration started from (-1 = none
     // pending verification), how many times it fell back to HLS, and the
@@ -861,7 +844,7 @@ fun VODPlayerScreen(
         // restarted from 0 (Streamer 2026-10-12, recording 130).
         val finishedRecording = progressMeta?.vodType == "recording" && !isDvr &&
             existing != null && existing.isFinished
-        savedPositionMs = PhoneVodMini.resumePosition(videoId, if (finishedRecording) -1L else existing?.positionMs ?: -1L)
+        savedPositionMs = if (finishedRecording) -1L else existing?.positionMs ?: -1L
     }
 
     // Black player background -- not the navy app-background -- so the
@@ -1129,10 +1112,8 @@ fun VODPlayerScreen(
                 val mediaSourceFactory = DefaultMediaSourceFactory(ctx)
                     .setDataSourceFactory(tracedFactory)
 
-                // Phone mini expand (PhoneVodMini.kt): adopt the instance that
-                // kept playing in the floating mini instead of building one.
                 val player = (
-                    PhoneVodMini.adopt(streamUrl) ?: ExoPlayer.Builder(ctx)
+                    ExoPlayer.Builder(ctx)
                         .setRenderersFactory(renderersFactory)
                         .setLoadControl(loadControl)
                         .setMediaSourceFactory(mediaSourceFactory)
@@ -1287,7 +1268,7 @@ fun VODPlayerScreen(
                                 }
                             }
                         })
-                        playWhenReady = PhoneVodMini.playWhenReadyFor(this)
+                        playWhenReady = true
                         // "Watch from Beginning" on an in-progress recording
                         // pins the START POSITION at prepare time rather than
                         // seeking afterwards. Media3 resolves a live HLS to its
@@ -1318,9 +1299,7 @@ fun VODPlayerScreen(
                         // Leaving min/max playback speed unset also pins the
                         // rate at 1.0x, so media3 never speeds up trying to
                         // chase the live edge.
-                        if (PhoneVodMini.isAdopted(this)) {
-                            // Already tuned and positioned; prepare() below is a no-op.
-                        } else if (isDvr && !startAtLiveEdge) {
+                        if (isDvr && !startAtLiveEdge) {
                             val fromStartItem = MediaItem.Builder()
                                 .setUri(streamUrl)
                                 .setLiveConfiguration(
@@ -1358,12 +1337,13 @@ fun VODPlayerScreen(
                 view.resizeMode = videoScaleResizeMode(videoScaleMode, false)
             },
             onRelease = { view ->
-                // Releases (with the task #149 native catch-up revoke), or keeps
-                // the instance when it was handed to the phone mini.
-                PhoneVodMini.releaseOrRetain(
-                    exoPlayer, tracer, view, catchupOffsetMs,
-                    isNativeCatchup, currentPlaybackUrl, onRevokeCatchup,
-                )
+                // Releases, with the task #149 native catch-up revoke.
+                tracer.tracedPlayer = null
+                exoPlayer?.removeAnalyticsListener(tracer.analyticsListener)
+                android.util.Log.i(TAG, "Releasing VOD ExoPlayer")
+                if (isNativeCatchup) onRevokeCatchup(currentPlaybackUrl)
+                exoPlayer?.release()
+                view.player = null
                 exoPlayer = null
             },
         )
@@ -1437,19 +1417,11 @@ fun VODPlayerScreen(
         // no up-front choice, silent auto-resume (Apple parity), not the "Resuming from M:SS"
         // toast. Keyed by channel id + program start; saved on exit,
         // cleared once playback reaches the end.
-        // A mini-player expand hands over a session already at its spot.
-        val catchupExpandHandoff = remember {
-            PhoneVodMini.restoreUrl(streamUrl) != streamUrl ||
-                PhoneVodMini.restoreCatchupOffset(streamUrl) > 0L
-        }
         LaunchedEffect(exoPlayer) {
             val player = exoPlayer ?: return@LaunchedEffect
             if (!isCatchup) return@LaunchedEffect
-            if (catchupChannelId.isBlank() || catchupExpandHandoff) {
-                Log.i(TAG, "[CATCHUP] resume skipped (channel=${catchupChannelId.isNotBlank()} handoff=$catchupExpandHandoff)")
-                if (catchupExpandHandoff && catchupChannelId.isNotBlank()) {
-                    Log.i(TAG, "[CATCHUP] identity carried on expand id=${com.aeriotv.android.core.playback.CatchupResumeStore.key(catchupChannelId, catchupStartMillis)}")
-                }
+            if (catchupChannelId.isBlank()) {
+                Log.i(TAG, "[CATCHUP] resume skipped (no channel)")
                 catchupResumeSettled = true
                 return@LaunchedEffect
             }

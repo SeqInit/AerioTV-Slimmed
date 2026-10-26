@@ -194,14 +194,10 @@ fun CollectionPill(
                 .height(30.dp)
                 .clip(CircleShape)
                 .background(
-                    when {
-                        selected -> MaterialTheme.colorScheme.primary
-                        // TV group pills are soft filled capsules; phone group
-                        // pills are outlined FilterChips. Match each so a
-                        // collection pill is indistinguishable from a group pill.
-                        true -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                        else -> Color.Transparent
-                    },
+                    // Group pills are soft filled capsules; match them so a
+                    // collection pill is indistinguishable from a group pill.
+                    if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 )
                 .then(
                     when {

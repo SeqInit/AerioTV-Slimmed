@@ -160,7 +160,6 @@ fun ConfigureSourceScreen(
             ),
         )
 
-        val vp = com.aeriotv.android.ui.adaptive.rememberViewport()
         // TV: deadband spec stops the form's +/-1px per-frame jiggle when a
         // focused text field sits at the floating IME's top edge (see
         // TvImeNoJitterBringIntoViewSpec). Same loop as Edit Playlist.
@@ -173,14 +172,11 @@ fun ConfigureSourceScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = vp.gutter, vertical = 12.dp),
+                .padding(horizontal = com.aeriotv.android.ui.adaptive.TvLayout.gutter, vertical = 12.dp),
             contentAlignment = androidx.compose.ui.Alignment.TopCenter,
         ) {
         Column(
-            modifier = if (vp.onboardingMaxWidth != androidx.compose.ui.unit.Dp.Unspecified)
-                Modifier.widthIn(max = vp.onboardingMaxWidth).fillMaxWidth()
-            else
-                Modifier.fillMaxWidth(),
+            modifier = Modifier.widthIn(max = com.aeriotv.android.ui.adaptive.TvLayout.onboardingMaxWidth).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             SourceTypeCard(icon = cardIcon, title = cardTitle, subtitle = cardSubtitle)
@@ -478,7 +474,6 @@ private fun M3uFields(state: PlaylistViewModel.UiState, viewModel: PlaylistViewM
     // into filesDir/imports/ and its file:// URI dropped into the URL field,
     // so the rest of the add/refresh pipeline treats it like any source
     // (fetchViaTempFile parses file: URIs in place).
-    val importContext = androidx.compose.ui.platform.LocalContext.current
     val importScope = androidx.compose.runtime.rememberCoroutineScope()
     LabeledField(label = "EPG URL (Optional)") {
         IconTextField(

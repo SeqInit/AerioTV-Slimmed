@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,7 +66,6 @@ fun WelcomeScreen(
     /** "Sync via Dispatcharr": opens the Direct Connect form, sync turns on after the connect. */
     onSyncViaDispatcharr: (() -> Unit)? = null,
 ) {
-    val config = LocalConfiguration.current
     // Two-column when the viewport is meaningfully wider than tall (tablet
     // landscape, foldable unfolded). TV is excluded: it uses the centered
     // single column to mirror the tvOS welcome layout.

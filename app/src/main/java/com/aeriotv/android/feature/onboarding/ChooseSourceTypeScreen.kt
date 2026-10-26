@@ -44,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aeriotv.android.core.data.SourceType
 import com.aeriotv.android.feature.onboarding.components.SourceTypeCard
-import com.aeriotv.android.ui.adaptive.rememberViewport
 import com.aeriotv.android.ui.settings.dpadFocusRing
 
 /**
@@ -86,7 +85,6 @@ fun ChooseSourceTypeScreen(
             ),
         )
 
-        val vp = rememberViewport()
         // tvOS parity: the three source types are a single vertical stack of
         // rounded rows (not a 3-up grid), centered with a tighter max width so
         // the rows aren't stretched edge-to-edge on a wide TV.
@@ -94,14 +92,11 @@ fun ChooseSourceTypeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = vp.gutter, vertical = 12.dp),
+                .padding(horizontal = com.aeriotv.android.ui.adaptive.TvLayout.gutter, vertical = 12.dp),
             contentAlignment = androidx.compose.ui.Alignment.TopCenter,
         ) {
             Column(
-                modifier = if (vp.onboardingMaxWidth != androidx.compose.ui.unit.Dp.Unspecified)
-                    Modifier.widthIn(max = vp.onboardingMaxWidth).fillMaxWidth()
-                else
-                    Modifier.fillMaxWidth(),
+                modifier = Modifier.widthIn(max = com.aeriotv.android.ui.adaptive.TvLayout.onboardingMaxWidth).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

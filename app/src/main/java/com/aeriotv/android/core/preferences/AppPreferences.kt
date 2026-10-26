@@ -108,6 +108,13 @@ private fun isRetiredPrefKey(name: String): Boolean =
 private val RETIRED_PREF_KEYS = setOf(
     // Phone / tablet UI (the app is TV-only)
     "ui_show_epg_badges_mobile",
+    "app_behaviors_auto_rotate",
+    "in_player_gesture_brightness",
+    "in_player_gesture_volume",
+    "in_player_gesture_brightness_edge",
+    "phone_group_selector",
+    "live_tv_edge_swipe_opens_sidebar",
+    "programInfoButtonList",
     // Standard TV interface (Sidebar is the only layout)
     "tv_interface_layout",
     "live_tv_layout",
@@ -202,7 +209,7 @@ class AppPreferences @Inject constructor(
     suspend fun seedProfileSettings(profileId: String) {
         val bases = listOf(
             KEY_DEFAULT_LIVE_TV_VIEW,
-            KEY_PHONE_GROUP_SELECTOR, KEY_GROUP_SORT_MODE, KEY_GROUP_ORDER,
+            KEY_GROUP_SORT_MODE, KEY_GROUP_ORDER,
         )
         store.edit { prefs ->
             bases.forEach { k ->
@@ -334,9 +341,6 @@ class AppPreferences @Inject constructor(
      * straight over into the List toggle and nobody's setting changes.
      */
     val roundedArtwork: Flow<Boolean> = store.data.map { it[KEY_ROUNDED_ARTWORK] ?: true }
-    suspend fun setRoundedArtwork(value: Boolean) {
-        store.edit { it[KEY_ROUNDED_ARTWORK] = value }
-    }
 
     /**
      * Settings > Appearance > "Rounded corners in Guide view". Covers ONLY the
@@ -524,11 +528,6 @@ class AppPreferences @Inject constructor(
         prefs[KEY_DEFAULT_LIVE_TV_VIEW.s()] ?: ""
     }
 
-    suspend fun setDefaultLiveTVView(value: String) {
-        store.edit { it[KEY_DEFAULT_LIVE_TV_VIEW.s()] = value }
-    }
-
-
     // ── App Behaviors ────────────────────────────────────────────────────
 
     /**
@@ -541,19 +540,6 @@ class AppPreferences @Inject constructor(
     }
 
     /**
-     * iOS `appBehaviorsAutoRotate` parity (Logan 2026-08-07). Follow the
-     * device orientation app-wide on phones/tablets. Default ON. When off,
-     * MainActivity locks the activity to its current orientation
-     * (SCREEN_ORIENTATION_LOCKED); the player's fullscreen button still
-     * forces landscape. Device-local (not in the sync snapshot) - rotation
-     * is a per-device preference and TVs ignore it entirely.
-     */
-    val autoRotate: Flow<Boolean> = store.data.map { it[KEY_AUTO_ROTATE] ?: true }
-    suspend fun setAutoRotate(value: Boolean) {
-        store.edit { it[KEY_AUTO_ROTATE] = value }
-    }
-
-    /**
      * iOS `appBehaviorsAppleTVChannelFlip` parity. Gates the Player vertical
      * swipe-flip (PlayerScreen.kt) and the future Apple TV-style D-pad nav.
      * Defaults to true so the v1.0 ship matches iOS's default.
@@ -561,38 +547,6 @@ class AppPreferences @Inject constructor(
     val appleTVChannelFlip: Flow<Boolean> = store.data.map { it[KEY_APPLE_TV_CHANNEL_FLIP] ?: true }
     suspend fun setAppleTVChannelFlip(value: Boolean) {
         store.edit { it[KEY_APPLE_TV_CHANNEL_FLIP] = value }
-    }
-
-    /**
-     * In-Player Gestures (phone and tablet only): a vertical slide along one
-     * screen edge of the fullscreen player adjusts screen brightness, and the
-     * other edge adjusts media volume.
-     *
-     * Both default OFF: the player already owns the vertical axis (channel
-     * flip) and the top strip (swipe down to minimize), so these only exist
-     * for users who ask for them. Device-local (not in the sync snapshot) -
-     * brightness and volume are per-device, and a TV has neither gesture.
-     */
-    val playerBrightnessGesture: Flow<Boolean> =
-        store.data.map { it[KEY_PLAYER_BRIGHTNESS_GESTURE] ?: false }
-    suspend fun setPlayerBrightnessGesture(value: Boolean) {
-        store.edit { it[KEY_PLAYER_BRIGHTNESS_GESTURE] = value }
-    }
-
-    val playerVolumeGesture: Flow<Boolean> =
-        store.data.map { it[KEY_PLAYER_VOLUME_GESTURE] ?: false }
-    suspend fun setPlayerVolumeGesture(value: Boolean) {
-        store.edit { it[KEY_PLAYER_VOLUME_GESTURE] = value }
-    }
-
-    /**
-     * Which edge brightness lives on: [PLAYER_EDGE_LEFT] or
-     * [PLAYER_EDGE_RIGHT]. Volume always takes the other edge.
-     */
-    val playerBrightnessEdge: Flow<String> =
-        store.data.map { it[KEY_PLAYER_BRIGHTNESS_EDGE] ?: PLAYER_EDGE_LEFT }
-    suspend fun setPlayerBrightnessEdge(value: String) {
-        store.edit { it[KEY_PLAYER_BRIGHTNESS_EDGE] = value }
     }
 
     /**
@@ -669,29 +623,6 @@ class AppPreferences @Inject constructor(
         store.data.map { it[KEY_SHOW_REMOTE_HINTS] ?: true }
     suspend fun setShowRemoteHints(value: Boolean) {
         store.edit { it[KEY_SHOW_REMOTE_HINTS] = value }
-    }
-
-    /**
-     * Phone / tablet Live TV group selector (Logan 2026-09-05, Apple parity
-     * with `phoneGroupSelectorKey`): "sidebar" (default) = a slide-in group
-     * drawer opened from the header's groups button, "pills" = the group pill
-     * strip in the header row.
-     */
-    val phoneGroupSelector: Flow<String> =
-        scopedData.map { it[KEY_PHONE_GROUP_SELECTOR.s()] ?: "sidebar" }
-    suspend fun setPhoneGroupSelector(mode: String) {
-        store.edit { it[KEY_PHONE_GROUP_SELECTOR.s()] = mode }
-    }
-
-    /**
-     * Phone / tablet (Apple issue #102 parity): with the Sidebar Menu group
-     * selector, a swipe in from the start edge opens the group sidebar and the
-     * left/right group-change swipes are off. Default false.
-     */
-    val liveTvEdgeSwipeOpensSidebar: Flow<Boolean> =
-        store.data.map { it[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR] ?: false }
-    suspend fun setLiveTvEdgeSwipeOpensSidebar(enabled: Boolean) {
-        store.edit { it[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR] = enabled }
     }
 
     /**
@@ -845,24 +776,12 @@ class AppPreferences @Inject constructor(
      */
     val guideProgramInfoButton: Flow<String> =
         store.data.map { it[KEY_GUIDE_PROGRAM_INFO_BUTTON] ?: GuideProgramInfoButton.OFF }
-    suspend fun setGuideProgramInfoButton(value: String) {
-        store.edit { it[KEY_GUIDE_PROGRAM_INFO_BUTTON] = value }
-    }
 
     /** Program Info Button > Guide View (Apple parity 2026-10-13). Unset
      *  follows the old single setting: on unless that was Off. */
     val programInfoButtonGuide: Flow<Boolean> = store.data.map {
         it[KEY_PROGRAM_INFO_BUTTON_GUIDE]
             ?: ((it[KEY_GUIDE_PROGRAM_INFO_BUTTON] ?: GuideProgramInfoButton.OFF) != GuideProgramInfoButton.OFF)
-    }
-    suspend fun setProgramInfoButtonGuide(value: Boolean) {
-        store.edit { it[KEY_PROGRAM_INFO_BUTTON_GUIDE] = value }
-    }
-
-    /** Program Info Button > List View: the same button on channel list rows. Default off. */
-    val programInfoButtonList: Flow<Boolean> = store.data.map { it[KEY_PROGRAM_INFO_BUTTON_LIST] ?: false }
-    suspend fun setProgramInfoButtonList(value: Boolean) {
-        store.edit { it[KEY_PROGRAM_INFO_BUTTON_LIST] = value }
     }
 
     val playerCardShowChannelLogo: Flow<Boolean> =
@@ -1442,14 +1361,6 @@ class AppPreferences @Inject constructor(
         store.edit { it[booleanPreferencesKey(bucket.enabledStorageKey)] = enabled }
     }
 
-    suspend fun resetCategoryPalette() {
-        store.edit { prefs ->
-            ProgramCategory.entries.forEach { bucket ->
-                prefs.remove(stringPreferencesKey(bucket.hexStorageKey))
-            }
-        }
-    }
-
     suspend fun setCustomCategories(list: List<CustomCategoryEntry>) {
         store.edit { prefs ->
             if (list.isEmpty()) {
@@ -1575,13 +1486,10 @@ class AppPreferences @Inject constructor(
         put("textContrast", p[KEY_TEXT_CONTRAST])
         put("guideProgramInfoButton", p[KEY_GUIDE_PROGRAM_INFO_BUTTON])
         put("programInfoButtonGuide", p[KEY_PROGRAM_INFO_BUTTON_GUIDE])
-        put("programInfoButtonList", p[KEY_PROGRAM_INFO_BUTTON_LIST])
         put("showEpgBadgesTv", p[KEY_SHOW_EPG_BADGES_TV])
         put("showRemoteHints", p[KEY_SHOW_REMOTE_HINTS])
         put("guideTuneInMini", p[KEY_GUIDE_TUNE_IN_MINI])
         put("playerInfoCard.showOnChannelChange", p[KEY_PLAYER_SHOW_CHANNEL_INFO_CARD])
-        put("phoneGroupSelector", p[KEY_PHONE_GROUP_SELECTOR.s()])
-        put("liveTvEdgeSwipeOpensSidebar", p[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR])
         put("skipLoadingScreen", p[KEY_SKIP_LOADING_SCREEN])
         put("appleTVChannelFlip", p[KEY_APPLE_TV_CHANNEL_FLIP])
         return out
@@ -1597,7 +1505,6 @@ class AppPreferences @Inject constructor(
         fun bool(n: String) = v[n]?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull()
             ?: v[n]?.takeIf { it.isString }?.content?.toBooleanStrictOrNull()
         fun dbl(n: String) = v[n]?.takeIf { !it.isString }?.content?.toDoubleOrNull()
-        val phoneSel = KEY_PHONE_GROUP_SELECTOR.s()
         store.edit { p ->
             str("selectedTheme")?.takeIf { t -> AppTheme.entries.any { it.name == t } }?.let { p[KEY_SELECTED_THEME] = it }
             str("appearanceMode")?.let { p[KEY_APPEARANCE_MODE] = it }
@@ -1609,13 +1516,10 @@ class AppPreferences @Inject constructor(
             dbl("textContrast")?.let { p[KEY_TEXT_CONTRAST] = snapTextContrast(it.toFloat()).toDouble() }
             str("guideProgramInfoButton")?.takeIf { it in GuideProgramInfoButton.VALUES }?.let { p[KEY_GUIDE_PROGRAM_INFO_BUTTON] = it }
             bool("programInfoButtonGuide")?.let { p[KEY_PROGRAM_INFO_BUTTON_GUIDE] = it }
-            bool("programInfoButtonList")?.let { p[KEY_PROGRAM_INFO_BUTTON_LIST] = it }
             bool("showEpgBadgesTv")?.let { p[KEY_SHOW_EPG_BADGES_TV] = it }
             bool("showRemoteHints")?.let { p[KEY_SHOW_REMOTE_HINTS] = it }
             bool("guideTuneInMini")?.let { p[KEY_GUIDE_TUNE_IN_MINI] = it }
             bool("playerInfoCard.showOnChannelChange")?.let { p[KEY_PLAYER_SHOW_CHANNEL_INFO_CARD] = it }
-            str("phoneGroupSelector")?.let { p[phoneSel] = it }
-            bool("liveTvEdgeSwipeOpensSidebar")?.let { p[KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR] = it }
             bool("skipLoadingScreen")?.let { p[KEY_SKIP_LOADING_SCREEN] = it }
             bool("appleTVChannelFlip")?.let { p[KEY_APPLE_TV_CHANNEL_FLIP] = it }
         }
@@ -2124,26 +2028,19 @@ class AppPreferences @Inject constructor(
         val KEY_CUSTOM_ACCENT_HEX = stringPreferencesKey("custom_accent_hex")
         val KEY_DEFAULT_LIVE_TV_VIEW = stringPreferencesKey("default_live_tv_view")
         val KEY_SKIP_LOADING_SCREEN = booleanPreferencesKey("app_behaviors_skip_loading_screen")
-        val KEY_AUTO_ROTATE = booleanPreferencesKey("app_behaviors_auto_rotate")
         val KEY_DEBUG_LOGGING_ENABLED = booleanPreferencesKey("debug_logging_enabled")
         val KEY_DEVELOPER_FORCE_HLS = booleanPreferencesKey("developer_force_hls")
         val KEY_SERVER_HLS_HOSTS = androidx.datastore.preferences.core.stringSetPreferencesKey("server_hls_hosts")
         val KEY_APPLE_TV_CHANNEL_FLIP = booleanPreferencesKey("app_behaviors_apple_tv_channel_flip")
-        val KEY_PLAYER_BRIGHTNESS_GESTURE = booleanPreferencesKey("in_player_gesture_brightness")
-        val KEY_PLAYER_VOLUME_GESTURE = booleanPreferencesKey("in_player_gesture_volume")
-        val KEY_PLAYER_BRIGHTNESS_EDGE = stringPreferencesKey("in_player_gesture_brightness_edge")
         val KEY_REMOTE_CONTROL_MAP = stringPreferencesKey("remote_control_map")
         val KEY_REMOTE_LEARNED_BUTTONS = stringPreferencesKey("remote_learned_buttons")
         val KEY_SYNC_REMOTE_CONTROL_MAP = booleanPreferencesKey("sync_remote_control_map")
         val KEY_RADIO_MODE_BY_DEFAULT = booleanPreferencesKey("radio_mode_by_default")
         val KEY_SYNC_RADIO_MODE_BY_DEFAULT = booleanPreferencesKey("sync_radio_mode_by_default")
         val KEY_HDR_TO_SDR = stringPreferencesKey("hdr_to_sdr")
-        val KEY_PHONE_GROUP_SELECTOR = stringPreferencesKey("phone_group_selector")
-        val KEY_LIVE_TV_EDGE_SWIPE_OPENS_SIDEBAR = booleanPreferencesKey("live_tv_edge_swipe_opens_sidebar")
         val KEY_GUIDE_TUNE_IN_MINI = booleanPreferencesKey("guide_tune_in_mini")
         val KEY_GUIDE_PROGRAM_INFO_BUTTON = stringPreferencesKey("guideProgramInfoButton")
         val KEY_PROGRAM_INFO_BUTTON_GUIDE = booleanPreferencesKey("programInfoButtonGuide")
-        val KEY_PROGRAM_INFO_BUTTON_LIST = booleanPreferencesKey("programInfoButtonList")
         val KEY_PLAYER_SHOW_CHANNEL_INFO_CARD = booleanPreferencesKey("playerShowChannelInfoCard")
         val KEY_SHOW_REMOTE_HINTS = booleanPreferencesKey("show_remote_hints")
         val KEY_STARTUP_REFRESH_RATE = stringPreferencesKey("startup_refresh_rate")
@@ -2262,12 +2159,6 @@ fun snapTextContrast(value: Float): Float {
     val v = if (value.isNaN()) 0f else value.coerceIn(0f, 1f)
     return kotlin.math.round(v * 10f) / 10f
 }
-
-/** Brightness slides on the left edge of the player; volume on the right. */
-const val PLAYER_EDGE_LEFT = "left"
-
-/** Brightness slides on the right edge of the player; volume on the left. */
-const val PLAYER_EDGE_RIGHT = "right"
 
 /**
  * Settings > Live TV > Program Info Button values (Apple GuideProgramInfoButton,

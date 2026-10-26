@@ -252,26 +252,6 @@ class SettingsNavState(initial: List<SettingsRoute> = emptyList()) {
         stack.clear()
     }
 
-    /**
-     * Inserts [route] UNDER everything already pushed. Used by the posture
-     * mapping when a two-pane host collapses to stacked: the pane selection
-     * becomes the bottom-most push, so Back walks out through it exactly as if
-     * the user had navigated there from the root list.
-     */
-    fun insertAtBaseline(route: SettingsRoute) {
-        stack.add(0, route)
-    }
-
-    /**
-     * Removes and returns the bottom-most entry, or null when empty. The
-     * stacked-to-two-pane direction of the same mapping: that entry becomes the
-     * pane selection and any deeper pushes stay on the stack above it.
-     */
-    fun removeBaseline(): SettingsRoute? {
-        if (stack.isEmpty()) return null
-        return stack.removeAt(0)
-    }
-
     /** Stable key for the focus contract; see MainScaffold's settingsContentFocus. */
     val focusKey: String?
         get() = when (val r = current) {

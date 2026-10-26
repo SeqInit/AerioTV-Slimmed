@@ -1,11 +1,7 @@
 package com.aeriotv.android.core.category
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -28,22 +24,6 @@ val METADATA_TOKENS: Set<String> = setOf(
     "made for tv movie", "miniseries", "limited series",
 )
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun CategoryPillsFlow(
-    tokens: List<String>,
-    palette: CategoryPaletteState? = null,
-    modifier: Modifier = Modifier,
-) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        tokens.forEach { token -> CategoryPill(token = token, palette = palette) }
-    }
-}
-
 /**
  * tvOS ProgramInfoView.CategoryPill (halved): 20 pt medium, 16/8 padding,
  * capsule filled with the resolved bucket color at 85% and white text;
@@ -63,28 +43,6 @@ fun TvCategoryPill(token: String, palette: CategoryPaletteState?, forceNeutral: 
             text = token,
             fontSize = 10.sp,
             color = if (tint != null) androidx.compose.ui.graphics.Color.White else colors.onSurfaceVariant,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-fun CategoryPill(token: String, palette: CategoryPaletteState? = null) {
-    // resolveBaseColor returns null when masterEnabled is false or no bucket
-    // matches, so passing the live palette respects the user's category-colors
-    // master toggle and falls back to the neutral chip (iOS unresolved branch).
-    val tint = palette?.resolveBaseColor(token)
-    val bg = tint?.copy(alpha = 0.30f)
-        ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-    Box(
-        modifier = Modifier
-            .background(color = bg, shape = RoundedCornerShape(50))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    ) {
-        Text(
-            text = token,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Medium,
         )
     }

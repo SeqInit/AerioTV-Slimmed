@@ -2,7 +2,6 @@ package com.aeriotv.android.ui.textfield
 
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -34,7 +33,6 @@ fun aerioTextFieldKeyboardOptions(
     imeAction: ImeAction = ImeAction.Done,
     capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
 ): KeyboardOptions {
-    val configuration = LocalConfiguration.current
     val resolvedImeAction =
         if (imeAction == ImeAction.Next) ImeAction.Done else imeAction
     return KeyboardOptions(

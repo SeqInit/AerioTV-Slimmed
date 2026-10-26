@@ -169,17 +169,10 @@ fun PlayerScreen(
     val settingsVm: SettingsViewModel = hiltViewModel()
     val miniPlayerVm: MiniPlayerViewModel = hiltViewModel()
     val appleTVChannelFlip by settingsVm.appleTVChannelFlip.collectAsStateWithLifecycle(initialValue = true)
-    // In-Player Gestures (touch only, all off by default).
-    val playerBrightnessGesture by settingsVm.playerBrightnessGesture.collectAsStateWithLifecycle(initialValue = false)
-    val playerVolumeGesture by settingsVm.playerVolumeGesture.collectAsStateWithLifecycle(initialValue = false)
-    val playerBrightnessEdge by settingsVm.playerBrightnessEdge.collectAsStateWithLifecycle(
-        initialValue = com.aeriotv.android.core.preferences.PLAYER_EDGE_LEFT,
-    )
     // Remote Control initiative: live button map (player context slots).
     val remoteMap by settingsVm.remoteControlMap.collectAsStateWithLifecycle(
         initialValue = com.aeriotv.android.core.remote.RemoteControlMap.DEFAULT,
     )
-    val streamBufferSize by settingsVm.streamBufferSize.collectAsStateWithLifecycle(initialValue = "default")
     val videoScaleMode by settingsVm.videoScaleMode.collectAsStateWithLifecycle(
         initialValue = VIDEO_SCALE_FIT,
     )

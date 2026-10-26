@@ -97,14 +97,7 @@ fun BoxScope.PersistentExoWindow(
     val videoScaleMode by settingsVm.videoScaleMode.collectAsStateWithLifecycle(
         initialValue = VIDEO_SCALE_FIT,
     )
-    // Phones and tablets get the floating PiP-style mini (PhoneMiniPlayer.kt);
-    // everything below that reads MiniPlayerChrome is the TV geometry.
-    val miniSession = hiltViewModel<com.aeriotv.android.feature.miniplayer.MiniPlayerViewModel>().session
-    // Phone on-demand mini (PhoneVodMini.kt): while a movie / episode /
-    // recording / catch-up is minimized, this PlayerView shows THAT screen's
-    // ExoPlayer instead of the live holder's. Never read on TV.
-    val vodMiniPlayer = null
-    val bindTarget = vodMiniPlayer ?: boundPlayer
+    val bindTarget = boundPlayer
 
     // Minimize / expand is ONE spring on size AND position (tvOS
     // .spring(response: 0.35), HomeView.swift:4920), not a hard cut. The
@@ -260,7 +253,6 @@ fun BoxScope.PersistentExoWindow(
         miniTarget ||
             (mode == ExoWindowState.Mode.Fullscreen && miniWidth < screenW)
         )
-    val phoneFrame = null
 
     // See PersistentMpvWindow for the long form of the z-index rationale.
     // tl;dr: NavHost paints over PersistentExoWindow by declaration order;
@@ -268,7 +260,6 @@ fun BoxScope.PersistentExoWindow(
     // to float above the Guide's opaque background).
     val containerModifier = when {
         mode == ExoWindowState.Mode.Hidden -> Modifier.size(0.dp)
-        phoneFrame != null -> phoneFrame
         // tvOS geometry, halved from the 1080 pt canvas (mini report D2-D4):
         // 410x231 pt -> 205x115 dp, 40 pt -> 20 dp end inset, corner radius
         // 12 pt -> 6 dp, shadow blur 20 pt -> 10 dp. The top inset is the

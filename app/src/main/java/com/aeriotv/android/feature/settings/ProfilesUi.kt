@@ -21,14 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -175,99 +171,6 @@ class ProfilesViewModel @Inject constructor(
         manager.channelProfileAssignment(playlistId, profileId)
     suspend fun saveChannelProfiles(playlistId: String, profileId: String, userId: Int, ids: List<Int>) =
         manager.saveChannelProfiles(playlistId, profileId, userId, ids)
-}
-
-/** Phone / tablet Live TV header: avatar circle, only with 2+ profiles. */
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-fun ProfileSwitcherButton(modifier: Modifier = Modifier) {
-    val vm: ProfilesViewModel = hiltViewModel()
-    val playlistId by vm.activePlaylistId.collectAsStateWithLifecycle(initialValue = null)
-    val profiles by vm.activePlaylistProfiles.collectAsStateWithLifecycle(initialValue = emptyList())
-    val pid = playlistId ?: return
-    if (profiles.size < 2) return
-    // Phase 2b: a Child never sees the switcher (or any other profile name).
-    val role by vm.activeRole.collectAsStateWithLifecycle()
-    if (!com.aeriotv.android.core.profiles.RoleRules.canSeeSwitcher(role)) return
-    val activeId by vm.activeProfileId(pid).collectAsStateWithLifecycle(initialValue = null)
-    val active = profiles.firstOrNull { it.id == activeId } ?: profiles.first()
-    var open by remember { mutableStateOf(false) }
-    var confirm by remember { mutableStateOf<DispatcharrProfile?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    var pinFor by remember { mutableStateOf<DispatcharrProfile?>(null) }
-
-    ProfileAvatar(
-        name = active.displayName,
-        size = 38,
-        modifier = modifier.clip(CircleShape).clickable { open = true },
-    )
-
-    fun doSwitch(p: DispatcharrProfile) {
-        busy = true
-        vm.switchTo(pid, p.id) { err -> busy = false; error = err; if (err == null) open = false }
-    }
-
-    if (open) {
-        ModalBottomSheet(onDismissRequest = { open = false }) {
-            Column(Modifier.padding(bottom = 24.dp)) {
-                Text(
-                    "Switch Profile",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                )
-                profiles.forEach { p ->
-                    ProfileRow(
-                        profile = p,
-                        locked = vm.hasPin(p.id),
-                        isActive = p.id == active.id,
-                        onClick = {
-                            if (p.id == active.id || busy) return@ProfileRow
-                            if (vm.hasPin(p.id)) pinFor = p
-                            else if (vm.isPlaying()) confirm = p else doSwitch(p)
-                        },
-                    )
-                }
-                if (busy) {
-                    Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    }
-                }
-                error?.let {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
-                    )
-                }
-                HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { open = false; vm.manageProfiles() }
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.ManageAccounts, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.size(12.dp))
-                    Text("Manage Profiles", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge)
-                }
-            }
-        }
-    }
-    confirm?.let { p ->
-        StopPlaybackDialog(name = p.displayName, onDismiss = { confirm = null }) {
-            confirm = null
-            doSwitch(p)
-        }
-    }
-    pinFor?.let { p ->
-        SwitchPinDialog(p, vm, onDismiss = { pinFor = null }) {
-            pinFor = null
-            if (vm.isPlaying()) confirm = p else doSwitch(p)
-        }
-    }
 }
 
 /** "Enter PIN for {name}" before switching to a locked profile. */

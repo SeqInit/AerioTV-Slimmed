@@ -41,7 +41,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.aeriotv.android.ui.scale.DropdownMenu
 
@@ -72,7 +71,6 @@ internal fun ReorderableStreamList(
      *  Reorder mode ends (Finish or dismiss), not per drop. */
     onPendingOrder: (List<Int>) -> Unit = {},
 ) {
-    val context = LocalContext.current
     // Local order so a drag can preview; reset whenever the server list changes.
     var order by remember { mutableStateOf(streams) }
     var dragIndex by remember { mutableStateOf(-1) }

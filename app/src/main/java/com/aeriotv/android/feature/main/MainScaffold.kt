@@ -5,19 +5,15 @@ import com.aeriotv.android.core.data.db.entity.dispatcharrCanViewDvr
 import com.aeriotv.android.core.data.db.entity.dispatcharrCanViewVod
 import com.aeriotv.android.core.data.db.entity.dispatcharrCanViewSeries
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -33,7 +29,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -80,14 +75,11 @@ import com.aeriotv.android.feature.settings.LiveTvSettingsScreen
 import com.aeriotv.android.feature.settings.MoviesAndTvShowsSettingsScreen
 import com.aeriotv.android.feature.settings.PlayerSettingsScreen
 import com.aeriotv.android.feature.settings.SettingsRootContent
-import com.aeriotv.android.feature.settings.DefaultSettingsPaneSelection
 import com.aeriotv.android.feature.settings.SettingsRoute
 import com.aeriotv.android.feature.settings.SettingsScreen
 import com.aeriotv.android.feature.settings.SettingsSection
 import com.aeriotv.android.feature.settings.SettingsViewModel
-import com.aeriotv.android.ui.adaptive.rememberViewport
 import com.aeriotv.android.feature.settings.SettingsTvRailHost
-import com.aeriotv.android.feature.settings.SettingsPaneSplit
 import com.aeriotv.android.feature.settings.rememberSettingsNavState
 import com.aeriotv.android.feature.settings.rememberSettingsPaneSelection
 import com.aeriotv.android.feature.settings.isPaneBaseline
@@ -791,28 +783,6 @@ fun MainScaffold(
     }
 }
 
-/** Floating bottom-nav chrome shared by the tab bar pill and the minimized
- *  pill so they read as one layer over busy content
- *  (guide grid, posters): solid card surface at 92 percent, a 1 dp on-surface
- *  hairline at 12 percent and a soft black drop shadow. Material styling, no
- *  translucent glass (Logan 2026-10-04, same recipe as the iPad). */
-@Composable
-internal fun Modifier.floatingNavChrome(shape: androidx.compose.ui.graphics.Shape): Modifier {
-    val cs = MaterialTheme.colorScheme
-    return this
-        .dropShadow(
-            shape,
-            androidx.compose.ui.graphics.shadow.Shadow(
-                radius = 18.dp,
-                color = Color.Black.copy(alpha = 0.35f),
-                offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp),
-            ),
-        )
-        .clip(shape)
-        .background(cs.surface.copy(alpha = 0.92f))
-        .border(1.dp, cs.onSurface.copy(alpha = 0.12f), shape)
-}
-
 /**
  * iOS 26 parity: the phone tab bar as a centered, floating, rounded pill
  * (the iPhone app's Liquid-Glass bar) instead of a full-width Material
@@ -1027,23 +997,11 @@ private fun SettingsTabContent(
     // position, which plain `remember` could not.
     val nav = rememberSettingsNavState()
     val route = nav.current
-    // Phase B3: the tablet list-detail host. Expanded width alone is not the
-    // gate -- a landscape phone is "expanded" but far too short -- and TV keeps
-    // the stacked layout until B4 lands the rail with its focus contract.
-    val viewport = rememberViewport()
-    // Settings phase 2: the gate is MEDIUM width and up, so an unfolded
-    // foldable gets the sidebar. `settingsTwoPane` is Settings' own flag; the
-    // window-wide `isTwoPaneEligible` (and the tab-bar placement built on it)
-    // is deliberately unchanged.
-    val paneEligible = viewport.settingsTwoPane
-    // Same eligibility, two hosts: touch tablets get the tap sidebar (B3), TV
-    // gets the 10-foot rail with its focus contract (B4).
-    val tvRail = paneEligible
-    val twoPane = tvRail
-    var selection by rememberSettingsPaneSelection(nav = nav, twoPane = twoPane, initial = if (tvRail) SettingsRoute.Root else DefaultSettingsPaneSelection)
+    // Settings always runs the 10-foot rail (sidebar + detail).
+    var selection by rememberSettingsPaneSelection()
     // True for the route the pane is BASELINED on; pushes above it render as
     // ordinary screens and keep their own back affordance.
-    val inPane = twoPane && route == null
+    val inPane = route == null
     val updaterEnabled = hiltViewModel<com.aeriotv.android.feature.update.UpdateViewModel>()
         .isEnabled
     // Sidebar / rail Sync row reads On or Off rather than a description.
@@ -1074,29 +1032,25 @@ private fun SettingsTabContent(
     // focus into the pane on a PUSH, so a plain selection change would leave
     // focus wherever it was (the tab pill on a cold launch).
     var deepLinkPaneFocus by remember { mutableIntStateOf(0) }
-    LaunchedEffect(pendingSettingsPage, twoPane, tvRail, playlistState.playlist?.id) {
+    LaunchedEffect(pendingSettingsPage, playlistState.playlist?.id) {
         val page = pendingSettingsPage?.page ?: return@LaunchedEffect
         val activeId = playlistState.playlist?.id
         // No playlist yet: leave the request pending and retry when one lands.
         if (activeId == null && settingsDeepLinkPageNeedsPlaylist(page)) return@LaunchedEffect
         val target = settingsRouteForDeepLinkPage(page, activeId, com.aeriotv.android.core.profiles.ProfileRoles.active.value)
         nav.popToRoot()
-        if (twoPane) {
-            when {
-                target == null ->
-                    selection = if (tvRail) SettingsRoute.Root else DefaultSettingsPaneSelection
-                target.isPaneBaseline -> selection = target
-                else -> {
-                    // Playlist detail / edit are pushes; baseline them on the
-                    // Playlists pane so Back walks out the way it normally would.
-                    selection = SettingsRoute.Playlists
-                    nav.push(target)
-                }
+        when {
+            target == null ->
+                selection = SettingsRoute.Root
+            target.isPaneBaseline -> selection = target
+            else -> {
+                // Playlist detail / edit are pushes; baseline them on the
+                // Playlists pane so Back walks out the way it normally would.
+                selection = SettingsRoute.Playlists
+                nav.push(target)
             }
-            deepLinkPaneFocus++
-        } else if (target != null) {
-            nav.push(target)
         }
+        deepLinkPaneFocus++
         playlistVm.consumeSettingsPage()
     }
     // Watch for a playlist id flip while we're inside the Add Playlist flow;
@@ -1150,7 +1104,6 @@ private fun SettingsTabContent(
     // host moves focus into the pane itself for those; this stays responsible
     // for the stacked layouts and for takeovers.
     val subScreenKey: String? = when {
-        !twoPane -> nav.focusKey
         route != null && isSettingsTakeover(route) -> nav.focusKey
         else -> null
     }
@@ -1191,7 +1144,7 @@ private fun SettingsTabContent(
             // Left the Child (Manage Profiles -> Admin): that page has no row
             // outside Child mode, so land on the canon default instead.
             nav.popToRoot()
-            selection = if (tvRail) SettingsRoute.Playlists else DefaultSettingsPaneSelection
+            selection = SettingsRoute.Playlists
         } else if (nav.stack.any { it is SettingsRoute.ManageProfiles }) {
             nav.popToRoot()
         }
@@ -1352,38 +1305,8 @@ private fun SettingsTabContent(
     }
     }
 
-    // Fold awareness. Every geometry comes from the OS-reported FoldingFeature,
-    // and the boundary always lands ON the crease so no pane is bent:
-    //
-    //  - VERTICAL crease: the window splits left/right, so the existing
-    //    side-by-side layout just moves its boundary to the hinge.
-    //  - HORIZONTAL crease, ANY state: Settings keeps the full display side by
-    //    side (Logan's call), so the split is the ordinary fixed one; only an
-    //    OCCLUDING hinge changes anything, by taking the hairline away.
-    //
-    // The host's Row/Column starts at the window's leading/top edge, which is
-    // the same origin the feature bounds use. Recomposing on a new FoldInfo
-    // re-lays-out only; `selection` and the nav stack live above this and are
-    // untouched, and `twoPane` does not flip, so no posture mapping runs.
-    val fold = com.aeriotv.android.ui.adaptive.rememberFoldInfo()
-    val settingsSplit = when {
-        fold != null &&
-            fold.axis == com.aeriotv.android.ui.adaptive.FoldAxis.VERTICAL &&
-            fold.start > 0.dp ->
-            SettingsPaneSplit(
-                sidebarExtent = fold.start,
-                gap = fold.gap,
-                drawDivider = !fold.needsBlankGap,
-            )
-        else ->
-            SettingsPaneSplit(
-                sidebarExtent = viewport.settingsSidebarWidth,
-                drawDivider = fold?.isOccluding != true,
-            )
-    }
-
     Box(modifier = Modifier.focusRequester(settingsContentFocus).focusGroup()) {
-        if (tvRail && sidebarPanel) {
+        if (sidebarPanel) {
             com.aeriotv.android.feature.settings.SettingsSidebarPanelHost(
                 selection = selection,
                 onSelect = { picked ->
@@ -1399,7 +1322,7 @@ private fun SettingsTabContent(
                 takeover = ::isSettingsTakeover,
                 detail = { renderRoute(it) },
             )
-        } else if (tvRail) {
+        } else {
             SettingsTvRailHost(
                 focusPaneSignal = deepLinkPaneFocus,
                 selection = selection,
@@ -1419,11 +1342,6 @@ private fun SettingsTabContent(
                 takeover = ::isSettingsTakeover,
                 detail = { renderRoute(it) },
             )
-        } else {
-            // Dispatch on the stack's top route. Ordering that used to be
-            // implicit in branch position (the log viewer had to sit ABOVE
-            // Developer to win) is now just push order.
-            renderRoute(route)
         }
     }
 }

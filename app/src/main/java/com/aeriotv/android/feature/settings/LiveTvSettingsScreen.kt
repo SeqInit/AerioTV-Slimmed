@@ -5,17 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ViewAgenda
-import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.Subject
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.FilterNone
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Numbers
@@ -23,7 +17,6 @@ import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -44,8 +36,6 @@ import com.aeriotv.android.ui.scale.AlertDialog
 import com.aeriotv.android.ui.settings.SettingsActionRow
 import com.aeriotv.android.ui.settings.SettingsDialogTextButton
 import com.aeriotv.android.ui.settings.SettingsDetailTopBar
-import com.aeriotv.android.ui.settings.SettingsPickerOption
-import com.aeriotv.android.ui.settings.SettingsPickerRow
 import com.aeriotv.android.ui.settings.SettingsSection
 import com.aeriotv.android.ui.settings.SettingsSubGroup
 import com.aeriotv.android.ui.settings.SettingsSubPageHost
@@ -70,29 +60,23 @@ fun LiveTvSettingsScreen(
     onOpenAddMoreCategories: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    // TV has no Live TV List view (Logan 2026-09-16, see core.ui.TvListView),
-    // so the list-only options are hidden and the list-facing copy is written
-    // for the Guide's channel column instead. The keys keep their values.
-    val listViewShown = com.aeriotv.android.core.ui.TvListView.ENABLED
+    // There is no Live TV List view (Logan 2026-09-16), so the list-facing
+    // copy is written for the Guide's channel column. List-only keys keep
+    // their synced values.
 
     val showChannelLogos by viewModel.showChannelLogos.collectAsStateWithLifecycle(initialValue = true)
     val channelLogoSize by viewModel.channelLogoSize.collectAsStateWithLifecycle(initialValue = 100)
     val showChannelNumbers by viewModel.showChannelNumbers.collectAsStateWithLifecycle(initialValue = true)
     val showChannelNames by viewModel.showChannelNames.collectAsStateWithLifecycle(initialValue = true)
     val showProgramSubtitles by viewModel.showProgramSubtitles.collectAsStateWithLifecycle(initialValue = true)
-    val roundedArtwork by viewModel.roundedArtwork.collectAsStateWithLifecycle(initialValue = true)
     val roundedArtworkGuide by viewModel.roundedArtworkGuide.collectAsStateWithLifecycle(initialValue = false)
     val roundedProgramCells by viewModel.roundedProgramCells.collectAsStateWithLifecycle(initialValue = false)
     val defaultLiveTVView by viewModel.defaultLiveTVView.collectAsStateWithLifecycle(initialValue = "")
-    val phoneGroupSelector by viewModel.phoneGroupSelector.collectAsStateWithLifecycle(initialValue = "sidebar")
-    val edgeSwipeOpensSidebar by viewModel.liveTvEdgeSwipeOpensSidebar.collectAsStateWithLifecycle(initialValue = false)
     val showEpgBadges by viewModel.showEpgBadges.collectAsStateWithLifecycle(initialValue = true)
     val hiddenEpgBadges by viewModel.hiddenEpgBadges.collectAsStateWithLifecycle(initialValue = emptySet())
     val scaleLiveTV by viewModel.displayScaleLiveTV.collectAsStateWithLifecycle(initialValue = 1.0f)
     val programInfoButton by viewModel.guideProgramInfoButton
         .collectAsStateWithLifecycle(initialValue = GuideProgramInfoButton.OFF)
-    val pibGuide by viewModel.programInfoButtonGuide.collectAsStateWithLifecycle(initialValue = false)
-    val pibList by viewModel.programInfoButtonList.collectAsStateWithLifecycle(initialValue = false)
     var confirmClearRecents by remember { mutableStateOf(false) }
     val palette by viewModel.categoryPalette.collectAsStateWithLifecycle(initialValue = CategoryPaletteState.Default)
 
@@ -128,11 +112,7 @@ fun LiveTvSettingsScreen(
                     ) {
                         SettingsToggleRow(
                             title = "Show Channel Logos",
-                            subtitle = if (listViewShown) {
-                                "Turn off to hide channel logos so longer channel names get the full row width."
-                            } else {
-                                "Display each channel's logo in the Guide's channel column."
-                            },
+                            subtitle = "Display each channel's logo in the Guide's channel column.",
                             leadingIcon = Icons.Filled.Tv,
                             checked = showChannelLogos,
                             onCheckedChange = viewModel::setShowChannelLogos,
@@ -151,33 +131,21 @@ fun LiveTvSettingsScreen(
                         }
                         SettingsToggleRow(
                             title = "Show Channel Numbers",
-                            subtitle = if (listViewShown) {
-                                "Turn off to hide channel numbers in the Live TV list and Guide."
-                            } else {
-                                "Display each channel's number in the Guide's channel column."
-                            },
+                            subtitle = "Display each channel's number in the Guide's channel column.",
                             leadingIcon = Icons.Filled.Numbers,
                             checked = showChannelNumbers,
                             onCheckedChange = viewModel::setShowChannelNumbers,
                         )
                         SettingsToggleRow(
                             title = "Show Channel Names",
-                            subtitle = if (listViewShown) {
-                                "Turn off to hide channel names in the Live TV list and the Guide's channel column."
-                            } else {
-                                "Turn off to hide channel names in the Guide's channel column."
-                            },
+                            subtitle = "Turn off to hide channel names in the Guide's channel column.",
                             leadingIcon = Icons.Filled.TextFields,
                             checked = showChannelNames,
                             onCheckedChange = viewModel::setShowChannelNames,
                         )
                         SettingsToggleRow(
                             title = "Show Program Subtitles",
-                            subtitle = if (listViewShown) {
-                                "Turn off to hide the episode or match name under each program title in the Guide and Live TV list, for EPGs that repeat the description there."
-                            } else {
-                                "Turn off to hide the episode or match name under each program title in the Guide, for EPGs that repeat the description there."
-                            },
+                            subtitle = "Turn off to hide the episode or match name under each program title in the Guide, for EPGs that repeat the description there.",
                             leadingIcon = Icons.AutoMirrored.Filled.Subject,
                             checked = showProgramSubtitles,
                             onCheckedChange = viewModel::setShowProgramSubtitles,
@@ -198,36 +166,6 @@ fun LiveTvSettingsScreen(
                         )
                         // GH #127 (Apple d051505): phone and tablet only; TV
                         // reaches Program Info from the long-press menu.
-                    }
-                }
-
-                // MARK: List view
-                //
-                // Hidden on TV under the TvListView gate, exactly as the two
-                // source screens gated these rows before the regroup. Apple
-                // has no section footer here: the Default Live TV View copy
-                // lives on the picker's own page (iOS only; tvOS passes none).
-                if (listViewShown) item("list-view") {
-                    SettingsSection(header = "List view") {
-                        SettingsToggleRow(
-                            title = "Rounded List Logos and Artwork",
-                            subtitle = "Round the channel logos and program artwork in the channel list and on the app's cards.",
-                            leadingIcon = Icons.Filled.FilterNone,
-                            checked = roundedArtwork,
-                            onCheckedChange = viewModel::setRoundedArtwork,
-                        )
-                        SettingsPickerRow(
-                            title = "Default Live TV View",
-                            inlineTitle = true,
-                            options = DEFAULT_LIVE_TV_VIEW_OPTIONS.map {
-                                SettingsPickerOption(it.first, it.second, icon = liveTvViewIcon(it.first))
-                            },
-                            selected = defaultLiveTVView.lowercase(),
-                            onSelect = viewModel::setDefaultLiveTVView,
-                            // Apple rectangle.grid.1x2: two outlined stacked rows.
-                            leadingIcon = Icons.Outlined.ViewAgenda,
-                            footer = null,
-                        )
                     }
                 }
 
@@ -287,14 +225,10 @@ fun LiveTvSettingsScreen(
                 settingsCard(
                     header = "Display Scale",
                     // tvOS prints no footer under the Guide scale row.
-                    footer = if (!listViewShown) null else if (listViewShown) {
-                        "Independent scale for the Live TV List. 100% matches the default; 85-150% lets you trade density for readability (larger steps show fewer, bigger items - handy on a TV across the room). Changes apply live."
-                    } else {
-                        "Independent scale for Live TV. 100% matches the default; 85-150% lets you trade density for readability (larger steps show fewer, bigger items - handy on a TV across the room). Changes apply live."
-                    },
+                    footer = null,
                 ) {
                     ScaleSliderRow(
-                        label = if (listViewShown) "Live TV List" else "Guide",
+                        label = "Guide",
                         value = scaleLiveTV,
                         onValueChange = viewModel::setDisplayScaleLiveTV,
                     )
@@ -370,20 +304,3 @@ fun LiveTvSettingsScreen(
 
 }
 
-/** Default Live TV View choices. Empty string = "Automatic" (form-factor
- *  default: List on compact phones, Guide on tablets / TV). "list" / "guide"
- *  are explicit overrides. Written to the same [defaultLiveTVView] pref the
- *  Live TV screen reads; the in-screen List / Guide button is session-only and
- *  never writes here. */
-/** Apple's liveTVViewIcon: wand.and.stars / list.bullet / calendar. */
-private fun liveTvViewIcon(value: String): ImageVector = when (value) {
-    "list" -> Icons.AutoMirrored.Filled.FormatListBulleted
-    "guide" -> Icons.Filled.CalendarMonth
-    else -> Icons.Filled.AutoAwesome
-}
-
-private val DEFAULT_LIVE_TV_VIEW_OPTIONS = listOf(
-    "" to "Automatic",
-    "list" to "List",
-    "guide" to "Guide",
-)

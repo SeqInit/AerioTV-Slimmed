@@ -72,7 +72,6 @@ import com.aeriotv.android.feature.favorites.FavoritesViewModel
 import com.aeriotv.android.feature.livetv.EmptyGroupNotice
 import com.aeriotv.android.feature.livetv.GroupSortMode
 import com.aeriotv.android.feature.livetv.GuideGroupSidebarPane
-import com.aeriotv.android.feature.livetv.LiveTVViewMode
 import com.aeriotv.android.feature.livetv.ProgramInfoSheet
 import com.aeriotv.android.feature.livetv.RecordProgramSheet
 import com.aeriotv.android.feature.livetv.computeDisplayChannels
@@ -98,9 +97,6 @@ import kotlinx.coroutines.withContext
 @Composable
 fun GuideScreen(
     onChannelClick: (M3UChannel) -> Unit,
-    viewMode: LiveTVViewMode,
-    canToggleViewMode: Boolean,
-    onToggleViewMode: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onPlayCatchup: (
         channelId: String,
@@ -200,7 +196,6 @@ fun GuideScreen(
     val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
     // Phone / tablet rows keep their fixed canon heights at 100% and grow only
     // with the app Text Size (not the system font size, unchanged from before).
-    val appTextScale = com.aeriotv.android.ui.scale.LocalAppTextScale.current
     val hourWidth = 300.dp * guideScale * tvComfortScale
     val railWidth = 120.dp * tvComfortScale
     // Phone cells carry the subtitle and two description lines (Logan

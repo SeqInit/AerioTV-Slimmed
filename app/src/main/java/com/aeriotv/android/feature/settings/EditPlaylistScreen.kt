@@ -193,7 +193,6 @@ fun EditPlaylistScreen(
         !state.isLoading && !saving
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val performSave = {
         saving = true
         saveError = null
