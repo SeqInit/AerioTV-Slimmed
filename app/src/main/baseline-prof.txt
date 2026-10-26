@@ -2,7 +2,7 @@
 # ProfileInstaller at install time (via the binary profile AGP bundles into
 # assets/dexopt/baseline.prof), so they run as native code instead of
 # interpreter -> JIT. This eliminates the press-to-action lag on low-end TV
-# boxes (e.g. Google TV Streamer) where guide/list/player navigation would
+# boxes (e.g. Google TV Streamer) where guide/player navigation would
 # otherwise run interpreted on a cold install.
 #
 # FORMAT
@@ -62,10 +62,6 @@ HSPLandroidx/compose/ui/**->**(**)**
 HSPLandroidx/compose/material3/**->**(**)**
 HSPLandroidx/compose/material/**->**(**)**
 HSPLandroidx/compose/animation/**->**(**)**
-
-# androidx.tv Material/Foundation -- the TV-specific components the guide,
-# pills and cards are built from.
-HSPLandroidx/tv/**->**(**)**
 
 # androidx.collection -- ScatterMap/ObjectList et al. that Compose's runtime
 # and layout lean on heavily per frame.
