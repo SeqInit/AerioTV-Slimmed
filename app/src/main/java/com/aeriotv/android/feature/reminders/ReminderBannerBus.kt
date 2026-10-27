@@ -14,6 +14,12 @@ data class ReminderBannerData(
     val channelId: String,
     val channelName: String,
     val programTitle: String,
+    /** Room key of the reminder: the banner's Record reads the window from it. */
+    val reminderKey: String,
+    /** Programme window when the alarm intent carried one (the debug test
+     *  reminder, which has no Room row); null = read it from the row. */
+    val startMillis: Long? = null,
+    val endMillis: Long? = null,
 )
 
 /**

@@ -171,6 +171,25 @@ internal fun recordingProgressId(playbackUrl: String, recId: Int): String {
 }
 
 /**
+ * Tune a live channel from outside the player (deep link, reminder banner).
+ * If this TV is already on the LIVE player, re-tune in place (PlayerScreen
+ * observes LiveChannelRequest); a catch-up replay shares the player/ route but
+ * its prime effect early-returns, so those navigate a fresh live player
+ * instead. Anywhere else (guide, tabs, mini player) navigates.
+ */
+private fun tuneLiveChannel(navController: androidx.navigation.NavController, channelId: String) {
+    val onPlayer = navController.currentDestination
+        ?.route?.startsWith("player/") == true
+    val onCatchup = navController.currentBackStackEntry
+        ?.arguments?.getString("csUrl").orEmpty().isNotBlank()
+    if (onPlayer && !onCatchup) {
+        com.aeriotv.android.feature.player.LiveChannelRequest.request(channelId)
+    } else {
+        navController.navigate(Routes.player(channelId))
+    }
+}
+
+/**
  * Silence any LIVE session (persistent exo window + mini player + media service)
  * before a VOD/recording player mounts. Extracted from the RECORDING_PLAYER route
  * so the two VOD routes get the same teardown -- an aeriotv://vodplay deep link
@@ -256,20 +275,7 @@ fun AerioTVNavHost(
                         it.id == target.channelId && it.url.isNotBlank()
                     }
                     if (exists) {
-                        // If this TV is already on the LIVE player, re-tune in
-                        // place (PlayerScreen observes LiveChannelRequest); a
-                        // catch-up replay shares the player/ route but its prime
-                        // effect early-returns, so those navigate a fresh live
-                        // player instead. First open (on the guide) navigates.
-                        val onPlayer = navController.currentDestination
-                            ?.route?.startsWith("player/") == true
-                        val onCatchup = navController.currentBackStackEntry
-                            ?.arguments?.getString("csUrl").orEmpty().isNotBlank()
-                        if (onPlayer && !onCatchup) {
-                            com.aeriotv.android.feature.player.LiveChannelRequest.request(target.channelId)
-                        } else {
-                            navController.navigate(Routes.player(target.channelId))
-                        }
+                        tuneLiveChannel(navController, target.channelId)
                         onDeepLinkConsumed()
                     } else if (dlState.phase == PlaylistViewModel.Phase.ChannelsReady) {
                         onDeepLinkConsumed() // channels loaded, id gone => drop
@@ -1441,9 +1447,16 @@ fun AerioTVNavHost(
     }
         // In-app reminder banner overlay. Floats over every screen; the bus
         // only surfaces a banner when a reminder fires while foregrounded.
+        // Channels are read at press time through the playlist graph's VM (a
+        // .value read, so this root scope never recomposes on playlist state).
+        val bannerPlaylistVm: PlaylistViewModel? = dlGraphEntry?.let { hiltViewModel(it) }
         ReminderBannerHost(
-            onOpenChannel = { channelId -> navController.navigate(Routes.player(channelId)) },
-            modifier = Modifier.align(Alignment.TopCenter),
+            findChannel = { id, name ->
+                val channels = bannerPlaylistVm?.state?.value?.channels.orEmpty()
+                channels.firstOrNull { id.isNotBlank() && it.id == id }
+                    ?: channels.firstOrNull { name.isNotBlank() && it.name == name }
+            },
+            onWatch = { channelId -> tuneLiveChannel(navController, channelId) },
         )
         // In-app updater prompt (github flavor; inert no-op on Play). Renders
         // only on the main tabs and drives the throttled foreground update

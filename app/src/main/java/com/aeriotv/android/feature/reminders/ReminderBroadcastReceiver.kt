@@ -42,7 +42,16 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
             .fromApplication(context.applicationContext, ReminderReceiverEntryPoint::class.java)
             .reminderBannerBus()
         if (bus.isForeground) {
-            bus.post(ReminderBannerData(channelId = channelId, channelName = channelName, programTitle = title))
+            bus.post(
+                ReminderBannerData(
+                    channelId = channelId,
+                    channelName = channelName,
+                    programTitle = title,
+                    reminderKey = key,
+                    startMillis = intent.getLongExtra(EXTRA_START_MILLIS, 0L).takeIf { it > 0L },
+                    endMillis = intent.getLongExtra(EXTRA_END_MILLIS, 0L).takeIf { it > 0L },
+                ),
+            )
             return
         }
 
@@ -89,6 +98,10 @@ class ReminderBroadcastReceiver : BroadcastReceiver() {
         const val EXTRA_CHANNEL_NAME = "extra_channel"
         const val EXTRA_CHANNEL_ID = "extra_channel_id"
         const val EXTRA_REMINDER_KEY = "extra_key"
+        // Optional programme window. Real alarms omit it (the banner reads the
+        // reminder's Room row); the debug test reminder has no row and sends it.
+        const val EXTRA_START_MILLIS = "extra_start_millis"
+        const val EXTRA_END_MILLIS = "extra_end_millis"
         private const val CHANNEL_ID = "aeriotv_reminders"
     }
 }

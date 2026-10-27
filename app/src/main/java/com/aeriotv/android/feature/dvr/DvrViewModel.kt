@@ -63,6 +63,7 @@ class DvrViewModel @Inject constructor(
     private val epgProgrammeDao: com.aeriotv.android.core.data.db.dao.EpgProgrammeDao,
     private val recordingsCache: DvrRecordingsCache,
     private val settleGate: com.aeriotv.android.core.app.AppSettleGate,
+    private val serverWriter: DvrServerWriter,
 ) : ViewModel() {
 
     enum class Filter { Scheduled, Recording, Completed }
@@ -792,50 +793,12 @@ class DvrViewModel @Inject constructor(
     private suspend fun <T> withCapability(
         capability: Capability,
         block: suspend () -> T,
-    ): Result<T> {
-        val playlistId = playlistRepository.activePlaylist()?.id
-        val believedDenied = playlistId != null &&
-            playlistRepository.activePlaylist()?.isDenied(capability) == true
-        val result = runCatching { block() }
-        result.onSuccess {
-            if (believedDenied && playlistId != null) {
-                // We were wrong, and the server just proved it.
-                CapabilityCorrections.record(playlistId, capability, CapabilityState.Allowed)
-                runCatching { playlistRepository.probeCapabilities(playlistId, force = true) }
-                refresh()
-            }
-            return result
-        }
-        val error = result.exceptionOrNull()
-        val denied = error is DispatcharrError.Forbidden ||
-            error is DispatcharrError.Unauthorized
-        if (!denied || playlistId == null) return result
+    ): Result<T> = serverWriter.withCapability(capability, ::onCapabilityCorrected, block)
 
-        // Re-probe and re-derive before deciding what to tell the user.
-        val probed = runCatching { playlistRepository.probeCapabilities(playlistId, force = true) }
-            .getOrDefault(false)
-        val fresh = playlistRepository.activePlaylist()
-        val stillAllowed = probed && fresh?.allows(capability) == true &&
-            fresh.capabilities().isKnownAllowed(capability)
-        val message = if (stillAllowed) {
-            // Permissions say yes, the server still said no.
-            capability.networkRestrictionMessage()
-        } else {
-            CapabilityCorrections.record(playlistId, capability, CapabilityState.Denied)
-            capability.deniedMessage()
-        }
-        CapabilityNotices.emit(
-            CapabilityNotice(
-                playlistId = playlistId,
-                capability = capability,
-                message = message,
-                looksLikeNetworkRestriction = stillAllowed,
-            ),
-        )
-        _state.update { it.copy(error = message) }
-        // Re-read so the affordance follows the corrected capability.
+    /** After a capability correction: surface a denial, re-read the list. */
+    private fun onCapabilityCorrected(errorMessage: String?) {
+        if (errorMessage != null) _state.update { it.copy(error = errorMessage) }
         refresh()
-        return Result.failure(DispatcharrError.Forbidden(message))
     }
 
     suspend fun deleteRecording(recording: Recording): Result<Unit> {
@@ -925,26 +888,13 @@ class DvrViewModel @Inject constructor(
         title: String,
         description: String,
         comskip: Boolean,
-    ): Result<DispatcharrRecording> {
-        val playlist = playlistRepository.activePlaylist()
-            ?: return Result.failure(IllegalStateException("No playlist loaded."))
-        if (playlist.apiKey.isNullOrBlank()) {
-            return Result.failure(IllegalStateException("Active source is not Dispatcharr-backed."))
-        }
-        val base = playlistRepository.effectiveBaseUrl(playlist)
-        return withCapability(Capability.CanManageDvr) {
-            val result = dispatcharrAuth.withApiKeyRetry(playlist.id) { key ->
-                dispatcharrClient.createRecording(
-                    baseUrl = base,
-                    apiKey = key,
-                    channelId = channelDispatcharrId,
-                    startIso = startMillis.toIsoUtc(),
-                    endIso = endMillis.toIsoUtc(),
-                    title = title,
-                    description = description,
-                    comskip = comskip,
-                )
-            }
+    ): Result<DispatcharrRecording> = serverWriter.scheduleServerRecording(
+        channelDispatcharrId, startMillis, endMillis, title, description, comskip,
+        onCorrected = ::onCapabilityCorrected,
+    ).map { scheduled ->
+            val result = scheduled.recording
+            val base = scheduled.baseUrl
+            val playlist = scheduled.playlist
             // Optimistic insert: the POST already returned the full server row
             // (real id, channel, window). Merge it into state NOW so the
             // "Recording (N)" pill + red row appear immediately, instead of
@@ -961,7 +911,6 @@ class DvrViewModel @Inject constructor(
             refresh()
             result
         }
-    }
 
     /**
      * Edits an already-scheduled Dispatcharr server recording. Mirrors

@@ -160,6 +160,9 @@ fun DeveloperSettingsScreen(
             item("force-hls") {
                 ForceHlsSection(checked = forceHls, onCheckedChange = settingsVm::setDeveloperForceHls)
             }
+            // Debug builds only: src/debug holds the tools, release / perf an
+            // empty stub (draws nothing).
+            item("debug-tools") { DebugToolsSection() }
             // Section order follows Apple per platform. Phone: Logging, What's
             // Captured, Log File. TV: Logging, Log File, What's Captured.
             // Apple's Playback Engine section sits after What's Captured on
