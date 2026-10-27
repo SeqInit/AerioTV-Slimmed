@@ -191,7 +191,9 @@ internal fun SidebarPlayerChrome(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .offset(y = panelOffset)
+                    // Lambda offset: the slide is read at layout, so the
+                    // panel is not recomposed on every animation frame.
+                    .offset { androidx.compose.ui.unit.IntOffset(0, panelOffset.roundToPx()) }
                     .padding(start = 38.dp, end = 38.dp, bottom = 18.dp)
                     .onPreviewKeyEvent { e ->
                         if (e.type == KeyEventType.KeyDown) onInteraction()

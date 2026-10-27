@@ -679,9 +679,14 @@ fun MainScaffold(
         // undocked one); the docked preview on the left stays clear of it.
         // The side menu pushes the docked preview along with the guide,
         // so only the Settings panel can cover the mini.
-        val dockRect by com.aeriotv.android.feature.player.MiniPlayerChrome
+        // Only "is the mini docked" matters here. The rect itself moves every
+        // frame while the side menu / groups column slides (the header slot
+        // republishes it from onGloballyPositioned), and reading it directly
+        // recomposed this scope, tab content included, once per frame.
+        val dockRect = com.aeriotv.android.feature.player.MiniPlayerChrome
             .dockRectPx.collectAsStateWithLifecycle()
-        val menuCoversMini = settingsPanelOpen && dockRect.width <= 0f
+        val miniDocked by remember { androidx.compose.runtime.derivedStateOf { dockRect.value.width > 0f } }
+        val menuCoversMini = settingsPanelOpen && !miniDocked
         androidx.compose.runtime.LaunchedEffect(selectedTab, menuCoversMini) {
             com.aeriotv.android.feature.player.MiniPlayerChrome
                 .settingsStashed.value = selectedTab == AppTab.Settings || menuCoversMini

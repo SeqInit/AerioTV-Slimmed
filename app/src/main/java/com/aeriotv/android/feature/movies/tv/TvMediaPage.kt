@@ -1704,7 +1704,9 @@ private fun TvHeroCarousel(
                 modifier = Modifier
                     .wrapContentWidth(Alignment.Start, unbounded = true)
                     .requiredWidth(total)
-                    .offset(x = shift),
+                    // Lambda offset: the page slide is read at layout, so the
+                    // hero cards are not recomposed on every animation frame.
+                    .offset { androidx.compose.ui.unit.IntOffset(shift.roundToPx(), 0) },
                 horizontalArrangement = Arrangement.spacedBy(spacing),
             ) {
                 pages.forEachIndexed { i, page ->

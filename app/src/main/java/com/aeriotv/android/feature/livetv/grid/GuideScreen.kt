@@ -640,8 +640,12 @@ fun GuideScreen(
     val bannerFocus = remember { FocusRequester() }
     val radioBannerFocus = remember { FocusRequester() }
     var clockSelectTrigger by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val previewProgram: EPGProgramme? = grid.focusedCell()
-    val previewChannel: M3UChannel? = if (grid.focusRow in 0 until grid.rows.size) grid.rows.channel(grid.focusRow) else null
+    // The focused cell is NOT read here: focusRow / focusCellStartMs change on
+    // every D-pad step, and a read in this scope restarted the whole GuideScreen
+    // body per press. FocusedSidebarGuideHeader reads them in its own scope, and
+    // the lambdas below read them at call time.
+    fun focusedChannel(): M3UChannel? =
+        if (grid.focusRow in 0 until grid.rows.size) grid.rows.channel(grid.focusRow) else null
     val pl = state.playlist
     com.aeriotv.android.feature.livetv.grid.ActivePlaylistBase.baseUrl = pl?.urlString
     com.aeriotv.android.feature.livetv.grid.ActivePlaylistBase.playlistId = pl?.id
@@ -714,16 +718,22 @@ fun GuideScreen(
         ).exoWindowState().mode
     }
     val exoWindowMode by exoWindowModeFlow.collectAsStateWithLifecycle()
-    val traceGates: () -> String = {
+    // The change key is built WITHOUT the rows / focusRow / topNav / guideHasFocus
+    // tail: reading focusRow in composition recomposed the whole screen on every
+    // D-pad step, only for substringBefore to throw that part away.
+    val gatePrefix: () -> String = {
         "gates[tabActive=$tabActive gridHasFocus=$gridHasFocus" +
             " sidebarOpen=$groupSidebarOpen sidebarMode=$sidebarGroupMode" +
             " manageGroups=$showManageGroups menu=${menuFor != null} info=${programInfoTarget != null} record=${recordTarget != null}" +
             " jump=$showJumpSheet collectionPicker=${collectionPickerFor != null} search=$searchActive" +
-            " mini=$miniActive exoWindow=$exoWindowMode clockTrigger=$clockSelectTrigger" +
+            " mini=$miniActive exoWindow=$exoWindowMode clockTrigger=$clockSelectTrigger"
+    }
+    val traceGates: () -> String = {
+        gatePrefix() +
             " rows=${rows.size} focusRow=${grid.focusRow} topNavHasFocus=${topNavHasFocus.value}" +
             " guideHasFocus=$guideHasFocus]"
     }
-    val gateKey = traceGates().substringBefore(" rows=")
+    val gateKey = gatePrefix()
     LaunchedEffect(gateKey) { com.aeriotv.android.ui.tv.TvFocusTrace.guide("gates ${traceGates()}") }
     LaunchedEffect(rows.isEmpty, tabActive) {
         if (!tabActive) return@LaunchedEffect
@@ -1221,13 +1231,13 @@ fun GuideScreen(
         }) {
     Row(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.weight(1f).fillMaxSize().then(Modifier)) {
-        SidebarGuideHeader(
-            program = previewProgram,
-            channel = previewChannel,
+        FocusedSidebarGuideHeader(
+            grid = grid,
             nowMs = nowMs,
             onOpenInfo = {
-                previewProgram?.let { cell ->
-                    programInfoTarget = cell.toInfoTarget(previewChannel?.name ?: "", previewChannel?.dispatcharrChannelId)
+                grid.focusedCell()?.let { cell ->
+                    val ch = focusedChannel()
+                    programInfoTarget = cell.toInfoTarget(ch?.name ?: "", ch?.dispatcharrChannelId)
                 }
             },
             descriptionFocus = bannerFocus,
@@ -1306,7 +1316,7 @@ fun GuideScreen(
                     if (bannerFocused) true else when {
                         // Channel Preview with no pill row: the banner's
                         // description is the next stop above the clock.
-                        (favoritesOnly || sidebarGroupMode) && previewProgram?.description?.isNotBlank() == true ->
+                        (favoritesOnly || sidebarGroupMode) && grid.focusedCell()?.description?.isNotBlank() == true ->
                             runCatching { bannerFocus.requestFocus() }.getOrDefault(false)
                         favoritesOnly -> guideFocusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Up)
                         else -> false

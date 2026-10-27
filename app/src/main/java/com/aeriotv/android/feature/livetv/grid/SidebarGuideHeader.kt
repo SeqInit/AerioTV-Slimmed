@@ -83,6 +83,38 @@ object SidebarGuideHeader {
     val height = 196.dp
 }
 
+/**
+ * [SidebarGuideHeader] for the grid's focused cell. The focus reads live in
+ * THIS scope so a D-pad step recomposes only the header, not GuideScreen (whose
+ * body is a thousand lines of state, effects and lambdas).
+ */
+@Composable
+fun FocusedSidebarGuideHeader(
+    grid: GuideGridState,
+    nowMs: Long,
+    onOpenInfo: () -> Unit,
+    descriptionFocus: FocusRequester,
+    downTarget: FocusRequester?,
+    onDown: (() -> Boolean)? = null,
+    miniActive: Boolean,
+    publishDock: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val row = grid.focusRow
+    SidebarGuideHeader(
+        program = grid.focusedCell(),
+        channel = if (row in 0 until grid.rows.size) grid.rows.channel(row) else null,
+        nowMs = nowMs,
+        onOpenInfo = onOpenInfo,
+        descriptionFocus = descriptionFocus,
+        downTarget = downTarget,
+        onDown = onDown,
+        miniActive = miniActive,
+        publishDock = publishDock,
+        modifier = modifier,
+    )
+}
+
 @Composable
 fun SidebarGuideHeader(
     program: EPGProgramme?,
