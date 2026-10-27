@@ -24,7 +24,7 @@ Download the latest `.apk` from [Releases](https://github.com/SeqInit/AerioTV-Sl
 - Sort channels by number, name, or favorites; reorder favorites
 - Manage favorites and per-group visibility from the channel menu
 - Long-press an upcoming program to set a reminder or schedule a recording
-- EPG reminders fire before the program starts, as an in-app banner and a notification
+- EPG reminders fire 5 minutes before the program starts: a notification when the app is in the background, or an in-app banner with **Watch** (tune the channel), **Record** (schedule a Dispatcharr server recording) and **Close** (closes by itself after 5 seconds)
 - EPG window configurable from 6 hours up to the full available window (Settings, Network)
 - Guide display scale and a jump-to-now control
 - Channels without guide data are still selectable from the grid
@@ -319,6 +319,14 @@ cd AerioTV-Slimmed
 ```
 
 Release signing reads a gitignored `keystore.properties`; without it the release APK is unsigned.
+
+Debug builds add a **Debug Tools** section to Settings, Developer. **Test Reminder** fires a reminder for a real channel of the active playlist 15 seconds later, to try the reminder banner without waiting for a guide slot. The tools live in `app/src/debug`; release and perf compile empty stubs from `app/src/release` and `app/src/perf`, so none of it ships.
+
+`docs/FEATURES.md` maps every feature to the subsystem it belongs to and the code that owns it.
+
+### Releases and the in-app updater
+
+The updater reads `releases/latest` of this repository. A release is offered when its tag (`vX.Y.Z`) is newer than the installed `versionName`, it is not a prerelease, and it has exactly one fully uploaded `.apk` asset (`AerioTV-slimmed.apk`). The downloaded APK must also have a higher `versionCode` and be signed with the same key as the installed app. Bump `versionCode` and `versionName` in `app/build.gradle.kts`, build with `./gradlew :app:assembleRelease`, then create the release as a draft, attach the APK, and publish it.
 
 ### Project Structure
 
