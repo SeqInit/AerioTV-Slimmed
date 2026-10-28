@@ -168,30 +168,40 @@ fun BoxScope.PersistentExoWindow(
     // (Discord report 2026-10-14: a 2 to 3x oversized black frame for
     // ~350 ms). Mini <-> Fullscreen within one visible stretch keeps the
     // shared springs, so minimize and expand still animate.
+    // Dock tracking: once the minimize spring has landed in the dock, the
+    // frame follows the dock rect directly instead of springing after it.
+    // The side menu and the groups column slide the guide header (and so the
+    // dock) every frame; a spring chasing that moving target trailed the
+    // slide by most of its 0.35 s response, so the mini (drawn above the
+    // whole scaffold) sat over the opening menu before catching up. Read
+    // from the previous composition: the spring specs below depend on it.
+    var miniSettledInDock by remember { mutableStateOf(false) }
+    val trackDock = miniSettledInDock && miniTarget && docked
     val epochHolder = remember { MiniEpochHolder() }
     val hiddenNow = mode == ExoWindowState.Mode.Hidden
     if (epochHolder.wasHidden && !hiddenNow) epochHolder.epoch++
     epochHolder.wasHidden = hiddenNow
+    val frameSpec = if (trackDock) snap() else miniSpec
     val miniAnims = key(epochHolder.epoch) {
         listOf(
             animateDpAsState(
                 targetValue = if (miniTarget) miniFitWidth else screenW,
-                animationSpec = miniSpec,
+                animationSpec = frameSpec,
                 label = "miniWidth",
             ),
             animateDpAsState(
                 targetValue = if (miniTarget) miniFitHeight else screenH,
-                animationSpec = miniSpec,
+                animationSpec = frameSpec,
                 label = "miniHeight",
             ),
             animateDpAsState(
                 targetValue = if (miniTarget) miniFitTop else 0.dp,
-                animationSpec = miniSpec,
+                animationSpec = frameSpec,
                 label = "miniTopInset",
             ),
             animateDpAsState(
                 targetValue = if (miniTarget) miniFitEnd else 0.dp,
-                animationSpec = miniSpec,
+                animationSpec = frameSpec,
                 label = "miniEndInset",
             ),
             animateDpAsState(
@@ -201,10 +211,23 @@ fun BoxScope.PersistentExoWindow(
             ),
         )
     }
-    val miniWidth by miniAnims[0]
-    val miniHeight by miniAnims[1]
-    val miniTopInset by miniAnims[2]
-    val miniEndInset by miniAnims[3]
+    val miniWidth = if (trackDock) miniFitWidth else miniAnims[0].value
+    val miniHeight = if (trackDock) miniFitHeight else miniAnims[1].value
+    val miniTopInset = if (trackDock) miniFitTop else miniAnims[2].value
+    val miniEndInset = if (trackDock) miniFitEnd else miniAnims[3].value
+    val landedInDock = miniTarget && docked &&
+        miniAnims[0].value == miniFitWidth && miniAnims[1].value == miniFitHeight &&
+        miniAnims[2].value == miniFitTop && miniAnims[3].value == miniFitEnd
+    androidx.compose.runtime.SideEffect {
+        // Latches on landing; only leaving Mini or the dock clears it, so a
+        // dock that moves every frame (the snapped springs trail it by one)
+        // never drops back to the chasing spring mid-slide.
+        miniSettledInDock = when {
+            !miniTarget || !docked -> false
+            landedInDock -> true
+            else -> miniSettledInDock
+        }
+    }
     val miniCorner by miniAnims[4]
     // Settings tab stash (TV only; the phone mini floats over every tab,
     // Settings included, like system PiP). The frame keeps its size, so the SurfaceView is only
@@ -227,7 +250,10 @@ fun BoxScope.PersistentExoWindow(
             if (stashFully) miniFitWidth + miniFitEnd + 12.dp
             else miniFitWidth + miniFitEnd - MiniPlayerChrome.stashSliver
         } else 0.dp,
-        animationSpec = if (reduceMotion) snap() else miniSpec,
+        // Stashing is instant: the Settings panel it makes way for appears
+        // in one frame, and a mini sliding out across the open panel was the
+        // eye-catching part. Coming back still slides in from the edge.
+        animationSpec = if (reduceMotion || stashTarget) snap() else miniSpec,
         label = "miniStashOffset",
     )
     var stashFadeCover by remember { mutableFloatStateOf(0f) }

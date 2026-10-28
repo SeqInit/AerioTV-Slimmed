@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -255,6 +256,18 @@ fun PlayerScreen(
     // Focus target that holds D-pad focus during fullscreen playback (chrome
     // hidden) so the remote's up/down reaches the channel-flip handler on TV.
     val playbackFocus = remember { FocusRequester() }
+    // Live Rewind transport state: declared here (not with the rest of the
+    // transport state below) because nowProgramme follows the playback
+    // position while timeshifted.
+    val tsState by timeshiftController.state.collectAsStateWithLifecycle()
+    val tsPositionWallMsState = remember { mutableStateOf(0L) }
+    var tsPositionWallMs by tsPositionWallMsState
+    // Wall clock nowProgramme is resolved against. Advanced by the boundary
+    // ticker below: without it the derivation only re-ran on a channel or
+    // EPG change, so watching past a programme's end left the old programme
+    // on screen with the seek bar pinned at its end and the buffer band
+    // clamped away (the next programme never took over).
+    var epgClockMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val nowProgramme by remember(epgByChannel, currentChannel) {
         derivedStateOf {
             // Catch-up: the info card / footer must describe the REPLAYED
@@ -270,8 +283,23 @@ fun PlayerScreen(
                     category = "",
                 )
             } else {
-                currentChannel?.let { epgByChannel[it.guideMatchKey]?.nowPlaying() }
+                // Timeshifted: the programme at the PLAYBACK position (the
+                // one on screen), not the one airing at the live edge.
+                val at = if (tsState.timeshifting) tsPositionWallMs else epgClockMs
+                currentChannel?.let { epgByChannel[it.guideMatchKey]?.nowPlaying(at) }
             }
+        }
+    }
+    // Programme-boundary ticker: wake when the current programme ends so the
+    // next one (title, seek bar window, buffer band) takes over on time.
+    // Capped at a minute so an EPG gap (no programme) or a clock change is
+    // picked up without a precise target. Timeshifted playback needs no
+    // help: tsPositionWallMs already advances every 500 ms.
+    LaunchedEffect(Unit) {
+        while (true) {
+            val untilEnd = nowProgramme?.endMillis?.minus(System.currentTimeMillis()) ?: 60_000L
+            kotlinx.coroutines.delay(untilEnd.coerceIn(1_000L, 60_000L))
+            epgClockMs = System.currentTimeMillis()
         }
     }
 
@@ -1130,10 +1158,8 @@ fun PlayerScreen(
     }
 
     // Live Rewind transport state (declared before the chrome canvas so
-    // the root key handler below can reach it).
-    val tsState by timeshiftController.state.collectAsStateWithLifecycle()
-    val tsPositionWallMsState = remember { mutableStateOf(0L) }
-    var tsPositionWallMs by tsPositionWallMsState
+    // the root key handler below can reach it). tsState / tsPositionWallMs
+    // are declared further up, next to nowProgramme, which reads them.
     val tsPausedState = remember { mutableStateOf(false) }
     var tsPaused by tsPausedState
     val livePauseWallMsState = remember { mutableStateOf(0L) }
